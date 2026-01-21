@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -17,7 +15,7 @@ func main() {
 	log.Println("Agentium Controller starting")
 
 	// Load session config from environment or file
-	config, err := loadConfig()
+	config, err := controller.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -48,33 +46,4 @@ func main() {
 	}
 
 	log.Println("Controller completed successfully")
-}
-
-func loadConfig() (controller.SessionConfig, error) {
-	var config controller.SessionConfig
-
-	// Try environment variable first
-	if configJSON := os.Getenv("AGENTIUM_SESSION_CONFIG"); configJSON != "" {
-		if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
-			return config, fmt.Errorf("failed to parse AGENTIUM_SESSION_CONFIG: %w", err)
-		}
-		return config, nil
-	}
-
-	// Try config file
-	configPath := os.Getenv("AGENTIUM_CONFIG_PATH")
-	if configPath == "" {
-		configPath = "/etc/agentium/session.json"
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return config, fmt.Errorf("failed to read config file %s: %w", configPath, err)
-	}
-
-	if err := json.Unmarshal(data, &config); err != nil {
-		return config, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	return config, nil
 }

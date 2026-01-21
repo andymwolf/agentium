@@ -33,6 +33,48 @@ type SessionConfig struct {
 	} `json:"github"`
 }
 
+// DefaultConfigPath is the default path for the session config file
+const DefaultConfigPath = "/etc/agentium/session.json"
+
+// LoadConfig loads the session configuration from environment or file.
+// It first checks for AGENTIUM_SESSION_CONFIG env var (JSON string),
+// then falls back to reading from a file path specified by AGENTIUM_CONFIG_PATH
+// or the default path /etc/agentium/session.json.
+func LoadConfig() (SessionConfig, error) {
+	return LoadConfigFromEnv(os.Getenv, os.ReadFile)
+}
+
+// LoadConfigFromEnv loads config using the provided getenv and readFile functions.
+// This allows for easier testing by injecting mock implementations.
+func LoadConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (SessionConfig, error) {
+	var config SessionConfig
+
+	// Try environment variable first
+	if configJSON := getenv("AGENTIUM_SESSION_CONFIG"); configJSON != "" {
+		if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+			return config, fmt.Errorf("failed to parse AGENTIUM_SESSION_CONFIG: %w", err)
+		}
+		return config, nil
+	}
+
+	// Try config file
+	configPath := getenv("AGENTIUM_CONFIG_PATH")
+	if configPath == "" {
+		configPath = DefaultConfigPath
+	}
+
+	data, err := readFile(configPath)
+	if err != nil {
+		return config, fmt.Errorf("failed to read config file %s: %w", configPath, err)
+	}
+
+	if err := json.Unmarshal(data, &config); err != nil {
+		return config, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return config, nil
+}
+
 // Controller manages the agent execution lifecycle
 type Controller struct {
 	config       SessionConfig
