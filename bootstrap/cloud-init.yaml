@@ -1,0 +1,138 @@
+#cloud-config
+# Agentium Bootstrap Cloud-Init Configuration
+#
+# This cloud-init script sets up a GCP VM for running Claude Code.
+# It installs all required dependencies and prepares the workspace.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - curl
+  - jq
+  - unzip
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - openssl
+
+write_files:
+  # Git configuration
+  - path: /etc/gitconfig
+    content: |
+      [user]
+          name = Agentium Bot
+          email = bot@agentium.dev
+      [init]
+          defaultBranch = main
+      [safe]
+          directory = /workspace
+
+  # Session script placeholder (will be fetched at runtime)
+  - path: /usr/local/bin/agentium-session
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Fetch and run the latest session script from agentium repo
+      curl -sL https://raw.githubusercontent.com/andymwolf/agentium/main/bootstrap/session.sh \
+        -o /tmp/session.sh
+      chmod +x /tmp/session.sh
+      exec /tmp/session.sh "$@"
+
+runcmd:
+  # Install Docker
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Install Node.js v20 (via NodeSource)
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  - apt-get install -y nodejs
+
+  # Install Claude Code CLI
+  - npm install -g @anthropic-ai/claude-code
+
+  # Install GitHub CLI
+  - |
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    apt-get update
+    apt-get install -y gh
+
+  # gcloud CLI is pre-installed on GCP VMs, but ensure it's up to date
+  - |
+    if ! command -v gcloud &> /dev/null; then
+      curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts
+      echo 'source /root/google-cloud-sdk/path.bash.inc' >> /etc/profile.d/gcloud.sh
+    fi
+
+  # Create workspace directory
+  - mkdir -p /workspace
+  - chmod 755 /workspace
+
+  # Log completion
+  - echo "Agentium cloud-init completed at $(date)" >> /var/log/agentium-init.log
+
+  # Read session config from instance metadata and start session
+  # The Terraform module passes session config via instance metadata
+  - |
+    # Helper function to fetch metadata with retry
+    fetch_metadata() {
+      local key="$1"
+      local max_attempts=10
+      local attempt=1
+      while [ $attempt -le $max_attempts ]; do
+        value=$(curl -sf -H "Metadata-Flavor: Google" \
+          "http://metadata.google.internal/computeMetadata/v1/instance/attributes/${key}" 2>/dev/null)
+        if [ -n "$value" ]; then
+          echo "$value"
+          return 0
+        fi
+        sleep 2
+        attempt=$((attempt + 1))
+      done
+      return 1
+    }
+
+    # Check if we should auto-start a session
+    if fetch_metadata "agentium-autostart" > /dev/null 2>&1; then
+      echo "Auto-start enabled, fetching session config..." >> /var/log/agentium-init.log
+
+      # Export session config from metadata
+      export AGENTIUM_SESSION_ID=$(fetch_metadata "agentium-session-id")
+      export AGENTIUM_REPOSITORY=$(fetch_metadata "agentium-repository")
+      export AGENTIUM_ISSUES=$(fetch_metadata "agentium-issues")
+      export GITHUB_APP_ID=$(fetch_metadata "github-app-id")
+      export GITHUB_INSTALLATION_ID=$(fetch_metadata "github-installation-id")
+      export GITHUB_PRIVATE_KEY_SECRET=$(fetch_metadata "github-private-key-secret")
+      export ANTHROPIC_API_KEY_SECRET=$(fetch_metadata "anthropic-api-key-secret")
+
+      # Validate required metadata
+      if [ -z "$AGENTIUM_REPOSITORY" ] || [ -z "$AGENTIUM_ISSUES" ]; then
+        echo "ERROR: Missing required metadata (repository or issues)" >> /var/log/agentium-init.log
+        exit 1
+      fi
+
+      # Fetch Anthropic API key from Secret Manager if configured
+      if [ -n "$ANTHROPIC_API_KEY_SECRET" ]; then
+        export ANTHROPIC_API_KEY=$(gcloud secrets versions access latest --secret="$ANTHROPIC_API_KEY_SECRET")
+      fi
+
+      # Mark as ready
+      touch /var/run/agentium-ready
+
+      # Run the session
+      /usr/local/bin/agentium-session 2>&1 | tee /var/log/agentium-session.log
+    fi
+
+final_message: |
+  Agentium bootstrap complete!
+  - Docker: $(docker --version 2>/dev/null || echo "not installed")
+  - Node.js: $(node --version 2>/dev/null || echo "not installed")
+  - npm: $(npm --version 2>/dev/null || echo "not installed")
+  - gh: $(gh --version 2>/dev/null | head -1 || echo "not installed")
+  - gcloud: $(gcloud --version 2>/dev/null | head -1 || echo "not installed")
+  - Workspace: /workspace
