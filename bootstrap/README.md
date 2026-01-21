@@ -30,6 +30,7 @@ The bootstrap system launches ephemeral GCP VMs that run Claude Code to implemen
 
 - **gcloud CLI**: Authenticated with a GCP project
 - **Terraform**: v1.0 or later
+- **jq**: For parsing JSON outputs
 - **GitHub CLI**: For creating the GitHub App (optional)
 
 ### GCP Setup
@@ -323,12 +324,13 @@ Sessions have a 2-hour maximum duration. For longer tasks:
 
 ```
 bootstrap/
-├── README.md           # This file
-├── AGENT.template.md   # Template for project-specific instructions
-├── SYSTEM.md           # Core safety guardrails (fetched at runtime)
-├── cloud-init.yaml     # VM setup script
-├── main.tf             # Terraform configuration
-├── variables.tf        # Terraform variables
-├── run.sh              # Local launch script
-└── session.sh          # VM session orchestration script
+├── README.md                  # This file
+├── AGENT.template.md          # Template for project-specific instructions
+├── SYSTEM.md                  # Core safety guardrails (fetched at runtime)
+├── cloud-init.yaml            # VM setup script
+├── main.tf                    # Terraform configuration
+├── variables.tf               # Terraform variables
+├── terraform.tfvars.example   # Example variable values
+├── run.sh                     # Local launch script
+└── session.sh                 # VM session orchestration script
 ```
