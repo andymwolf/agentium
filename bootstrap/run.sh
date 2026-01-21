@@ -197,6 +197,12 @@ validate_prerequisites() {
         exit 1
     fi
 
+    # Check jq (used for parsing Terraform outputs)
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is not installed"
+        exit 1
+    fi
+
     # Check gcloud auth
     if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" &> /dev/null; then
         print_error "gcloud is not authenticated. Run 'gcloud auth login'"
