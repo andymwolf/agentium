@@ -16,6 +16,7 @@ packages:
   - ca-certificates
   - gnupg
   - lsb-release
+  - openssl
 
 write_files:
   # Git configuration
@@ -78,24 +79,50 @@ runcmd:
   # Read session config from instance metadata and start session
   # The Terraform module passes session config via instance metadata
   - |
-    # Wait for metadata to be available
-    sleep 5
+    # Helper function to fetch metadata with retry
+    fetch_metadata() {
+      local key="$1"
+      local max_attempts=10
+      local attempt=1
+      while [ $attempt -le $max_attempts ]; do
+        value=$(curl -sf -H "Metadata-Flavor: Google" \
+          "http://metadata.google.internal/computeMetadata/v1/instance/attributes/${key}" 2>/dev/null)
+        if [ -n "$value" ]; then
+          echo "$value"
+          return 0
+        fi
+        sleep 2
+        attempt=$((attempt + 1))
+      done
+      return 1
+    }
 
     # Check if we should auto-start a session
-    if curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/agentium-autostart" > /dev/null 2>&1; then
+    if fetch_metadata "agentium-autostart" > /dev/null 2>&1; then
+      echo "Auto-start enabled, fetching session config..." >> /var/log/agentium-init.log
+
       # Export session config from metadata
-      export AGENTIUM_SESSION_ID=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/agentium-session-id")
-      export AGENTIUM_REPOSITORY=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/agentium-repository")
-      export AGENTIUM_ISSUES=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/agentium-issues")
-      export GITHUB_APP_ID=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/github-app-id")
-      export GITHUB_INSTALLATION_ID=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/github-installation-id")
-      export GITHUB_PRIVATE_KEY_SECRET=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/github-private-key-secret")
-      export ANTHROPIC_API_KEY_SECRET=$(curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/anthropic-api-key-secret")
+      export AGENTIUM_SESSION_ID=$(fetch_metadata "agentium-session-id")
+      export AGENTIUM_REPOSITORY=$(fetch_metadata "agentium-repository")
+      export AGENTIUM_ISSUES=$(fetch_metadata "agentium-issues")
+      export GITHUB_APP_ID=$(fetch_metadata "github-app-id")
+      export GITHUB_INSTALLATION_ID=$(fetch_metadata "github-installation-id")
+      export GITHUB_PRIVATE_KEY_SECRET=$(fetch_metadata "github-private-key-secret")
+      export ANTHROPIC_API_KEY_SECRET=$(fetch_metadata "anthropic-api-key-secret")
+
+      # Validate required metadata
+      if [ -z "$AGENTIUM_REPOSITORY" ] || [ -z "$AGENTIUM_ISSUES" ]; then
+        echo "ERROR: Missing required metadata (repository or issues)" >> /var/log/agentium-init.log
+        exit 1
+      fi
 
       # Fetch Anthropic API key from Secret Manager if configured
       if [ -n "$ANTHROPIC_API_KEY_SECRET" ]; then
         export ANTHROPIC_API_KEY=$(gcloud secrets versions access latest --secret="$ANTHROPIC_API_KEY_SECRET")
       fi
+
+      # Mark as ready
+      touch /var/run/agentium-ready
 
       # Run the session
       /usr/local/bin/agentium-session 2>&1 | tee /var/log/agentium-session.log
