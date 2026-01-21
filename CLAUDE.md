@@ -1,32 +1,51 @@
 # Claude Code Instructions for Agentium
 
+## CRITICAL WORKFLOW RULES
+
+**NEVER make code changes directly on the `main` branch.** All work must follow the branch workflow below.
+
+**ALWAYS create a feature branch BEFORE writing any code.** If you find yourself on `main`, switch to a feature branch immediately.
+
+**When given a plan or implementation instructions:**
+1. First update the relevant GitHub issue(s) with the plan details (use `gh issue edit`)
+2. Create a feature branch
+3. Then implement the changes
+
 ## Workflow Requirements
 
 ### Branch and PR Workflow (REQUIRED)
 
 When implementing any GitHub issue:
 
-1. **Create a feature branch** from `main`:
+1. **Update the GitHub issue** with implementation details if needed:
+   ```bash
+   gh issue edit <number> --body "$(gh issue view <number> --json body -q .body)
+
+   ## Implementation Plan
+   <details added from plan>"
+   ```
+
+2. **Create a feature branch** from `main`:
    ```bash
    git checkout main
    git pull origin main
    git checkout -b feature/issue-<number>-<short-description>
    ```
 
-2. **Make commits** with clear messages referencing the issue:
+3. **Make commits** with clear messages referencing the issue:
    ```bash
    git commit -m "Add feature X
 
    Implements #<issue-number>"
    ```
 
-3. **Push and create a PR**:
+4. **Push and create a PR**:
    ```bash
    git push -u origin feature/issue-<number>-<short-description>
    gh pr create --title "..." --body "Closes #<issue-number>"
    ```
 
-4. **Never commit directly to `main`**
+5. **Never commit directly to `main`** - This is strictly enforced.
 
 ### Branch Naming Convention
 
@@ -36,10 +55,11 @@ When implementing any GitHub issue:
 
 ### Before Starting Work
 
-1. Read the issue description fully
-2. Check for dependencies on other issues
-3. Ensure you're on a clean working tree
-4. Pull latest `main`
+1. **Verify you are NOT on main:** `git branch --show-current`
+2. Read the issue description fully
+3. Check for dependencies on other issues
+4. Ensure you're on a clean working tree
+5. Pull latest `main` and create feature branch
 
 ### Code Standards
 
