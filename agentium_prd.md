@@ -54,6 +54,18 @@ Agents never hold production credentials.
 - Hosting, deployment, and operation of applications produced by agents
 - Defined in a separate Application Runtime Platform PRD.
 
+### Bootstrap System (Phase 0)
+
+For users who want to run agent sessions without building the Go CLI, a standalone bootstrap system exists:
+
+- `bootstrap/run.sh` - Local launcher script
+- `bootstrap/main.tf` - GCP Terraform configuration
+- `bootstrap/cloud-init.yaml` - VM initialization
+- `bootstrap/session.sh` - Agent session orchestration
+- `bootstrap/SYSTEM.md` - Agent safety guardrails
+
+This system is GCP-only and represents the MVP implementation.
+
 ---
 
 ## 5. Core Design Principles
@@ -127,6 +139,24 @@ Requirements:
 
 ---
 
+### FR-4.1: Supported Agent Adapters
+
+The system supports pluggable agent adapters via a registry pattern:
+
+**Claude Code** (Primary)
+- Container: `ghcr.io/andywolf/agentium-claudecode:latest`
+- Invocation: `claude --print --dangerously-skip-permissions`
+- Output parsing: PR detection, task completion via commit messages
+
+**Aider** (Secondary)
+- Container: `ghcr.io/andywolf/agentium-aider:latest`
+- Invocation: `aider --model claude-3-5-sonnet --yes-always --no-git`
+- Output parsing: File modification detection
+
+Custom agents can be added by implementing the `Agent` interface.
+
+---
+
 ### FR-5: Session Properties (Prompt-Configurable)
 
 Each agent session must accept:
@@ -139,9 +169,15 @@ Each agent session must accept:
 
 #### Example Prompt Semantics
 
-> “Complete issues 12, 17, and 24.\
+> "Complete issues 12, 17, and 24.\
 > Max 30 iterations.\
-> Shut down when all issues have PRs, iteration limit is reached, tokens are exhausted, or a fatal error occurs.”
+> Shut down when all issues have PRs, iteration limit is reached, tokens are exhausted, or a fatal error occurs."
+
+**Implementation Note:** Token budget enforcement is not yet implemented (see Issue #18).
+Currently supported limits:
+- Maximum iteration count (implemented)
+- Wall-clock time limit (implemented)
+- Token budget (planned)
 
 ---
 
@@ -183,6 +219,14 @@ Container exit alone must **not** trigger VM termination.
 
 Termination behavior must be **predictable and auditable**.
 
+**Implementation Note:** Token budget exhaustion is not yet implemented as a termination trigger.
+Currently implemented triggers:
+- All tasks complete (PR detection)
+- Maximum iterations reached
+- Hard time limit exceeded
+- Fatal error
+- Explicit shutdown
+
 ---
 
 ### FR-8: GitHub Authentication Model
@@ -200,6 +244,10 @@ Agents must not:
 - Access GitHub secrets
 - Trigger deployments directly
 - Bypass branch protection rules
+
+**Implementation Note:** GitHub App JWT generation is stubbed in the Go controller but fully implemented in the bootstrap system. Issues #3, #4, #5 track porting this to the Go codebase.
+
+Current workaround: `GITHUB_TOKEN` environment variable fallback.
 
 ---
 
@@ -236,6 +284,14 @@ The infrastructure must support:
 - Minimal per-project configuration (ideally a single config file)
 
 Adding a new project should be <15 minutes of human effort.
+
+**Cloud Provider Support:**
+
+| Provider | Provisioner | Secret Manager | Terraform Module |
+|----------|-------------|----------------|------------------|
+| GCP      | Complete    | Bootstrap only | Complete         |
+| AWS      | Planned #9  | Planned #10    | Not started      |
+| Azure    | Planned #11 | Planned #12    | Not started      |
 
 ---
 
@@ -280,6 +336,11 @@ At the session level, the system must record:
 - The session controller is responsible for emitting authoritative lifecycle and termination logs
 - Agent runtime containers may emit execution-level logs, but these are advisory
 - Container exit without graceful shutdown must still produce a controller-level record
+
+**Implementation Note:** Cloud Logging integration is not yet implemented (Issue #6). Current logging:
+- Controller stdout/stderr captured locally
+- Bootstrap system logs to VM console
+- Logs accessible via `agentium logs` command (tails VM output)
 
 ---
 
@@ -408,7 +469,41 @@ The system is successful when:
 
 ---
 
-## 12. Intended Use as an Agent Prompt
+## 12. Implementation Status
+
+### Phase 0: Bootstrap System (COMPLETE)
+
+A working bootstrap system exists for GCP-only deployments:
+- Local script-based session launching (`bootstrap/run.sh`)
+- Terraform-based VM provisioning
+- Cloud-init VM setup with all dependencies
+- GitHub App authentication (JWT + installation token)
+- Session lifecycle management
+
+### Phase 1: Go CLI & Controller (IN PROGRESS)
+
+The Go-based CLI and controller are functional for GCP:
+- CLI commands: init, run, status, logs, destroy
+- Session controller with iteration tracking
+- GCP provisioner with Terraform integration
+- Agent adapters for Claude Code and Aider
+
+### Phase 2: Multi-Cloud Support (NOT STARTED)
+
+AWS and Azure provisioners are planned but not implemented.
+
+### Open Work Items
+
+See GitHub issues for detailed tracking:
+- GitHub App auth integration (#3, #4, #5)
+- Cloud Logging integration (#6)
+- Token budget enforcement (#18)
+- AWS support (#9, #10)
+- Azure support (#11, #12)
+
+---
+
+## 13. Intended Use as an Agent Prompt
 
 This PRD is designed to:
 
