@@ -1,0 +1,34 @@
+# Agentium Configuration Example
+# Copy this file to .agentium.yaml in your project root and customize
+
+# Project settings
+project:
+  name: "my-webapp"
+  repository: "github.com/your-org/your-repo"
+
+# GitHub App authentication
+# Create a GitHub App at https://github.com/settings/apps
+# Grant it: Repository (read/write), Pull requests (read/write), Issues (read)
+github:
+  app_id: 123456                    # Your GitHub App ID
+  installation_id: 789012           # Installation ID for your org/repo
+  private_key_secret: "projects/my-gcp-project/secrets/github-app-key"
+
+# Cloud provider settings
+cloud:
+  provider: "gcp"                   # gcp, aws, or azure
+  region: "us-central1"
+  project: "my-gcp-project"         # GCP project ID
+  machine_type: "e2-medium"         # VM instance type
+  use_spot: true                    # Use spot/preemptible instances (cheaper)
+  disk_size_gb: 50
+
+# Default session settings
+defaults:
+  agent: "claude-code"              # claude-code or aider
+  max_iterations: 30                # Maximum iterations before termination
+  max_duration: "2h"                # Maximum session duration
+
+# Controller settings (optional)
+controller:
+  image: "ghcr.io/andywolf/agentium-controller:latest"
