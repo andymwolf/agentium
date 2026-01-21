@@ -44,6 +44,7 @@ Follow this workflow for each assigned issue:
 - Read the issue description carefully
 - Check for linked issues or dependencies
 - Review any referenced files or code
+- Identify what tests exist and how to run them
 
 ### Step 2: Create Feature Branch
 ```bash
@@ -56,13 +57,50 @@ Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
 
-### Step 4: Run Tests
+### Step 4: Development Loop (Iterate Until Done)
+
+Repeat the following cycle until all tests pass and code is ready:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│   ┌──────┐    ┌──────┐    ┌────────┐    ┌────────┐    │
+│   │ Fix  │───▶│ Test │───▶│ Review │───▶│ Commit │    │
+│   └──────┘    └──────┘    └────────┘    └────────┘    │
+│       ▲                        │                       │
+│       │                        │                       │
+│       └────────────────────────┘                       │
+│              (if issues found)                         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 4a. Run Tests
 ```bash
 # Run the project's test suite
 # Check for project-specific instructions in .agentium/AGENT.md
 ```
 
-### Step 5: Commit Changes
+#### 4b. Review Your Own Code
+Before committing, critically review your changes:
+- Does the code correctly implement the issue requirements?
+- Are there any edge cases not handled?
+- Is the code readable and maintainable?
+- Are there any security concerns?
+- Does it follow the project's coding conventions?
+- Are error cases handled appropriately?
+
+#### 4c. Fix Issues Found
+If tests fail or review reveals problems:
+- Fix the identified issues
+- Return to step 4a (run tests again)
+
+#### 4d. Commit When Ready
+Only commit when:
+- All tests pass
+- Code review reveals no issues
+- Changes are complete and correct
+
 ```bash
 git add <files>
 git commit -m "Add feature X
@@ -71,7 +109,7 @@ Closes #<issue-number>
 Co-Authored-By: Agentium Bot <noreply@agentium.dev>"
 ```
 
-### Step 6: Push and Create PR
+### Step 5: Push and Create PR
 ```bash
 git push -u origin agentium/issue-<number>-<short-description>
 gh pr create --title "..." --body "Closes #<issue-number>
@@ -80,8 +118,20 @@ gh pr create --title "..." --body "Closes #<issue-number>
 - Brief description of changes
 
 ## Test Plan
-- How the changes were tested"
+- How the changes were tested
+
+## Self-Review Checklist
+- [ ] Tests pass
+- [ ] Code follows project conventions
+- [ ] No security issues introduced
+- [ ] Edge cases handled"
 ```
+
+### Step 6: Post-PR Review
+After creating the PR:
+- Review the PR diff one more time
+- If you find issues, push additional commits to fix them
+- Update the PR description if needed
 
 ## PROHIBITED ACTIONS
 

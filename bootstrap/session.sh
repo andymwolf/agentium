@@ -19,6 +19,12 @@
 
 set -euo pipefail
 
+# Cleanup sensitive files on exit
+cleanup() {
+    rm -f /tmp/SYSTEM.md /tmp/git-askpass.sh 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # Configuration
 WORKSPACE="/workspace"
 SYSTEM_MD_URL="https://raw.githubusercontent.com/andymwolf/agentium/main/bootstrap/SYSTEM.md"
@@ -143,7 +149,7 @@ fetch_system_md() {
 
     log_info "Fetching SYSTEM.md from agentium repository"
 
-    if curl -sL "${SYSTEM_MD_URL}" -o "${output_path}"; then
+    if curl -sfL "${SYSTEM_MD_URL}" -o "${output_path}"; then
         log_info "SYSTEM.md fetched successfully"
         echo "${output_path}"
     else
@@ -260,8 +266,8 @@ main() {
             log_error "Iteration ${iteration} failed"
         fi
 
-        # Check if PRs were created (simple check)
-        local pr_count=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --author "@me" --state open --json number | jq '. | length')
+        # Check if PRs were created (filter by agentium branch prefix)
+        local pr_count=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --head "agentium/" --state open --json number | jq '. | length')
         if [[ ${pr_count} -gt 0 ]]; then
             log_info "PRs created, session complete"
             break
