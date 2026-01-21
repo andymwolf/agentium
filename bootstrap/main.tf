@@ -25,17 +25,20 @@ provider "google" {
 
 # Generate unique session ID if not provided
 resource "random_id" "session" {
-  byte_length = 8
+  byte_length = 6  # 12 hex chars to stay within GCP naming limits
 }
 
 locals {
   session_id = var.session_id != "" ? var.session_id : "agentium-${random_id.session.hex}"
-  vm_name    = "agentium-session-${random_id.session.hex}"
+  vm_name    = "agentium-${random_id.session.hex}"
+  # Sanitize repository for use in labels (lowercase, no special chars)
+  repo_label = lower(replace(replace(var.repository, "/", "-"), ".", "-"))
 }
 
 # Service account for the VM
+# GCP service account IDs have a 30 character limit
 resource "google_service_account" "agentium" {
-  account_id   = "agentium-session-${random_id.session.hex}"
+  account_id   = "agentium-${random_id.session.hex}"
   display_name = "Agentium Session ${local.session_id}"
   description  = "Service account for Agentium agent session"
 }
@@ -73,6 +76,11 @@ resource "google_compute_instance" "agentium" {
     on_host_maintenance         = "TERMINATE"
     provisioning_model          = "SPOT"
     instance_termination_action = "DELETE"
+
+    # Auto-terminate after max session duration
+    max_run_duration {
+      seconds = var.max_session_hours * 3600
+    }
   }
 
   # Boot disk with SSD
@@ -87,7 +95,7 @@ resource "google_compute_instance" "agentium" {
 
   # Network interface
   network_interface {
-    network = "default"
+    network = var.network
     access_config {
       # Ephemeral external IP
     }
@@ -117,9 +125,9 @@ resource "google_compute_instance" "agentium" {
 
   # Labels for tracking
   labels = {
-    agentium     = "true"
-    session-id   = local.session_id
-    repository   = replace(replace(var.repository, "/", "-"), ".", "-")
+    agentium   = "true"
+    session-id = local.session_id
+    repository = local.repo_label
   }
 
   # Allow the instance to be deleted by Terraform
@@ -133,29 +141,8 @@ resource "google_compute_instance" "agentium" {
   ]
 }
 
-# Auto-delete the VM after max_session_hours
-# Uses a Cloud Scheduler job to delete the instance
-resource "google_cloud_scheduler_job" "cleanup" {
-  count = var.enable_auto_cleanup ? 1 : 0
-
-  name        = "agentium-cleanup-${random_id.session.hex}"
-  description = "Auto-cleanup for Agentium session ${local.session_id}"
-  schedule    = "0 */${var.max_session_hours} * * *"
-  time_zone   = "UTC"
-
-  http_target {
-    http_method = "DELETE"
-    uri         = "https://compute.googleapis.com/compute/v1/projects/${var.project_id}/zones/${var.zone}/instances/${local.vm_name}"
-    oauth_token {
-      service_account_email = google_service_account.agentium.email
-    }
-  }
-
-  # Run once after the max session time
-  retry_config {
-    retry_count = 0
-  }
-}
+# Note: Auto-cleanup is handled by max_run_duration in the scheduling block
+# The VM will automatically terminate after max_session_hours
 
 # Outputs
 output "session_id" {

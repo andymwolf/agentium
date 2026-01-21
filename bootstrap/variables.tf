@@ -12,11 +12,21 @@ variable "project_id" {
 variable "repository" {
   description = "Target GitHub repository (owner/repo format)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$", var.repository))
+    error_message = "Repository must be in owner/repo format (e.g., 'andymwolf/agentium')."
+  }
 }
 
 variable "issues" {
   description = "Comma-separated list of issue numbers to work on"
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+(,[0-9]+)*$", var.issues))
+    error_message = "Issues must be comma-separated numbers (e.g., '42' or '42,43,44')."
+  }
 }
 
 variable "github_app_id" {
@@ -50,6 +60,12 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
+variable "network" {
+  description = "GCP network to use for the VM"
+  type        = string
+  default     = "default"
+}
+
 variable "machine_type" {
   description = "GCP machine type for the VM"
   type        = string
@@ -75,13 +91,12 @@ variable "anthropic_api_key_secret" {
 }
 
 variable "max_session_hours" {
-  description = "Maximum session duration in hours before auto-cleanup"
+  description = "Maximum session duration in hours (VM auto-terminates after this)"
   type        = number
   default     = 2
-}
 
-variable "enable_auto_cleanup" {
-  description = "Enable automatic cleanup of the VM after max_session_hours"
-  type        = bool
-  default     = true
+  validation {
+    condition     = var.max_session_hours >= 1 && var.max_session_hours <= 24
+    error_message = "Max session hours must be between 1 and 24."
+  }
 }
