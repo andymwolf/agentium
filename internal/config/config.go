@@ -15,6 +15,13 @@ type Config struct {
 	Defaults   DefaultsConfig   `mapstructure:"defaults"`
 	Session    SessionConfig    `mapstructure:"session"`
 	Controller ControllerConfig `mapstructure:"controller"`
+	Claude     ClaudeConfig     `mapstructure:"claude"`
+}
+
+// ClaudeConfig contains Claude AI authentication settings
+type ClaudeConfig struct {
+	AuthMode     string `mapstructure:"auth_mode"`      // "api" (default) or "oauth"
+	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json
 }
 
 // ProjectConfig contains project-level settings
@@ -126,6 +133,14 @@ func applyDefaults(cfg *Config) {
 	if cfg.Controller.Image == "" {
 		cfg.Controller.Image = "ghcr.io/andywolf/agentium-controller:latest"
 	}
+
+	if cfg.Claude.AuthMode == "" {
+		cfg.Claude.AuthMode = "api"
+	}
+
+	if cfg.Claude.AuthJSONPath == "" {
+		cfg.Claude.AuthJSONPath = "~/.config/claude-code/auth.json"
+	}
 }
 
 // Validate validates the configuration
@@ -156,6 +171,13 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.Claude.AuthMode != "" {
+		validAuthModes := map[string]bool{"api": true, "oauth": true}
+		if !validAuthModes[c.Claude.AuthMode] {
+			return fmt.Errorf("invalid claude auth_mode: %s (must be api or oauth)", c.Claude.AuthMode)
+		}
+	}
+
 	return nil
 }
 
@@ -183,6 +205,10 @@ func (c *Config) ValidateForRun() error {
 
 	if c.GitHub.PrivateKeySecret == "" {
 		return fmt.Errorf("GitHub App private key secret path is required")
+	}
+
+	if c.Claude.AuthMode == "oauth" && c.Session.Agent != "claude-code" {
+		return fmt.Errorf("oauth auth_mode is only supported with the claude-code agent")
 	}
 
 	return nil

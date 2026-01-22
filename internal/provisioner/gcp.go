@@ -74,6 +74,7 @@ use_spot           = %t
 disk_size_gb       = %d
 controller_image   = "%s"
 session_config     = %s
+claude_auth_mode   = "%s"
 `,
 		config.Session.ID,
 		config.Region,
@@ -82,7 +83,13 @@ session_config     = %s
 		config.DiskSizeGB,
 		config.ControllerImage,
 		string(sessionJSON),
+		config.Session.ClaudeAuth.AuthMode,
 	)
+
+	// Add auth JSON only when oauth mode with auth data present
+	if config.Session.ClaudeAuth.AuthMode == "oauth" && config.Session.ClaudeAuth.AuthJSONBase64 != "" {
+		tfvars += fmt.Sprintf("claude_auth_json   = \"%s\"\n", config.Session.ClaudeAuth.AuthJSONBase64)
+	}
 
 	tfvarsPath := filepath.Join(workDir, "terraform.tfvars")
 	if err := os.WriteFile(tfvarsPath, []byte(tfvars), 0644); err != nil {

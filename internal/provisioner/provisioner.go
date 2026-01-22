@@ -34,6 +34,12 @@ type VMConfig struct {
 	ControllerImage string
 }
 
+// ClaudeAuthConfig contains Claude authentication configuration for the VM
+type ClaudeAuthConfig struct {
+	AuthMode       string `json:"auth_mode"`
+	AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+}
+
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
 	ID            string
@@ -45,6 +51,7 @@ type SessionConfig struct {
 	MaxDuration   string
 	Prompt        string
 	GitHub        GitHubConfig
+	ClaudeAuth    ClaudeAuthConfig
 }
 
 // GitHubConfig contains GitHub authentication configuration

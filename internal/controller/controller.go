@@ -61,6 +61,10 @@ type SessionConfig struct {
 		InstallationID   int64  `json:"installation_id"`
 		PrivateKeySecret string `json:"private_key_secret"`
 	} `json:"github"`
+	ClaudeAuth struct {
+		AuthMode       string `json:"auth_mode"`
+		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+	} `json:"claude_auth"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -738,15 +742,16 @@ func (c *Controller) shouldTerminate() bool {
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
 	session := &agent.Session{
-		ID:            c.config.ID,
-		Repository:    c.config.Repository,
-		Tasks:         c.config.Tasks,
-		WorkDir:       c.workDir,
-		GitHubToken:   c.gitHubToken,
-		MaxIterations: c.config.MaxIterations,
-		MaxDuration:   c.config.MaxDuration,
-		Prompt:        c.config.Prompt,
-		Metadata:      make(map[string]string),
+		ID:             c.config.ID,
+		Repository:     c.config.Repository,
+		Tasks:          c.config.Tasks,
+		WorkDir:        c.workDir,
+		GitHubToken:    c.gitHubToken,
+		MaxIterations:  c.config.MaxIterations,
+		MaxDuration:    c.config.MaxDuration,
+		Prompt:         c.config.Prompt,
+		Metadata:       make(map[string]string),
+		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 	}
 
 	// Build environment and command
@@ -765,6 +770,11 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// Add environment variables
 	for k, v := range env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// Mount Claude auth.json for OAuth mode
+	if c.config.ClaudeAuth.AuthMode == "oauth" {
+		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro")
 	}
 
 	// Add image and command

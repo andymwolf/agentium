@@ -29,6 +29,12 @@ defaults:
   max_iterations: 30                # Maximum iterations before termination
   max_duration: "2h"                # Maximum session duration
 
+# Claude AI authentication settings
+# Options: "api" (default, uses ANTHROPIC_API_KEY) or "oauth" (uses auth.json from `claude login`)
+claude:
+  auth_mode: "api"                            # "api" or "oauth"
+  auth_json_path: "~/.config/claude-code/auth.json"  # Path to auth.json (for oauth mode)
+
 # Controller settings (optional)
 controller:
   image: "ghcr.io/andywolf/agentium-controller:latest"

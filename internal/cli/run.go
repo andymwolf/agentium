@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -42,6 +45,7 @@ func init() {
 	runCmd.Flags().String("region", "", "Cloud region")
 	runCmd.Flags().Bool("dry-run", false, "Show what would be provisioned without creating resources")
 	runCmd.Flags().String("prompt", "", "Custom prompt for the agent")
+	runCmd.Flags().String("claude-auth-mode", "", "Claude auth mode: api (default) or oauth")
 
 	viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -51,6 +55,7 @@ func init() {
 	viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
 	viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
 	viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
+	viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
 }
 
 func runSession(cmd *cobra.Command, args []string) error {
@@ -100,6 +105,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if prompt, _ := cmd.Flags().GetString("prompt"); prompt != "" {
 		cfg.Session.Prompt = prompt
 	}
+	if authMode := viper.GetString("claude.auth_mode"); authMode != "" {
+		cfg.Claude.AuthMode = authMode
+	}
 
 	// Validate required fields
 	if cfg.Session.Repository == "" {
@@ -110,6 +118,17 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 	if cfg.Cloud.Provider == "" {
 		return fmt.Errorf("cloud provider is required (use --provider or set in config)")
+	}
+
+	// Handle Claude OAuth authentication
+	var claudeAuthBase64 string
+	if cfg.Claude.AuthMode == "oauth" {
+		authJSON, err := readAuthJSON(cfg.Claude.AuthJSONPath)
+		if err != nil {
+			return fmt.Errorf("failed to read Claude auth.json: %w", err)
+		}
+		claudeAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
+		fmt.Println("Using Claude Max OAuth authentication")
 	}
 
 	// Generate session ID
@@ -158,6 +177,10 @@ func runSession(cmd *cobra.Command, args []string) error {
 			InstallationID:   cfg.GitHub.InstallationID,
 			PrivateKeySecret: cfg.GitHub.PrivateKeySecret,
 		},
+		ClaudeAuth: provisioner.ClaudeAuthConfig{
+			AuthMode:       cfg.Claude.AuthMode,
+			AuthJSONBase64: claudeAuthBase64,
+		},
 	}
 
 	// Build VM config
@@ -186,4 +209,34 @@ func runSession(cmd *cobra.Command, args []string) error {
 	fmt.Printf("To terminate: agentium destroy %s\n", sessionID)
 
 	return nil
+}
+
+// readAuthJSON reads and validates the Claude auth.json file
+func readAuthJSON(path string) ([]byte, error) {
+	// Expand ~ to home directory
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve home directory: %w", err)
+		}
+		path = filepath.Join(home, path[2:])
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("auth.json not found at %s\n\nTo use OAuth authentication:\n  1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n  2. Run: claude login\n  3. Try again", path)
+		}
+		return nil, fmt.Errorf("failed to read auth.json: %w", err)
+	}
+
+	if len(data) < 10 {
+		return nil, fmt.Errorf("auth.json appears to be empty or too small")
+	}
+
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("auth.json is not valid JSON")
+	}
+
+	return data, nil
 }
