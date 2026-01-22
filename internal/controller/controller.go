@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/aider"
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
+	"github.com/andywolf/agentium/internal/github"
 )
 
 // TaskPhase represents the current phase of a task in its lifecycle
@@ -355,25 +357,29 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 }
 
 func (c *Controller) generateInstallationToken(privateKey string) (string, error) {
-	// Write private key to temp file
-	keyFile, err := os.CreateTemp("", "github-app-key-*.pem")
+	appID := strconv.FormatInt(c.config.GitHub.AppID, 10)
+	installationID := c.config.GitHub.InstallationID
+
+	// Generate JWT for GitHub App authentication
+	jwtGen, err := github.NewJWTGenerator(appID, []byte(privateKey))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create JWT generator: %w", err)
 	}
-	defer os.Remove(keyFile.Name())
 
-	if _, err := keyFile.WriteString(privateKey); err != nil {
-		return "", err
+	jwt, err := jwtGen.GenerateToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate JWT: %w", err)
 	}
-	keyFile.Close()
 
-	// Use gh CLI to generate token (requires GitHub CLI with app authentication)
-	// For MVP, we'll use a simpler approach with curl and JWT
-	// In production, this should use proper JWT generation
+	// Exchange JWT for installation access token
+	exchanger := github.NewTokenExchanger()
+	token, err := exchanger.ExchangeToken(jwt, installationID)
+	if err != nil {
+		return "", fmt.Errorf("failed to exchange token: %w", err)
+	}
 
-	// For now, assume GITHUB_TOKEN is set or use a placeholder
-	c.logger.Println("Warning: Using GITHUB_TOKEN from environment, proper App token generation not implemented")
-	return os.Getenv("GITHUB_TOKEN"), nil
+	c.logger.Printf("Generated installation token (expires at %s)", token.ExpiresAt.Format(time.RFC3339))
+	return token.Token, nil
 }
 
 func (c *Controller) cloneRepository(ctx context.Context) error {
