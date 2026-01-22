@@ -378,77 +378,81 @@ main() {
     fi
 
     local max_iterations="${AGENTIUM_MAX_ITERATIONS:-5}"
-    local iteration=1
-    local prompt=""
-    local is_pr_session=false
 
-    # Determine session type and set up accordingly
+    # Clone repository first (to main branch)
+    clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
+
+    # Build processing queue: PRs first, then issues
+    local WORK_QUEUE=()
+
     if [[ -n "${AGENTIUM_PRS:-}" ]]; then
-        is_pr_session=true
-        log_info "PR Review Session Mode"
-
-        # Clone repository (to main first, then checkout PR branch)
-        clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
-
-        # Checkout the first PR's branch
         IFS=',' read -ra PR_ARRAY <<< "${AGENTIUM_PRS}"
-        local first_pr=$(echo "${PR_ARRAY[0]}" | tr -d ' ')
-        checkout_pr_branch "${AGENTIUM_REPOSITORY}" "${first_pr}"
-
-        # Build PR-specific prompt
-        prompt=$(build_pr_prompt "${AGENTIUM_REPOSITORY}" "${AGENTIUM_PRS}")
-    else
-        log_info "Issue Session Mode"
-
-        # Clone repository
-        clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
-
-        # Build prompt with issue context
-        prompt=$(build_prompt "${AGENTIUM_REPOSITORY}" "${AGENTIUM_ISSUES}")
+        for pr_num in "${PR_ARRAY[@]}"; do
+            WORK_QUEUE+=("pr:$(echo "${pr_num}" | tr -d ' ')")
+        done
     fi
 
-    # Run iterations
-    while [[ ${iteration} -le ${max_iterations} ]]; do
-        log_info "=== Iteration ${iteration}/${max_iterations} ==="
+    if [[ -n "${AGENTIUM_ISSUES:-}" ]]; then
+        IFS=',' read -ra ISSUE_ARRAY <<< "${AGENTIUM_ISSUES}"
+        for issue_num in "${ISSUE_ARRAY[@]}"; do
+            WORK_QUEUE+=("issue:$(echo "${issue_num}" | tr -d ' ')")
+        done
+    fi
 
-        local output_file=$(mktemp)
-        if run_claude "${prompt}" "${system_md}" "${iteration}" 2>&1 | tee "${output_file}"; then
-            log_info "Iteration ${iteration} completed successfully"
+    log_info "Work queue: ${WORK_QUEUE[*]}"
+
+    # Process each item in queue
+    for queue_item in "${WORK_QUEUE[@]}"; do
+        IFS=':' read -r item_type item_num <<< "${queue_item}"
+
+        log_info "=== Processing ${item_type} #${item_num} ==="
+
+        local prompt=""
+        if [[ "${item_type}" == "pr" ]]; then
+            checkout_pr_branch "${AGENTIUM_REPOSITORY}" "${item_num}"
+            prompt=$(build_pr_prompt "${AGENTIUM_REPOSITORY}" "${item_num}")
         else
-            log_error "Iteration ${iteration} failed"
+            # Return to main branch for issues
+            cd "${WORKSPACE}"
+            git checkout "${AGENTIUM_BRANCH:-main}"
+            git pull origin "${AGENTIUM_BRANCH:-main}" || true
+            prompt=$(build_prompt "${AGENTIUM_REPOSITORY}" "${item_num}")
         fi
 
-        local output=$(cat "${output_file}")
-        rm -f "${output_file}"
+        # Inner iteration loop for this item
+        local item_iteration=1
+        while [[ ${item_iteration} -le ${max_iterations} ]]; do
+            log_info "=== ${item_type} #${item_num} - Iteration ${item_iteration}/${max_iterations} ==="
 
-        # Check completion based on session type
-        if [[ "${is_pr_session}" == "true" ]]; then
-            # For PR sessions: detect if changes were pushed
-            if echo "${output}" | grep -qE 'To (github\.com|git@github\.com)'; then
-                log_info "Changes pushed to PR branch, session complete"
-                break
+            local output_file=$(mktemp)
+            if run_claude "${prompt}" "${system_md}" "${item_iteration}" 2>&1 | tee "${output_file}"; then
+                log_info "Iteration ${item_iteration} completed successfully"
+            else
+                log_error "Iteration ${item_iteration} failed"
             fi
-        else
-            # For issue sessions: check if PRs were created
-            local pr_found=false
-            IFS=',' read -ra ISSUE_ARRAY <<< "${AGENTIUM_ISSUES}"
-            for issue_num in "${ISSUE_ARRAY[@]}"; do
-                issue_num=$(echo "${issue_num}" | tr -d ' ')
-                # Search for PRs that mention closing this issue
-                local pr_for_issue=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
-                    --search "Closes #${issue_num} in:body" --json number 2>/dev/null | jq '. | length')
-                if [[ ${pr_for_issue} -gt 0 ]]; then
-                    log_info "PR found for issue #${issue_num}, session complete"
-                    pr_found=true
+
+            local output=$(cat "${output_file}")
+            rm -f "${output_file}"
+
+            # Check completion based on item type
+            if [[ "${item_type}" == "pr" ]]; then
+                # For PR items: detect if changes were pushed
+                if echo "${output}" | grep -qE 'To (github\.com|git@github\.com)'; then
+                    log_info "PR #${item_num} complete - changes pushed"
                     break
                 fi
-            done
-            if [[ "${pr_found}" == "true" ]]; then
-                break
+            else
+                # For issue items: check if PR was created
+                local pr_count=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
+                    --search "Closes #${item_num} in:body" --json number 2>/dev/null | jq '. | length')
+                if [[ ${pr_count} -gt 0 ]]; then
+                    log_info "Issue #${item_num} complete - PR created"
+                    break
+                fi
             fi
-        fi
 
-        ((iteration++))
+            ((item_iteration++))
+        done
     done
 
     log_info "Session complete"

@@ -140,6 +140,27 @@ Work on multiple issues in one session:
 ./run.sh --repo andymwolf/agentium --issue 42,43,44
 ```
 
+### PR Review Sessions
+
+Address code review feedback on existing PRs:
+
+```bash
+./run.sh --repo andymwolf/agentium --pr 42
+```
+
+### Combined PR and Issue Sessions
+
+Process both PR reviews and new issues in one session. PRs are processed first:
+
+```bash
+./run.sh --repo andymwolf/agentium --pr 42 --issue 6,47
+```
+
+This creates a work queue that:
+1. Addresses PR #42 review feedback first
+2. Then works on Issue #6
+3. Finally works on Issue #47
+
 ### Destroy Session
 
 Clean up resources:
