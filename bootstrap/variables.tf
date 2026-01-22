@@ -32,6 +32,17 @@ variable "issues" {
   }
 }
 
+variable "prs" {
+  description = "Comma-separated list of PR numbers to address review feedback"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.prs == "" || can(regex("^[0-9]+(,[0-9]+)*$", var.prs))
+    error_message = "PRs must be comma-separated numbers (e.g., '42' or '42,43,44')."
+  }
+}
+
 variable "github_app_id" {
   description = "GitHub App ID for authentication"
   type        = string

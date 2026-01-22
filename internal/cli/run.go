@@ -34,6 +34,7 @@ func init() {
 	runCmd.Flags().String("repo", "", "GitHub repository (e.g., github.com/org/repo)")
 	runCmd.MarkFlagRequired("repo")
 	runCmd.Flags().StringSlice("issues", nil, "Issue numbers to work on (comma-separated)")
+	runCmd.Flags().StringSlice("prs", nil, "PR numbers to address review feedback (comma-separated)")
 	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider)")
 	runCmd.Flags().Int("max-iterations", 30, "Maximum number of iterations")
 	runCmd.Flags().String("max-duration", "2h", "Maximum session duration")
@@ -44,6 +45,7 @@ func init() {
 
 	viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
+	viper.BindPFlag("session.prs", runCmd.Flags().Lookup("prs"))
 	viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
 	viper.BindPFlag("session.max_iterations", runCmd.Flags().Lookup("max-iterations"))
 	viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
@@ -77,6 +79,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if issues := viper.GetStringSlice("session.issues"); len(issues) > 0 {
 		cfg.Session.Tasks = issues
 	}
+	if prs := viper.GetStringSlice("session.prs"); len(prs) > 0 {
+		cfg.Session.PRs = prs
+	}
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
 	}
@@ -100,8 +105,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if cfg.Session.Repository == "" {
 		return fmt.Errorf("repository is required (use --repo or set in config)")
 	}
-	if len(cfg.Session.Tasks) == 0 {
-		return fmt.Errorf("at least one issue is required (use --issues)")
+	if len(cfg.Session.Tasks) == 0 && len(cfg.Session.PRs) == 0 {
+		return fmt.Errorf("at least one issue or PR is required (use --issues or --prs)")
 	}
 	if cfg.Cloud.Provider == "" {
 		return fmt.Errorf("cloud provider is required (use --provider or set in config)")
@@ -115,7 +120,12 @@ func runSession(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Session ID: %s\n", sessionID)
 	fmt.Printf("Repository: %s\n", cfg.Session.Repository)
-	fmt.Printf("Issues: %s\n", strings.Join(cfg.Session.Tasks, ", "))
+	if len(cfg.Session.Tasks) > 0 {
+		fmt.Printf("Issues: %s\n", strings.Join(cfg.Session.Tasks, ", "))
+	}
+	if len(cfg.Session.PRs) > 0 {
+		fmt.Printf("PRs: %s\n", strings.Join(cfg.Session.PRs, ", "))
+	}
 	fmt.Printf("Agent: %s\n", cfg.Session.Agent)
 	fmt.Printf("Provider: %s\n", cfg.Cloud.Provider)
 	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
@@ -138,6 +148,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		ID:            sessionID,
 		Repository:    cfg.Session.Repository,
 		Tasks:         cfg.Session.Tasks,
+		PRs:           cfg.Session.PRs,
 		Agent:         cfg.Session.Agent,
 		MaxIterations: cfg.Session.MaxIterations,
 		MaxDuration:   cfg.Session.MaxDuration,

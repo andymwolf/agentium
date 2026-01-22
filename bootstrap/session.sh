@@ -7,10 +7,13 @@
 # Required environment variables:
 #   AGENTIUM_SESSION_ID      - Unique session identifier
 #   AGENTIUM_REPOSITORY      - Target repository (owner/repo format)
-#   AGENTIUM_ISSUES          - Comma-separated list of issue numbers
+#   AGENTIUM_ISSUES          - Comma-separated list of issue numbers (for issue sessions)
+#   AGENTIUM_PRS             - Comma-separated list of PR numbers (for PR review sessions)
 #   GITHUB_APP_ID            - GitHub App ID for authentication
 #   GITHUB_INSTALLATION_ID   - GitHub App installation ID
 #   GITHUB_PRIVATE_KEY_SECRET - GCP Secret Manager path for private key
+#
+# Note: At least one of AGENTIUM_ISSUES or AGENTIUM_PRS must be provided.
 #
 # Optional environment variables:
 #   AGENTIUM_MAX_ITERATIONS  - Maximum iterations (default: 5)
@@ -143,6 +146,123 @@ build_prompt() {
     echo -e "${prompt}"
 }
 
+# Fetch PR details from GitHub
+fetch_pr_details() {
+    local repo="$1"
+    local pr_number="$2"
+
+    gh pr view "${pr_number}" --repo "${repo}" \
+        --json number,title,body,headRefName
+}
+
+# Fetch PR review comments
+fetch_pr_reviews() {
+    local repo="$1"
+    local pr_number="$2"
+
+    gh api "repos/${repo}/pulls/${pr_number}/reviews" \
+        --jq '[.[] | select(.state == "CHANGES_REQUESTED" or .state == "COMMENTED") | {state: .state, body: .body}]' 2>/dev/null || echo "[]"
+}
+
+# Fetch PR inline comments
+fetch_pr_comments() {
+    local repo="$1"
+    local pr_number="$2"
+
+    gh api "repos/${repo}/pulls/${pr_number}/comments" \
+        --jq '[.[] | {path: .path, line: .line, body: .body}]' 2>/dev/null || echo "[]"
+}
+
+# Build the prompt for PR review sessions
+build_pr_prompt() {
+    local repo="$1"
+    local prs="$2"
+
+    local prompt="You are working on repository: ${repo}\n\n"
+    prompt+="## PR REVIEW SESSION\n\n"
+    prompt+="You are addressing code review feedback on existing pull request(s).\n\n"
+
+    IFS=',' read -ra PR_ARRAY <<< "${prs}"
+    for pr_num in "${PR_ARRAY[@]}"; do
+        pr_num=$(echo "${pr_num}" | tr -d ' ')
+        local pr_json=$(fetch_pr_details "${repo}" "${pr_num}" 2>/dev/null || echo '{}')
+
+        if [[ "${pr_json}" != "{}" ]]; then
+            local title=$(echo "${pr_json}" | jq -r '.title // "Unknown"')
+            local branch=$(echo "${pr_json}" | jq -r '.headRefName // "unknown"')
+
+            prompt+="### PR #${pr_num}: ${title}\n"
+            prompt+="Branch: ${branch}\n\n"
+
+            # Fetch and add review comments
+            local reviews=$(fetch_pr_reviews "${repo}" "${pr_num}")
+            if [[ "${reviews}" != "[]" ]] && [[ -n "${reviews}" ]]; then
+                prompt+="**Review Feedback:**\n"
+                prompt+=$(echo "${reviews}" | jq -r '.[] | "- [\(.state)] \(.body)"' | head -c 1000)
+                prompt+="\n\n"
+            fi
+
+            # Fetch and add inline comments
+            local comments=$(fetch_pr_comments "${repo}" "${pr_num}")
+            if [[ "${comments}" != "[]" ]] && [[ -n "${comments}" ]]; then
+                prompt+="**Inline Comments:**\n"
+                prompt+=$(echo "${comments}" | jq -r '.[] | "- File: \(.path) (line \(.line))\n  Comment: \(.body)"' | head -c 1500)
+                prompt+="\n\n"
+            fi
+        else
+            prompt+="### PR #${pr_num}\n\n"
+        fi
+    done
+
+    prompt+="## Instructions\n\n"
+    prompt+="1. You are ALREADY on the PR branch - do NOT create a new branch\n"
+    prompt+="2. Read and understand the review comments\n"
+    prompt+="3. Make targeted changes to address the feedback\n"
+    prompt+="4. Run tests to verify your changes\n"
+    prompt+="5. Commit with message: \"Address review feedback\"\n"
+    prompt+="6. Push your changes: \`git push origin HEAD\`\n\n"
+    prompt+="## DO NOT\n\n"
+    prompt+="- Create a new branch (you're already on the PR branch)\n"
+    prompt+="- Close or merge the PR\n"
+    prompt+="- Dismiss reviews\n"
+    prompt+="- Force push (unless absolutely necessary)\n"
+    prompt+="- Make unrelated changes\n"
+
+    echo -e "${prompt}"
+}
+
+# Checkout PR branch
+checkout_pr_branch() {
+    local repo="$1"
+    local pr_number="$2"
+
+    local pr_json=$(fetch_pr_details "${repo}" "${pr_number}" 2>/dev/null || echo '{}')
+    if [[ "${pr_json}" == "{}" ]]; then
+        log_error "Failed to fetch PR #${pr_number} details"
+        return 1
+    fi
+
+    local branch=$(echo "${pr_json}" | jq -r '.headRefName')
+    if [[ -z "${branch}" ]] || [[ "${branch}" == "null" ]]; then
+        log_error "Failed to get branch name for PR #${pr_number}"
+        return 1
+    fi
+
+    log_info "Checking out PR branch: ${branch}"
+    git fetch origin "${branch}" 2>/dev/null || true
+    git checkout "${branch}"
+}
+
+# Detect if changes were pushed (for PR completion detection)
+detect_push_completion() {
+    local output="$1"
+    # Look for git push success pattern
+    if echo "${output}" | grep -qE 'To (github\.com|git@github\.com).*\n.*[a-f0-9]+\.\.[a-f0-9]+'; then
+        return 0
+    fi
+    return 1
+}
+
 # Fetch SYSTEM.md from agentium repository
 fetch_system_md() {
     local output_path="/tmp/SYSTEM.md"
@@ -198,12 +318,22 @@ run_claude() {
 main() {
     log_info "Starting Agentium session: ${AGENTIUM_SESSION_ID:-unknown}"
     log_info "Repository: ${AGENTIUM_REPOSITORY}"
-    log_info "Issues: ${AGENTIUM_ISSUES}"
+    if [[ -n "${AGENTIUM_ISSUES:-}" ]]; then
+        log_info "Issues: ${AGENTIUM_ISSUES}"
+    fi
+    if [[ -n "${AGENTIUM_PRS:-}" ]]; then
+        log_info "PRs: ${AGENTIUM_PRS}"
+    fi
 
     # Validate required environment variables
     : "${AGENTIUM_SESSION_ID:?AGENTIUM_SESSION_ID is required}"
     : "${AGENTIUM_REPOSITORY:?AGENTIUM_REPOSITORY is required}"
-    : "${AGENTIUM_ISSUES:?AGENTIUM_ISSUES is required}"
+
+    # Require at least issues or PRs
+    if [[ -z "${AGENTIUM_ISSUES:-}" ]] && [[ -z "${AGENTIUM_PRS:-}" ]]; then
+        log_error "At least one of AGENTIUM_ISSUES or AGENTIUM_PRS is required"
+        exit 1
+    fi
 
     # Get GitHub token
     local github_token=""
@@ -240,9 +370,6 @@ main() {
     # Create workspace
     mkdir -p "${WORKSPACE}"
 
-    # Clone repository
-    clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
-
     # Fetch SYSTEM.md
     local system_md=$(fetch_system_md)
     if [[ -z "${system_md}" ]]; then
@@ -250,39 +377,75 @@ main() {
         exit 1
     fi
 
-    # Build prompt with issue context
-    local prompt=$(build_prompt "${AGENTIUM_REPOSITORY}" "${AGENTIUM_ISSUES}")
-
-    # Run iterations
     local max_iterations="${AGENTIUM_MAX_ITERATIONS:-5}"
     local iteration=1
+    local prompt=""
+    local is_pr_session=false
 
+    # Determine session type and set up accordingly
+    if [[ -n "${AGENTIUM_PRS:-}" ]]; then
+        is_pr_session=true
+        log_info "PR Review Session Mode"
+
+        # Clone repository (to main first, then checkout PR branch)
+        clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
+
+        # Checkout the first PR's branch
+        IFS=',' read -ra PR_ARRAY <<< "${AGENTIUM_PRS}"
+        local first_pr=$(echo "${PR_ARRAY[0]}" | tr -d ' ')
+        checkout_pr_branch "${AGENTIUM_REPOSITORY}" "${first_pr}"
+
+        # Build PR-specific prompt
+        prompt=$(build_pr_prompt "${AGENTIUM_REPOSITORY}" "${AGENTIUM_PRS}")
+    else
+        log_info "Issue Session Mode"
+
+        # Clone repository
+        clone_repository "${AGENTIUM_REPOSITORY}" "${github_token}" "${AGENTIUM_BRANCH:-main}"
+
+        # Build prompt with issue context
+        prompt=$(build_prompt "${AGENTIUM_REPOSITORY}" "${AGENTIUM_ISSUES}")
+    fi
+
+    # Run iterations
     while [[ ${iteration} -le ${max_iterations} ]]; do
         log_info "=== Iteration ${iteration}/${max_iterations} ==="
 
-        if run_claude "${prompt}" "${system_md}" "${iteration}"; then
+        local output_file=$(mktemp)
+        if run_claude "${prompt}" "${system_md}" "${iteration}" 2>&1 | tee "${output_file}"; then
             log_info "Iteration ${iteration} completed successfully"
         else
             log_error "Iteration ${iteration} failed"
         fi
 
-        # Check if PRs were created for any of the target issues
-        # Look for PRs that reference "Closes #N" for our target issues
-        local pr_found=false
-        IFS=',' read -ra ISSUE_ARRAY <<< "${AGENTIUM_ISSUES}"
-        for issue_num in "${ISSUE_ARRAY[@]}"; do
-            issue_num=$(echo "${issue_num}" | tr -d ' ')
-            # Search for PRs that mention closing this issue
-            local pr_for_issue=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
-                --search "Closes #${issue_num} in:body" --json number 2>/dev/null | jq '. | length')
-            if [[ ${pr_for_issue} -gt 0 ]]; then
-                log_info "PR found for issue #${issue_num}, session complete"
-                pr_found=true
+        local output=$(cat "${output_file}")
+        rm -f "${output_file}"
+
+        # Check completion based on session type
+        if [[ "${is_pr_session}" == "true" ]]; then
+            # For PR sessions: detect if changes were pushed
+            if echo "${output}" | grep -qE 'To (github\.com|git@github\.com)'; then
+                log_info "Changes pushed to PR branch, session complete"
                 break
             fi
-        done
-        if [[ "${pr_found}" == "true" ]]; then
-            break
+        else
+            # For issue sessions: check if PRs were created
+            local pr_found=false
+            IFS=',' read -ra ISSUE_ARRAY <<< "${AGENTIUM_ISSUES}"
+            for issue_num in "${ISSUE_ARRAY[@]}"; do
+                issue_num=$(echo "${issue_num}" | tr -d ' ')
+                # Search for PRs that mention closing this issue
+                local pr_for_issue=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
+                    --search "Closes #${issue_num} in:body" --json number 2>/dev/null | jq '. | length')
+                if [[ ${pr_for_issue} -gt 0 ]]; then
+                    log_info "PR found for issue #${issue_num}, session complete"
+                    pr_found=true
+                    break
+                fi
+            done
+            if [[ "${pr_found}" == "true" ]]; then
+                break
+            fi
         fi
 
         ((iteration++))

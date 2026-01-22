@@ -51,6 +51,7 @@ type DefaultsConfig struct {
 type SessionConfig struct {
 	Repository    string   `mapstructure:"repository"`
 	Tasks         []string `mapstructure:"tasks"`
+	PRs           []string `mapstructure:"prs"`
 	Agent         string   `mapstructure:"agent"`
 	MaxIterations int      `mapstructure:"max_iterations"`
 	MaxDuration   string   `mapstructure:"max_duration"`
@@ -168,8 +169,8 @@ func (c *Config) ValidateForRun() error {
 		return fmt.Errorf("repository is required")
 	}
 
-	if len(c.Session.Tasks) == 0 {
-		return fmt.Errorf("at least one task/issue is required")
+	if len(c.Session.Tasks) == 0 && len(c.Session.PRs) == 0 {
+		return fmt.Errorf("at least one issue or PR is required")
 	}
 
 	if c.GitHub.AppID == 0 {

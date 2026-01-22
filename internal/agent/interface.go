@@ -5,6 +5,7 @@ type Session struct {
 	ID            string
 	Repository    string
 	Tasks         []string
+	PRs           []string // PR numbers for review sessions
 	WorkDir       string
 	GitHubToken   string
 	MaxIterations int
@@ -19,6 +20,7 @@ type IterationResult struct {
 	Success        bool
 	TasksCompleted []string
 	PRsCreated     []string
+	PushedChanges  bool // True if git push was detected (for PR review sessions)
 	Error          string
 	Summary        string
 	TokensUsed     int

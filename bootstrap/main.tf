@@ -25,7 +25,7 @@ provider "google" {
 
 # Generate unique session ID if not provided
 resource "random_id" "session" {
-  byte_length = 6  # 12 hex chars to stay within GCP naming limits
+  byte_length = 6 # 12 hex chars to stay within GCP naming limits
 }
 
 locals {
@@ -113,14 +113,15 @@ resource "google_compute_instance" "agentium" {
     user-data = data.local_file.cloud_init.content
 
     # Agentium session configuration
-    agentium-autostart           = "true"
-    agentium-session-id          = local.session_id
-    agentium-repository          = var.repository
-    agentium-issues              = var.issues
-    github-app-id                = var.github_app_id
-    github-installation-id       = var.github_installation_id
-    github-private-key-secret    = var.github_private_key_secret
-    anthropic-api-key-secret     = var.anthropic_api_key_secret
+    agentium-autostart        = "true"
+    agentium-session-id       = local.session_id
+    agentium-repository       = var.repository
+    agentium-issues           = var.issues
+    agentium-prs              = var.prs
+    github-app-id             = var.github_app_id
+    github-installation-id    = var.github_installation_id
+    github-private-key-secret = var.github_private_key_secret
+    anthropic-api-key-secret  = var.anthropic_api_key_secret
   }
 
   # Labels for tracking
