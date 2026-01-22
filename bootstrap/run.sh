@@ -30,6 +30,7 @@ GITHUB_PRIVATE_KEY_SECRET=""
 ANTHROPIC_API_KEY_SECRET=""
 REPOSITORY=""
 ISSUES=""
+PRS=""
 FOLLOW_LOGS=false
 DESTROY_MODE=false
 AUTO_APPROVE=false
@@ -63,11 +64,14 @@ usage() {
     cat << EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Launch an Agentium session on GCP to work on GitHub issues.
+Launch an Agentium session on GCP to work on GitHub issues or PRs.
 
 Required options:
   --repo OWNER/REPO       Target GitHub repository
   --issue NUMBER          Issue number(s) to work on (comma-separated)
+  --pr NUMBER             PR number(s) for review sessions (comma-separated)
+
+Note: At least one of --issue or --pr is required. Both can be used together.
 
 GCP options:
   --project PROJECT_ID    GCP project ID (default: from gcloud config)
@@ -87,8 +91,14 @@ Other options:
   --help, -h              Show this help message
 
 Examples:
-  # Launch a session
+  # Launch a session for an issue
   $(basename "$0") --repo andymwolf/agentium --issue 42
+
+  # Launch a PR review session
+  $(basename "$0") --repo andymwolf/agentium --pr 42
+
+  # Combined PR and issue session (PRs processed first)
+  $(basename "$0") --repo andymwolf/agentium --pr 42 --issue 6,47
 
   # Launch and follow logs
   $(basename "$0") --repo andymwolf/agentium --issue 42 --follow
@@ -119,6 +129,10 @@ parse_args() {
                 ;;
             --issue)
                 ISSUES="$2"
+                shift 2
+                ;;
+            --pr)
+                PRS="$2"
                 shift 2
                 ;;
             --project)
@@ -233,8 +247,8 @@ validate_options() {
         missing+=("--repo")
     fi
 
-    if [[ -z "$ISSUES" ]]; then
-        missing+=("--issue")
+    if [[ -z "$ISSUES" ]] && [[ -z "$PRS" ]]; then
+        missing+=("--issue or --pr (at least one required)")
     fi
 
     if [[ -z "$GITHUB_APP_ID" ]]; then
@@ -282,7 +296,12 @@ init_terraform() {
 apply_terraform() {
     print_info "Creating Agentium session..."
     print_info "  Repository: $REPOSITORY"
-    print_info "  Issues: $ISSUES"
+    if [[ -n "$ISSUES" ]]; then
+        print_info "  Issues: $ISSUES"
+    fi
+    if [[ -n "$PRS" ]]; then
+        print_info "  PRs: $PRS"
+    fi
     print_info "  Project: $PROJECT_ID"
     print_info "  Zone: $ZONE"
 
@@ -294,6 +313,7 @@ apply_terraform() {
         -var="zone=$ZONE"
         -var="repository=$REPOSITORY"
         -var="issues=$ISSUES"
+        -var="prs=$PRS"
         -var="github_app_id=$GITHUB_APP_ID"
         -var="github_installation_id=$GITHUB_INSTALLATION_ID"
         -var="github_private_key_secret=$GITHUB_PRIVATE_KEY_SECRET"
