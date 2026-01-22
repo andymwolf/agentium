@@ -11,6 +11,9 @@ package_update: true
 package_upgrade: true
 
 # Create non-root user for running Claude Code
+# Note: NOPASSWD sudo is intentional for ephemeral VMs. The non-root requirement
+# is specifically to satisfy Claude Code's safety check, not as a privilege boundary.
+# These VMs are single-purpose and destroyed after each session.
 users:
   - default
   - name: agentium
@@ -74,11 +77,19 @@ runcmd:
     apt-get update
     apt-get install -y gh
 
-  # gcloud CLI is pre-installed on GCP VMs, but ensure it's up to date
+  # gcloud CLI is pre-installed on GCP VMs, but ensure it's available system-wide
+  # Install to /opt so all users (including agentium) can access it
   - |
     if ! command -v gcloud &> /dev/null; then
-      curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts
-      echo 'source /root/google-cloud-sdk/path.bash.inc' >> /etc/profile.d/gcloud.sh
+      export CLOUDSDK_INSTALL_DIR=/opt
+      curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/opt
+      cat > /etc/profile.d/gcloud.sh << 'GCLOUD_PROFILE'
+    if [ -f /opt/google-cloud-sdk/path.bash.inc ]; then
+      source /opt/google-cloud-sdk/path.bash.inc
+    fi
+    GCLOUD_PROFILE
+      # Also add to PATH immediately for this script
+      source /opt/google-cloud-sdk/path.bash.inc
     fi
 
   # Create workspace directory owned by agentium user
@@ -144,6 +155,7 @@ runcmd:
       # Run the session as the agentium user (non-root)
       # Claude Code requires non-root user when using --dangerously-skip-permissions
       sudo -u agentium \
+        HOME="/home/agentium" \
         AGENTIUM_SESSION_ID="$AGENTIUM_SESSION_ID" \
         AGENTIUM_REPOSITORY="$AGENTIUM_REPOSITORY" \
         AGENTIUM_ISSUES="$AGENTIUM_ISSUES" \
