@@ -327,16 +327,17 @@ run_claude() {
     log_info "Running Claude Code (iteration ${iteration})"
 
     # Build Claude command
+    # Note: --system-prompt expects content, not a file path
     local claude_args=(
         "--print"
         "--dangerously-skip-permissions"
-        "--system-prompt" "${system_md}"
+        "--system-prompt" "$(cat "${system_md}")"
     )
 
     # Check for project-specific instructions
     if [[ -f "${WORKSPACE}/.agentium/AGENT.md" ]]; then
         log_info "Found project-specific instructions: .agentium/AGENT.md"
-        claude_args+=("--append-system-prompt" "${WORKSPACE}/.agentium/AGENT.md")
+        claude_args+=("--append-system-prompt" "$(cat "${WORKSPACE}/.agentium/AGENT.md")")
     fi
 
     # Export session variables for Claude
