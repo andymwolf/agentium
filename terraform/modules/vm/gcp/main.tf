@@ -73,6 +73,19 @@ variable "vm_image" {
   default     = ""
 }
 
+variable "claude_auth_mode" {
+  description = "Claude authentication mode: api or oauth"
+  type        = string
+  default     = "api"
+}
+
+variable "claude_auth_json" {
+  description = "Base64-encoded Claude auth.json content (for oauth mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "network" {
   description = "VPC network name"
   type        = string
@@ -122,6 +135,16 @@ resource "google_project_iam_member" "compute_admin" {
 
 # Cloud-init script
 locals {
+  claude_auth_write_file = var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ? <<-AUTHFILE
+      - path: /etc/agentium/claude-auth.json
+        permissions: '0600'
+        encoding: b64
+        content: ${var.claude_auth_json}
+  AUTHFILE
+  : ""
+
+  claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro" : ""
+
   cloud_init = <<-EOF
     #cloud-config
     package_update: true
@@ -135,7 +158,7 @@ locals {
         permissions: '0600'
         content: |
           ${var.session_config}
-
+    ${local.claude_auth_write_file}
     runcmd:
       - systemctl start docker
       - systemctl enable docker
@@ -147,7 +170,9 @@ locals {
           -v /var/run/docker.sock:/var/run/docker.sock \
           -v /etc/agentium:/etc/agentium:ro \
           -v /workspace:/workspace \
+          ${local.claude_auth_volume} \
           -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
+          -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
           --name agentium-controller \
           ${var.controller_image}
   EOF

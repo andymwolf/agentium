@@ -37,12 +37,18 @@ func (a *Adapter) ContainerImage() string {
 
 // BuildEnv constructs environment variables for the Claude Code container
 func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]string {
+	authMode := session.ClaudeAuthMode
+	if authMode == "" {
+		authMode = "api"
+	}
+
 	env := map[string]string{
-		"GITHUB_TOKEN":          session.GitHubToken,
-		"AGENTIUM_SESSION_ID":   session.ID,
-		"AGENTIUM_ITERATION":    fmt.Sprintf("%d", iteration),
-		"AGENTIUM_REPOSITORY":   session.Repository,
-		"AGENTIUM_WORKDIR":      "/workspace",
+		"GITHUB_TOKEN":            session.GitHubToken,
+		"AGENTIUM_SESSION_ID":     session.ID,
+		"AGENTIUM_ITERATION":      fmt.Sprintf("%d", iteration),
+		"AGENTIUM_REPOSITORY":     session.Repository,
+		"AGENTIUM_WORKDIR":        "/workspace",
+		"AGENTIUM_AUTH_MODE":      authMode,
 		"CLAUDE_CODE_USE_BEDROCK": "0",
 	}
 
