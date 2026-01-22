@@ -15,6 +15,7 @@ import (
 	"github.com/andywolf/agentium/internal/agent"
 	_ "github.com/andywolf/agentium/internal/agent/aider"
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
+	"github.com/andywolf/agentium/internal/cloud/gcp"
 )
 
 // SessionConfig is the configuration passed to the controller
@@ -77,15 +78,16 @@ func LoadConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte
 
 // Controller manages the agent execution lifecycle
 type Controller struct {
-	config       SessionConfig
-	agent        agent.Agent
-	workDir      string
-	iteration    int
-	startTime    time.Time
-	maxDuration  time.Duration
-	gitHubToken  string
-	completed    map[string]bool
-	logger       *log.Logger
+	config        SessionConfig
+	agent         agent.Agent
+	workDir       string
+	iteration     int
+	startTime     time.Time
+	maxDuration   time.Duration
+	gitHubToken   string
+	completed     map[string]bool
+	logger        *log.Logger
+	secretManager gcp.SecretFetcher
 }
 
 // New creates a new session controller
@@ -102,14 +104,22 @@ func New(config SessionConfig) (*Controller, error) {
 		maxDuration = 2 * time.Hour
 	}
 
+	// Initialize Secret Manager client
+	secretManager, err := gcp.NewSecretManagerClient(context.Background())
+	if err != nil {
+		// Log warning but don't fail - allow fallback to gcloud CLI
+		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
+	}
+
 	return &Controller{
-		config:      config,
-		agent:       agentAdapter,
-		workDir:     "/workspace",
-		iteration:   0,
-		maxDuration: maxDuration,
-		completed:   make(map[string]bool),
-		logger:      log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		config:        config,
+		agent:         agentAdapter,
+		workDir:       "/workspace",
+		iteration:     0,
+		maxDuration:   maxDuration,
+		completed:     make(map[string]bool),
+		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		secretManager: secretManager,
 	}, nil
 }
 
@@ -238,7 +248,16 @@ func (c *Controller) fetchGitHubToken(ctx context.Context) error {
 }
 
 func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string, error) {
-	// Use gcloud to fetch secret
+	// Try to use Secret Manager client first
+	if c.secretManager != nil {
+		secret, err := c.secretManager.FetchSecret(ctx, secretPath)
+		if err == nil {
+			return secret, nil
+		}
+		c.logger.Printf("Warning: Secret Manager client failed: %v, falling back to gcloud CLI", err)
+	}
+
+	// Fallback to gcloud CLI
 	cmd := exec.CommandContext(ctx, "gcloud", "secrets", "versions", "access", "latest",
 		"--secret", filepath.Base(secretPath),
 	)
@@ -492,6 +511,13 @@ func (c *Controller) cleanup() {
 
 	// Clear sensitive data
 	c.gitHubToken = ""
+
+	// Close Secret Manager client
+	if c.secretManager != nil {
+		if err := c.secretManager.Close(); err != nil {
+			c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
+		}
+	}
 
 	// Request VM termination
 	c.terminateVM()
