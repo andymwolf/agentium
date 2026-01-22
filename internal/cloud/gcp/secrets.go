@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -110,6 +110,10 @@ func getProjectIDFromMetadata(ctx context.Context) (string, error) {
 // - projects/PROJECT_ID/secrets/SECRET_NAME (defaults to latest)
 // - SECRET_NAME (requires projectID from environment)
 func (c *SecretManagerClient) FetchSecret(ctx context.Context, secretPath string) (string, error) {
+	// Add timeout to prevent hanging if the API is slow
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	// Normalize the secret path
 	name := c.normalizeSecretPath(secretPath)
 
@@ -142,7 +146,7 @@ func (c *SecretManagerClient) normalizeSecretPath(secretPath string) string {
 	}
 
 	// If it's just a secret name, construct the full path using the project ID
-	secretName := filepath.Base(secretPath)
+	secretName := path.Base(secretPath)
 	return fmt.Sprintf("projects/%s/secrets/%s/versions/latest", c.projectID, secretName)
 }
 
