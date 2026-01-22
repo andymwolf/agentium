@@ -88,7 +88,8 @@ type Controller struct {
 	gitHubToken   string
 	completed     map[string]bool
 	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
-	logger        *log.Logger
+	logger        gcp.Logger
+	stdLogger     *log.Logger // Fallback for when cloud logging is not available
 	secretManager gcp.SecretFetcher
 }
 
@@ -113,6 +114,17 @@ func New(config SessionConfig) (*Controller, error) {
 		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
 	}
 
+	// Initialize Cloud Logger
+	var logger gcp.Logger
+	cloudLogger, err := gcp.NewCloudLogger(context.Background(), config.ID, "agentium-controller")
+	if err != nil {
+		// Fall back to standard logger if Cloud Logging is not available
+		log.Printf("[controller] Warning: failed to initialize Cloud Logger, falling back to stdout: %v", err)
+		logger = gcp.NewStdLogger(os.Stdout, "[controller] ")
+	} else {
+		logger = cloudLogger
+	}
+
 	return &Controller{
 		config:        config,
 		agent:         agentAdapter,
@@ -120,7 +132,8 @@ func New(config SessionConfig) (*Controller, error) {
 		iteration:     0,
 		maxDuration:   maxDuration,
 		completed:     make(map[string]bool),
-		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		logger:        logger,
+		stdLogger:     log.New(os.Stdout, "[controller] ", log.LstdFlags),
 		secretManager: secretManager,
 	}, nil
 }
@@ -128,17 +141,17 @@ func New(config SessionConfig) (*Controller, error) {
 // Run executes the main control loop
 func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
-	c.logger.Printf("Starting session %s", c.config.ID)
-	c.logger.Printf("Repository: %s", c.config.Repository)
+	c.logger.Info(fmt.Sprintf("Starting session %s", c.config.ID))
+	c.logger.Info(fmt.Sprintf("Repository: %s", c.config.Repository))
 	if len(c.config.Tasks) > 0 {
-		c.logger.Printf("Tasks: %v", c.config.Tasks)
+		c.logger.Info(fmt.Sprintf("Tasks: %v", c.config.Tasks))
 	}
 	if len(c.config.PRs) > 0 {
-		c.logger.Printf("PRs: %v", c.config.PRs)
+		c.logger.Info(fmt.Sprintf("PRs: %v", c.config.PRs))
 	}
-	c.logger.Printf("Agent: %s", c.config.Agent)
-	c.logger.Printf("Max iterations: %d", c.config.MaxIterations)
-	c.logger.Printf("Max duration: %s", c.maxDuration)
+	c.logger.Info(fmt.Sprintf("Agent: %s", c.config.Agent))
+	c.logger.Info(fmt.Sprintf("Max iterations: %d", c.config.MaxIterations))
+	c.logger.Info(fmt.Sprintf("Max duration: %s", c.maxDuration))
 
 	// Initialize workspace
 	if err := c.initializeWorkspace(ctx); err != nil {
@@ -160,7 +173,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		// PR review session: fetch PR details and checkout PR branch
 		prDetails, err := c.fetchPRDetails(ctx)
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch PR details: %v", err)
+			c.logger.Warn(fmt.Sprintf("failed to fetch PR details: %v", err))
 		}
 
 		// Build PR-specific prompt
@@ -171,7 +184,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		// Issue session: fetch issue details
 		issues, err := c.fetchIssueDetails(ctx)
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch issue details: %v", err)
+			c.logger.Warn(fmt.Sprintf("failed to fetch issue details: %v", err))
 		}
 
 		// Build initial prompt with issue context
@@ -184,28 +197,34 @@ func (c *Controller) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Println("Context cancelled, shutting down")
+			c.logger.Info("Context cancelled, shutting down")
 			return ctx.Err()
 		default:
 		}
 
 		// Check termination conditions
 		if c.shouldTerminate() {
-			c.logger.Println("Termination condition met")
+			c.logger.Info("Termination condition met")
 			break
 		}
 
 		c.iteration++
-		c.logger.Printf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
+
+		// Update logger iteration number if it's a CloudLogger
+		if cloudLogger, ok := c.logger.(*gcp.CloudLogger); ok {
+			cloudLogger.SetIteration(c.iteration)
+		}
+
+		c.logger.Info(fmt.Sprintf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations))
 
 		// Run agent iteration
 		result, err := c.runIteration(ctx)
 		if err != nil {
-			c.logger.Printf("Iteration %d failed: %v", c.iteration, err)
+			c.logger.Error(fmt.Sprintf("Iteration %d failed: %v", c.iteration, err))
 			continue
 		}
 
-		c.logger.Printf("Iteration %d completed: %s", c.iteration, result.Summary)
+		c.logger.Info(fmt.Sprintf("Iteration %d completed: %s", c.iteration, result.Summary))
 
 		// Update completion state
 		for _, task := range result.TasksCompleted {
@@ -214,18 +233,23 @@ func (c *Controller) Run(ctx context.Context) error {
 
 		// Check PRs created (for issue sessions)
 		if len(result.PRsCreated) > 0 {
-			c.logger.Printf("PRs created: %v", result.PRsCreated)
+			c.logger.Info(fmt.Sprintf("PRs created: %v", result.PRsCreated))
 		}
 
 		// Check if changes were pushed (for PR review sessions)
 		if result.PushedChanges {
 			c.pushedChanges = true
-			c.logger.Println("Changes pushed to PR branch")
+			c.logger.Info("Changes pushed to PR branch")
 		}
 	}
 
 	// Emit final logs
 	c.emitFinalLogs()
+
+	// Flush logs before cleanup to ensure they persist
+	if err := c.logger.Flush(); err != nil {
+		c.stdLogger.Printf("Warning: failed to flush logs: %v", err)
+	}
 
 	// Cleanup
 	c.cleanup()
@@ -234,7 +258,7 @@ func (c *Controller) Run(ctx context.Context) error {
 }
 
 func (c *Controller) initializeWorkspace(ctx context.Context) error {
-	c.logger.Println("Initializing workspace")
+	c.logger.Info("Initializing workspace")
 
 	if err := os.MkdirAll(c.workDir, 0755); err != nil {
 		return err
@@ -244,7 +268,7 @@ func (c *Controller) initializeWorkspace(ctx context.Context) error {
 }
 
 func (c *Controller) fetchGitHubToken(ctx context.Context) error {
-	c.logger.Println("Fetching GitHub token")
+	c.logger.Info("Fetching GitHub token")
 
 	// Try to get token from environment first (for local testing)
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
@@ -281,7 +305,7 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 		if err == nil {
 			return secret, nil
 		}
-		c.logger.Printf("Warning: Secret Manager client failed: %v, falling back to gcloud CLI", err)
+		c.logger.Warn(fmt.Sprintf("Secret Manager client failed: %v, falling back to gcloud CLI", err))
 	}
 
 	// Fallback to gcloud CLI
@@ -315,12 +339,12 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 	// In production, this should use proper JWT generation
 
 	// For now, assume GITHUB_TOKEN is set or use a placeholder
-	c.logger.Println("Warning: Using GITHUB_TOKEN from environment, proper App token generation not implemented")
+	c.logger.Warn("Using GITHUB_TOKEN from environment, proper App token generation not implemented")
 	return os.Getenv("GITHUB_TOKEN"), nil
 }
 
 func (c *Controller) cloneRepository(ctx context.Context) error {
-	c.logger.Printf("Cloning repository: %s", c.config.Repository)
+	c.logger.Info(fmt.Sprintf("Cloning repository: %s", c.config.Repository))
 
 	// Parse repository URL
 	repo := c.config.Repository
@@ -342,7 +366,7 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 	if err := cmd.Run(); err != nil {
 		// Check if directory already exists with content
 		if entries, _ := os.ReadDir(c.workDir); len(entries) > 0 {
-			c.logger.Println("Workspace already contains files, skipping clone")
+			c.logger.Info("Workspace already contains files, skipping clone")
 			return nil
 		}
 		return err
@@ -377,7 +401,7 @@ type prComment struct {
 }
 
 func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, error) {
-	c.logger.Println("Fetching issue details")
+	c.logger.Info("Fetching issue details")
 
 	issues := make([]issueDetail, 0, len(c.config.Tasks))
 
@@ -391,13 +415,13 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, erro
 
 		output, err := cmd.Output()
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch issue #%s: %v", taskID, err)
+			c.logger.Warn(fmt.Sprintf("failed to fetch issue #%s: %v", taskID, err))
 			continue
 		}
 
 		var issue issueDetail
 		if err := json.Unmarshal(output, &issue); err != nil {
-			c.logger.Printf("Warning: failed to parse issue #%s: %v", taskID, err)
+			c.logger.Warn(fmt.Sprintf("failed to parse issue #%s: %v", taskID, err))
 			continue
 		}
 
@@ -414,7 +438,7 @@ type prWithReviews struct {
 }
 
 func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error) {
-	c.logger.Println("Fetching PR details")
+	c.logger.Info("Fetching PR details")
 
 	prs := make([]prWithReviews, 0, len(c.config.PRs))
 
@@ -428,20 +452,20 @@ func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error
 
 		output, err := cmd.Output()
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch PR #%s: %v", prNumber, err)
+			c.logger.Warn(fmt.Sprintf("failed to fetch PR #%s: %v", prNumber, err))
 			continue
 		}
 
 		var pr prDetail
 		if err := json.Unmarshal(output, &pr); err != nil {
-			c.logger.Printf("Warning: failed to parse PR #%s: %v", prNumber, err)
+			c.logger.Warn(fmt.Sprintf("failed to parse PR #%s: %v", prNumber, err))
 			continue
 		}
 
 		prWithRev := prWithReviews{Detail: pr}
 
 		// Checkout PR branch
-		c.logger.Printf("Checking out PR branch: %s", pr.HeadRefName)
+		c.logger.Info(fmt.Sprintf("Checking out PR branch: %s", pr.HeadRefName))
 		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
 		checkoutCmd.Dir = c.workDir
 		if err := checkoutCmd.Run(); err != nil {
@@ -452,7 +476,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error
 			checkoutCmd = exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
 			checkoutCmd.Dir = c.workDir
 			if err := checkoutCmd.Run(); err != nil {
-				c.logger.Printf("Warning: failed to checkout PR branch %s: %v", pr.HeadRefName, err)
+				c.logger.Warn(fmt.Sprintf("failed to checkout PR branch %s: %v", pr.HeadRefName, err))
 			}
 		}
 
@@ -580,19 +604,19 @@ func (c *Controller) buildPromptWithIssues(issues []issueDetail) string {
 func (c *Controller) shouldTerminate() bool {
 	// Check iteration limit
 	if c.iteration >= c.config.MaxIterations {
-		c.logger.Println("Max iterations reached")
+		c.logger.Info("Max iterations reached")
 		return true
 	}
 
 	// Check time limit
 	if time.Since(c.startTime) >= c.maxDuration {
-		c.logger.Println("Max duration reached")
+		c.logger.Info("Max duration reached")
 		return true
 	}
 
 	// For PR review sessions: check if changes were pushed
 	if len(c.config.PRs) > 0 && c.pushedChanges {
-		c.logger.Println("PR review complete: changes pushed")
+		c.logger.Info("PR review complete: changes pushed")
 		return true
 	}
 
@@ -605,7 +629,7 @@ func (c *Controller) shouldTerminate() bool {
 		}
 	}
 	if allComplete && len(c.config.Tasks) > 0 {
-		c.logger.Println("All tasks completed")
+		c.logger.Info("All tasks completed")
 		return true
 	}
 
@@ -629,7 +653,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	env := c.agent.BuildEnv(session, c.iteration)
 	command := c.agent.BuildCommand(session, c.iteration)
 
-	c.logger.Printf("Running agent: %s %v", c.agent.ContainerImage(), command)
+	c.logger.Info(fmt.Sprintf("Running agent: %s %v", c.agent.ContainerImage(), command))
 
 	// Run agent container
 	args := []string{
@@ -685,10 +709,10 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 }
 
 func (c *Controller) emitFinalLogs() {
-	c.logger.Println("=== Session Summary ===")
-	c.logger.Printf("Session ID: %s", c.config.ID)
-	c.logger.Printf("Duration: %s", time.Since(c.startTime).Round(time.Second))
-	c.logger.Printf("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
+	c.logger.Info("=== Session Summary ===")
+	c.logger.Info(fmt.Sprintf("Session ID: %s", c.config.ID))
+	c.logger.Info(fmt.Sprintf("Duration: %s", time.Since(c.startTime).Round(time.Second)))
+	c.logger.Info(fmt.Sprintf("Iterations: %d/%d", c.iteration, c.config.MaxIterations))
 
 	completedCount := 0
 	for _, task := range c.config.Tasks {
@@ -696,12 +720,12 @@ func (c *Controller) emitFinalLogs() {
 			completedCount++
 		}
 	}
-	c.logger.Printf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
-	c.logger.Println("======================")
+	c.logger.Info(fmt.Sprintf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks)))
+	c.logger.Info("======================")
 }
 
 func (c *Controller) cleanup() {
-	c.logger.Println("Cleaning up")
+	c.logger.Info("Cleaning up")
 
 	// Clear sensitive data
 	c.gitHubToken = ""
@@ -709,8 +733,13 @@ func (c *Controller) cleanup() {
 	// Close Secret Manager client
 	if c.secretManager != nil {
 		if err := c.secretManager.Close(); err != nil {
-			c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
+			c.logger.Warn(fmt.Sprintf("failed to close Secret Manager client: %v", err))
 		}
+	}
+
+	// Close logger
+	if err := c.logger.Close(); err != nil {
+		c.stdLogger.Printf("Warning: failed to close logger: %v", err)
 	}
 
 	// Request VM termination
@@ -718,14 +747,14 @@ func (c *Controller) cleanup() {
 }
 
 func (c *Controller) terminateVM() {
-	c.logger.Println("Initiating VM termination")
+	c.stdLogger.Println("Initiating VM termination")
 
 	// Get instance name from metadata
 	cmd := exec.Command("curl", "-s", "-H", "Metadata-Flavor: Google",
 		"http://metadata.google.internal/computeMetadata/v1/instance/name")
 	instanceName, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Warning: failed to get instance name: %v", err)
+		c.stdLogger.Printf("Warning: failed to get instance name: %v", err)
 		return
 	}
 
@@ -734,7 +763,7 @@ func (c *Controller) terminateVM() {
 		"http://metadata.google.internal/computeMetadata/v1/instance/zone")
 	zone, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Warning: failed to get zone: %v", err)
+		c.stdLogger.Printf("Warning: failed to get zone: %v", err)
 		return
 	}
 
@@ -747,6 +776,6 @@ func (c *Controller) terminateVM() {
 	)
 
 	if err := cmd.Start(); err != nil {
-		c.logger.Printf("Warning: failed to initiate VM deletion: %v", err)
+		c.stdLogger.Printf("Warning: failed to initiate VM deletion: %v", err)
 	}
 }
