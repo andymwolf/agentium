@@ -29,10 +29,13 @@ RUN apk add --no-cache \
     git \
     curl \
     jq \
-    bash
+    bash \
+    python3
 
-# Install gcloud CLI
-RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/opt
+# Install gcloud CLI (static tarball for Alpine compatibility)
+RUN curl -sSL https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-sdk.tar.gz | \
+    tar xz -C /opt && \
+    /opt/google-cloud-sdk/install.sh --quiet --path-update=false
 ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
 # Install GitHub CLI
