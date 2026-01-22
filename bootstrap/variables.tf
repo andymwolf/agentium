@@ -7,14 +7,16 @@
 variable "project_id" {
   description = "GCP project ID"
   type        = string
+  default     = "agentium-485102"
 }
 
 variable "repository" {
   description = "Target GitHub repository (owner/repo format)"
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$", var.repository))
+    condition     = var.repository == "" || can(regex("^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$", var.repository))
     error_message = "Repository must be in owner/repo format (e.g., 'andymwolf/agentium')."
   }
 }
@@ -22,9 +24,10 @@ variable "repository" {
 variable "issues" {
   description = "Comma-separated list of issue numbers to work on"
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^[0-9]+(,[0-9]+)*$", var.issues))
+    condition     = var.issues == "" || can(regex("^[0-9]+(,[0-9]+)*$", var.issues))
     error_message = "Issues must be comma-separated numbers (e.g., '42' or '42,43,44')."
   }
 }
@@ -32,16 +35,19 @@ variable "issues" {
 variable "github_app_id" {
   description = "GitHub App ID for authentication"
   type        = string
+  default     = ""
 }
 
 variable "github_installation_id" {
   description = "GitHub App installation ID"
   type        = string
+  default     = ""
 }
 
 variable "github_private_key_secret" {
   description = "Name of the Secret Manager secret containing the GitHub App private key"
   type        = string
+  default     = ""
 }
 
 # =============================================================================
