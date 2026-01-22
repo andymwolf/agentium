@@ -266,10 +266,22 @@ main() {
             log_error "Iteration ${iteration} failed"
         fi
 
-        # Check if PRs were created (filter by agentium branch prefix)
-        local pr_count=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --head "agentium/" --state open --json number | jq '. | length')
-        if [[ ${pr_count} -gt 0 ]]; then
-            log_info "PRs created, session complete"
+        # Check if PRs were created for any of the target issues
+        # Look for PRs that reference "Closes #N" for our target issues
+        local pr_found=false
+        IFS=',' read -ra ISSUE_ARRAY <<< "${AGENTIUM_ISSUES}"
+        for issue_num in "${ISSUE_ARRAY[@]}"; do
+            issue_num=$(echo "${issue_num}" | tr -d ' ')
+            # Search for PRs that mention closing this issue
+            local pr_for_issue=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
+                --search "Closes #${issue_num} in:body" --json number 2>/dev/null | jq '. | length')
+            if [[ ${pr_for_issue} -gt 0 ]]; then
+                log_info "PR found for issue #${issue_num}, session complete"
+                pr_found=true
+                break
+            fi
+        done
+        if [[ "${pr_found}" == "true" ]]; then
             break
         fi
 
