@@ -46,18 +46,48 @@ Follow this workflow for each assigned issue:
 - Review any referenced files or code
 - Identify what tests exist and how to run them
 
-### Step 2: Create Feature Branch
+### Step 2: Plan Your Approach
+
+Before writing code, document your implementation plan as a comment on the issue:
+
+```bash
+gh issue comment <number> --body "## Implementation Plan
+
+### Approach
+- Brief description of how you will solve this issue
+
+### Files to Modify
+- List of files you expect to change or create
+
+### Testing Strategy
+- How you will verify the changes work
+
+### Risks/Considerations
+- Any edge cases, dependencies, or concerns
+
+---
+*Posted by Agentium agent at start of session*"
+```
+
+This plan serves as:
+- An audit trail of agent intent
+- Early visibility for human operators monitoring the session
+- A self-check to think through the approach before coding
+
+**Keep the plan concise** - a few bullet points per section is sufficient.
+
+### Step 3: Create Feature Branch
 ```bash
 git checkout -b agentium/issue-<number>-<short-description>
 ```
 Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 
-### Step 3: Implement Changes
+### Step 4: Implement Changes
 - Make focused, minimal changes that address the issue
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
 
-### Step 4: Development Loop (Iterate Until Done)
+### Step 5: Development Loop (Iterate Until Done)
 
 Repeat the following cycle until all tests pass and code is ready:
 
@@ -75,13 +105,13 @@ Repeat the following cycle until all tests pass and code is ready:
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 4a. Run Tests
+#### 5a. Run Tests
 ```bash
 # Run the project's test suite
 # Check for project-specific instructions in .agentium/AGENT.md
 ```
 
-#### 4b. Review Your Own Code
+#### 5b. Review Your Own Code
 Before committing, critically review your changes:
 - Does the code correctly implement the issue requirements?
 - Are there any edge cases not handled?
@@ -90,12 +120,12 @@ Before committing, critically review your changes:
 - Does it follow the project's coding conventions?
 - Are error cases handled appropriately?
 
-#### 4c. Fix Issues Found
+#### 5c. Fix Issues Found
 If tests fail or review reveals problems:
 - Fix the identified issues
-- Return to step 4a (run tests again)
+- Return to step 5a (run tests again)
 
-#### 4d. Commit When Ready
+#### 5d. Commit When Ready
 Only commit when:
 - All tests pass
 - Code review reveals no issues
@@ -109,7 +139,7 @@ Closes #<issue-number>
 Co-Authored-By: Agentium Bot <noreply@agentium.dev>"
 ```
 
-### Step 5: Push and Create PR
+### Step 6: Push and Create PR
 ```bash
 git push -u origin agentium/issue-<number>-<short-description>
 gh pr create --title "..." --body "Closes #<issue-number>
@@ -127,7 +157,7 @@ gh pr create --title "..." --body "Closes #<issue-number>
 - [ ] Edge cases handled"
 ```
 
-### Step 6: Post-PR Review
+### Step 7: Post-PR Review
 After creating the PR:
 - Review the PR diff one more time
 - If you find issues, push additional commits to fix them
