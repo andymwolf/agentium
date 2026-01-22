@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +46,13 @@ func TestNewJWTGenerator(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:       "empty app ID",
+			appID:      "",
+			pemData:    pemData,
+			wantErr:    true,
+			errContain: "app ID cannot be empty",
+		},
+		{
 			name:       "invalid PEM data",
 			appID:      "12345",
 			pemData:    []byte("not a valid pem"),
@@ -66,6 +74,8 @@ func TestNewJWTGenerator(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
+				} else if tt.errContain != "" && !strings.Contains(err.Error(), tt.errContain) {
+					t.Errorf("expected error containing %q, got %q", tt.errContain, err.Error())
 				}
 				return
 			}
@@ -184,27 +194,68 @@ func TestGenerateTokenWithDuration(t *testing.T) {
 	}
 }
 
-func TestTokenExpiration(t *testing.T) {
-	privateKey, pemData := generateTestKeyPair(t)
+func TestGenerateTokenWithDuration_Validation(t *testing.T) {
+	_, pemData := generateTestKeyPair(t)
 
 	gen, err := NewJWTGenerator("12345", pemData)
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
 
-	// Generate a token that's already expired
-	token, err := gen.GenerateTokenWithDuration(-1 * time.Minute)
-	if err != nil {
-		t.Fatalf("failed to generate token: %v", err)
+	tests := []struct {
+		name       string
+		duration   time.Duration
+		wantErr    bool
+		errContain string
+	}{
+		{
+			name:     "valid duration",
+			duration: 5 * time.Minute,
+			wantErr:  false,
+		},
+		{
+			name:     "max duration",
+			duration: MaxJWTDuration,
+			wantErr:  false,
+		},
+		{
+			name:       "exceeds max duration",
+			duration:   11 * time.Minute,
+			wantErr:    true,
+			errContain: "exceeds maximum allowed",
+		},
+		{
+			name:       "zero duration",
+			duration:   0,
+			wantErr:    true,
+			errContain: "duration must be positive",
+		},
+		{
+			name:       "negative duration",
+			duration:   -1 * time.Minute,
+			wantErr:    true,
+			errContain: "duration must be positive",
+		},
 	}
 
-	// Try to parse - should fail validation due to expiration
-	_, err = jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
-		return &privateKey.PublicKey, nil
-	})
-
-	if err == nil {
-		t.Error("expected error for expired token")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token, err := gen.GenerateTokenWithDuration(tt.duration)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if !strings.Contains(err.Error(), tt.errContain) {
+					t.Errorf("expected error containing %q, got %q", tt.errContain, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if token == "" {
+				t.Error("expected non-empty token")
+			}
+		})
 	}
 }
 
