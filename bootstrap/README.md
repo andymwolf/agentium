@@ -108,21 +108,25 @@ cd bootstrap
 
 ### With Environment Variables
 
-Set credentials once:
+Create a `.env` file to store your credentials (this file is gitignored):
 
 ```bash
+cat > .env << 'EOF'
 export AGENTIUM_PROJECT_ID=my-gcp-project
 export AGENTIUM_GITHUB_APP_ID=123456
 export AGENTIUM_GITHUB_INSTALLATION_ID=789012
 export AGENTIUM_GITHUB_PRIVATE_KEY_SECRET=github-app-key
 export AGENTIUM_ANTHROPIC_API_KEY_SECRET=anthropic-api-key
+EOF
 ```
 
-Then run:
+Then source the file and run:
 
 ```bash
-./run.sh --repo andymwolf/agentium --issue 42
+source .env && ./run.sh --repo andymwolf/agentium --issue 42
 ```
+
+Alternatively, export the variables directly in your shell or add them to your shell profile (`~/.bashrc` or `~/.zshrc`).
 
 ### Follow Logs
 
