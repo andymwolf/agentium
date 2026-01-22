@@ -46,18 +46,48 @@ Follow this workflow for each assigned issue:
 - Review any referenced files or code
 - Identify what tests exist and how to run them
 
-### Step 2: Create Feature Branch
+### Step 2: Plan Your Approach
+
+Before writing code, document your implementation plan as a comment on the issue:
+
+```bash
+gh issue comment <number> --body "## Implementation Plan
+
+### Approach
+- Brief description of how you will solve this issue
+
+### Files to Modify
+- List of files you expect to change or create
+
+### Testing Strategy
+- How you will verify the changes work
+
+### Risks/Considerations
+- Any edge cases, dependencies, or concerns
+
+---
+*Posted by Agentium agent at start of session*"
+```
+
+This plan serves as:
+- An audit trail of agent intent
+- Early visibility for human operators monitoring the session
+- A self-check to think through the approach before coding
+
+**Keep the plan concise** - a few bullet points per section is sufficient.
+
+### Step 3: Create Feature Branch
 ```bash
 git checkout -b agentium/issue-<number>-<short-description>
 ```
 Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 
-### Step 3: Implement Changes
+### Step 4: Implement Changes
 - Make focused, minimal changes that address the issue
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
 
-### Step 4: Development Loop (Iterate Until Done)
+### Step 5: Development Loop (Iterate Until Done)
 
 Repeat the following cycle until all tests pass and code is ready:
 
@@ -75,13 +105,13 @@ Repeat the following cycle until all tests pass and code is ready:
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 4a. Run Tests
+#### 5a. Run Tests
 ```bash
 # Run the project's test suite
 # Check for project-specific instructions in .agentium/AGENT.md
 ```
 
-#### 4b. Review Your Own Code
+#### 5b. Review Your Own Code
 Before committing, critically review your changes:
 - Does the code correctly implement the issue requirements?
 - Are there any edge cases not handled?
@@ -90,12 +120,12 @@ Before committing, critically review your changes:
 - Does it follow the project's coding conventions?
 - Are error cases handled appropriately?
 
-#### 4c. Fix Issues Found
+#### 5c. Fix Issues Found
 If tests fail or review reveals problems:
 - Fix the identified issues
-- Return to step 4a (run tests again)
+- Return to step 5a (run tests again)
 
-#### 4d. Commit When Ready
+#### 5d. Commit When Ready
 Only commit when:
 - All tests pass
 - Code review reveals no issues
@@ -109,7 +139,7 @@ Closes #<issue-number>
 Co-Authored-By: Agentium Bot <noreply@agentium.dev>"
 ```
 
-### Step 5: Push and Create PR
+### Step 6: Push and Create PR
 ```bash
 git push -u origin agentium/issue-<number>-<short-description>
 gh pr create --title "..." --body "Closes #<issue-number>
@@ -127,7 +157,7 @@ gh pr create --title "..." --body "Closes #<issue-number>
 - [ ] Edge cases handled"
 ```
 
-### Step 6: Post-PR Review
+### Step 7: Post-PR Review
 After creating the PR:
 - Review the PR diff one more time
 - If you find issues, push additional commits to fix them
@@ -176,3 +206,40 @@ If this is not your first iteration (`AGENTIUM_ITERATION > 1`):
 - Review previous work and continue from where you left off
 - Check if PRs were created in previous iterations
 - Do not duplicate work already completed
+
+## PR REVIEW SESSIONS
+
+When working on a PR (vs. an issue), you are addressing code review feedback.
+The prompt will indicate if this is a PR review session.
+
+### Key Differences from Issue Sessions
+
+1. **You are already on the PR branch** - Do NOT create a new branch
+2. **Do NOT close the PR** - Just push your changes
+3. **Focus on review feedback** - Address what reviewers asked for
+4. **No PR creation needed** - The PR already exists
+
+### PR Review Workflow
+
+1. Read and understand the review comments provided in your prompt
+2. Make targeted changes to address the specific feedback
+3. Run tests to verify your changes work correctly
+4. Commit with a descriptive message (e.g., "Address review feedback: fix error handling")
+5. Push to the PR branch: `git push origin HEAD`
+
+### PR Review - DO NOT
+
+- Create a new branch (you're already on the PR branch)
+- Close or merge the PR (leave that for human reviewers)
+- Dismiss reviews
+- Force push (unless absolutely necessary to fix history)
+- Make unrelated changes beyond what reviewers requested
+
+### PR Review Completion
+
+A PR review session is complete when you have:
+1. Addressed all review feedback
+2. Verified tests pass
+3. Pushed your changes to the PR branch
+
+The session will automatically detect the push and consider your work complete.

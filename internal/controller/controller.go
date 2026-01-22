@@ -23,6 +23,7 @@ type SessionConfig struct {
 	ID            string   `json:"id"`
 	Repository    string   `json:"repository"`
 	Tasks         []string `json:"tasks"`
+	PRs           []string `json:"prs,omitempty"`
 	Agent         string   `json:"agent"`
 	MaxIterations int      `json:"max_iterations"`
 	MaxDuration   string   `json:"max_duration"`
@@ -86,6 +87,7 @@ type Controller struct {
 	maxDuration   time.Duration
 	gitHubToken   string
 	completed     map[string]bool
+	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
 	logger        *log.Logger
 	secretManager gcp.SecretFetcher
 }
@@ -128,7 +130,12 @@ func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
 	c.logger.Printf("Starting session %s", c.config.ID)
 	c.logger.Printf("Repository: %s", c.config.Repository)
-	c.logger.Printf("Tasks: %v", c.config.Tasks)
+	if len(c.config.Tasks) > 0 {
+		c.logger.Printf("Tasks: %v", c.config.Tasks)
+	}
+	if len(c.config.PRs) > 0 {
+		c.logger.Printf("PRs: %v", c.config.PRs)
+	}
 	c.logger.Printf("Agent: %s", c.config.Agent)
 	c.logger.Printf("Max iterations: %d", c.config.MaxIterations)
 	c.logger.Printf("Max duration: %s", c.maxDuration)
@@ -148,15 +155,29 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
-	// Fetch issue details
-	issues, err := c.fetchIssueDetails(ctx)
-	if err != nil {
-		c.logger.Printf("Warning: failed to fetch issue details: %v", err)
-	}
+	// Handle PR mode vs issue mode
+	if len(c.config.PRs) > 0 {
+		// PR review session: fetch PR details and checkout PR branch
+		prDetails, err := c.fetchPRDetails(ctx)
+		if err != nil {
+			c.logger.Printf("Warning: failed to fetch PR details: %v", err)
+		}
 
-	// Build initial prompt with issue context
-	if len(issues) > 0 {
-		c.config.Prompt = c.buildPromptWithIssues(issues)
+		// Build PR-specific prompt
+		if len(prDetails) > 0 {
+			c.config.Prompt = c.buildPromptWithPRs(prDetails)
+		}
+	} else {
+		// Issue session: fetch issue details
+		issues, err := c.fetchIssueDetails(ctx)
+		if err != nil {
+			c.logger.Printf("Warning: failed to fetch issue details: %v", err)
+		}
+
+		// Build initial prompt with issue context
+		if len(issues) > 0 {
+			c.config.Prompt = c.buildPromptWithIssues(issues)
+		}
 	}
 
 	// Main execution loop
@@ -191,9 +212,15 @@ func (c *Controller) Run(ctx context.Context) error {
 			c.completed[task] = true
 		}
 
-		// Check PRs created
+		// Check PRs created (for issue sessions)
 		if len(result.PRsCreated) > 0 {
 			c.logger.Printf("PRs created: %v", result.PRsCreated)
+		}
+
+		// Check if changes were pushed (for PR review sessions)
+		if result.PushedChanges {
+			c.pushedChanges = true
+			c.logger.Println("Changes pushed to PR branch")
 		}
 	}
 
@@ -330,6 +357,25 @@ type issueDetail struct {
 	Body   string `json:"body"`
 }
 
+type prDetail struct {
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	HeadRefName string `json:"headRefName"`
+}
+
+type prReview struct {
+	State string `json:"state"`
+	Body  string `json:"body"`
+}
+
+type prComment struct {
+	Path     string `json:"path"`
+	Line     int    `json:"line"`
+	Body     string `json:"body"`
+	DiffHunk string `json:"diffHunk"`
+}
+
 func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, error) {
 	c.logger.Println("Fetching issue details")
 
@@ -359,6 +405,148 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, erro
 	}
 
 	return issues, nil
+}
+
+type prWithReviews struct {
+	Detail   prDetail
+	Reviews  []prReview
+	Comments []prComment
+}
+
+func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error) {
+	c.logger.Println("Fetching PR details")
+
+	prs := make([]prWithReviews, 0, len(c.config.PRs))
+
+	for _, prNumber := range c.config.PRs {
+		// Fetch basic PR info
+		cmd := exec.CommandContext(ctx, "gh", "pr", "view", prNumber,
+			"--repo", c.config.Repository,
+			"--json", "number,title,body,headRefName",
+		)
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+
+		output, err := cmd.Output()
+		if err != nil {
+			c.logger.Printf("Warning: failed to fetch PR #%s: %v", prNumber, err)
+			continue
+		}
+
+		var pr prDetail
+		if err := json.Unmarshal(output, &pr); err != nil {
+			c.logger.Printf("Warning: failed to parse PR #%s: %v", prNumber, err)
+			continue
+		}
+
+		prWithRev := prWithReviews{Detail: pr}
+
+		// Checkout PR branch
+		c.logger.Printf("Checking out PR branch: %s", pr.HeadRefName)
+		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
+		checkoutCmd.Dir = c.workDir
+		if err := checkoutCmd.Run(); err != nil {
+			// Try fetching and checking out
+			fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin", pr.HeadRefName)
+			fetchCmd.Dir = c.workDir
+			fetchCmd.Run()
+			checkoutCmd = exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
+			checkoutCmd.Dir = c.workDir
+			if err := checkoutCmd.Run(); err != nil {
+				c.logger.Printf("Warning: failed to checkout PR branch %s: %v", pr.HeadRefName, err)
+			}
+		}
+
+		// Fetch reviews requesting changes
+		repoPath := c.config.Repository
+		reviewCmd := exec.CommandContext(ctx, "gh", "api",
+			fmt.Sprintf("repos/%s/pulls/%s/reviews", repoPath, prNumber),
+			"--jq", `[.[] | select(.state == "CHANGES_REQUESTED" or .state == "COMMENTED") | {state: .state, body: .body}]`,
+		)
+		reviewCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+
+		if reviewOutput, err := reviewCmd.Output(); err == nil {
+			var reviews []prReview
+			if err := json.Unmarshal(reviewOutput, &reviews); err == nil {
+				prWithRev.Reviews = reviews
+			}
+		}
+
+		// Fetch inline review comments
+		commentCmd := exec.CommandContext(ctx, "gh", "api",
+			fmt.Sprintf("repos/%s/pulls/%s/comments", repoPath, prNumber),
+			"--jq", `[.[] | {path: .path, line: .line, body: .body, diffHunk: .diff_hunk}]`,
+		)
+		commentCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+
+		if commentOutput, err := commentCmd.Output(); err == nil {
+			var comments []prComment
+			if err := json.Unmarshal(commentOutput, &comments); err == nil {
+				prWithRev.Comments = comments
+			}
+		}
+
+		prs = append(prs, prWithRev)
+	}
+
+	return prs, nil
+}
+
+func (c *Controller) buildPromptWithPRs(prs []prWithReviews) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
+	sb.WriteString("## PR REVIEW SESSION\n\n")
+	sb.WriteString("You are addressing code review feedback on existing pull request(s).\n\n")
+
+	for _, pr := range prs {
+		sb.WriteString(fmt.Sprintf("### PR #%d: %s\n", pr.Detail.Number, pr.Detail.Title))
+		sb.WriteString(fmt.Sprintf("Branch: %s\n\n", pr.Detail.HeadRefName))
+
+		// Add review comments
+		if len(pr.Reviews) > 0 {
+			sb.WriteString("**Review Feedback:**\n")
+			for _, review := range pr.Reviews {
+				if review.Body != "" {
+					body := review.Body
+					if len(body) > 500 {
+						body = body[:500] + "..."
+					}
+					sb.WriteString(fmt.Sprintf("- [%s] %s\n", review.State, body))
+				}
+			}
+			sb.WriteString("\n")
+		}
+
+		// Add inline comments
+		if len(pr.Comments) > 0 {
+			sb.WriteString("**Inline Comments:**\n")
+			for _, comment := range pr.Comments {
+				body := comment.Body
+				if len(body) > 300 {
+					body = body[:300] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("- File: %s (line %d)\n", comment.Path, comment.Line))
+				sb.WriteString(fmt.Sprintf("  Comment: %s\n", body))
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("## Instructions\n\n")
+	sb.WriteString("1. You are ALREADY on the PR branch - do NOT create a new branch\n")
+	sb.WriteString("2. Read and understand the review comments\n")
+	sb.WriteString("3. Make targeted changes to address the feedback\n")
+	sb.WriteString("4. Run tests to verify your changes\n")
+	sb.WriteString("5. Commit with message: \"Address review feedback\"\n")
+	sb.WriteString("6. Push your changes: `git push origin HEAD`\n\n")
+	sb.WriteString("## DO NOT\n\n")
+	sb.WriteString("- Create a new branch (you're already on the PR branch)\n")
+	sb.WriteString("- Close or merge the PR\n")
+	sb.WriteString("- Dismiss reviews\n")
+	sb.WriteString("- Force push (unless absolutely necessary)\n")
+	sb.WriteString("- Make unrelated changes\n")
+
+	return sb.String()
 }
 
 func (c *Controller) buildPromptWithIssues(issues []issueDetail) string {
@@ -402,7 +590,13 @@ func (c *Controller) shouldTerminate() bool {
 		return true
 	}
 
-	// Check if all tasks are complete
+	// For PR review sessions: check if changes were pushed
+	if len(c.config.PRs) > 0 && c.pushedChanges {
+		c.logger.Println("PR review complete: changes pushed")
+		return true
+	}
+
+	// For issue sessions: check if all tasks are complete
 	allComplete := true
 	for _, task := range c.config.Tasks {
 		if !c.completed[task] {

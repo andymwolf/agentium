@@ -108,21 +108,25 @@ cd bootstrap
 
 ### With Environment Variables
 
-Set credentials once:
+Create a `.env` file to store your credentials (this file is gitignored):
 
 ```bash
+cat > .env << 'EOF'
 export AGENTIUM_PROJECT_ID=my-gcp-project
 export AGENTIUM_GITHUB_APP_ID=123456
 export AGENTIUM_GITHUB_INSTALLATION_ID=789012
 export AGENTIUM_GITHUB_PRIVATE_KEY_SECRET=github-app-key
 export AGENTIUM_ANTHROPIC_API_KEY_SECRET=anthropic-api-key
+EOF
 ```
 
-Then run:
+Then source the file and run:
 
 ```bash
-./run.sh --repo andymwolf/agentium --issue 42
+source .env && ./run.sh --repo andymwolf/agentium --issue 42
 ```
+
+Alternatively, export the variables directly in your shell or add them to your shell profile (`~/.bashrc` or `~/.zshrc`).
 
 ### Follow Logs
 
@@ -139,6 +143,27 @@ Work on multiple issues in one session:
 ```bash
 ./run.sh --repo andymwolf/agentium --issue 42,43,44
 ```
+
+### PR Review Sessions
+
+Address code review feedback on existing PRs:
+
+```bash
+./run.sh --repo andymwolf/agentium --pr 42
+```
+
+### Combined PR and Issue Sessions
+
+Process both PR reviews and new issues in one session. PRs are processed first:
+
+```bash
+./run.sh --repo andymwolf/agentium --pr 42 --issue 6,47
+```
+
+This creates a work queue that:
+1. Addresses PR #42 review feedback first
+2. Then works on Issue #6
+3. Finally works on Issue #47
 
 ### Destroy Session
 

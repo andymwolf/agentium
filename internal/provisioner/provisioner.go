@@ -39,6 +39,7 @@ type SessionConfig struct {
 	ID            string
 	Repository    string
 	Tasks         []string
+	PRs           []string
 	Agent         string
 	MaxIterations int
 	MaxDuration   string
