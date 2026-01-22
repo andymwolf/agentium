@@ -109,6 +109,30 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 		Success:  exitCode == 0,
 	}
 
+	// Parse AGENTIUM_STATUS signals from output
+	// Format: AGENTIUM_STATUS: STATUS_NAME [optional message on same line]
+	// The pattern matches status and optional message up to end of line
+	// Use [ \t] instead of \s to avoid matching newlines
+	statusPattern := regexp.MustCompile(`AGENTIUM_STATUS:[ \t]*(\w+)(?:[ \t]+([^\n]+))?`)
+	combined := stdout + stderr
+	if matches := statusPattern.FindAllStringSubmatch(combined, -1); len(matches) > 0 {
+		// Use the last status signal (most recent)
+		last := matches[len(matches)-1]
+		result.AgentStatus = last[1]
+		if len(last) > 2 && last[2] != "" {
+			result.StatusMessage = strings.TrimSpace(last[2])
+		}
+
+		// Set PushedChanges based on status signals for backwards compatibility
+		switch result.AgentStatus {
+		case "PUSHED", "COMPLETE", "PR_CREATED":
+			result.PushedChanges = true
+		case "NOTHING_TO_DO":
+			// Mark as success even if nothing was pushed
+			result.Success = true
+		}
+	}
+
 	// Look for created PRs in output
 	prPattern := regexp.MustCompile(`(?:Created|Opened|PR|pull request)[^\d]*#?(\d+)`)
 	matches := prPattern.FindAllStringSubmatch(stdout+stderr, -1)

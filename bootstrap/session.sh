@@ -263,6 +263,39 @@ detect_push_completion() {
     return 1
 }
 
+# Parse AGENTIUM_STATUS signals from output
+# Returns the last status signal found (most recent)
+parse_agent_status() {
+    local output="$1"
+    echo "${output}" | grep -oE 'AGENTIUM_STATUS:\s*\w+' | tail -1 | sed 's/AGENTIUM_STATUS:\s*//'
+}
+
+# Check if status signal indicates completion
+is_completion_status() {
+    local status="$1"
+    case "${status}" in
+        "COMPLETE"|"PUSHED"|"PR_CREATED"|"NOTHING_TO_DO")
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Check if status signal indicates blocked/failed state
+is_terminal_failure_status() {
+    local status="$1"
+    case "${status}" in
+        "BLOCKED"|"FAILED")
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # Fetch SYSTEM.md from agentium repository
 fetch_system_md() {
     local output_path="/tmp/SYSTEM.md"
@@ -434,11 +467,30 @@ main() {
             local output=$(cat "${output_file}")
             rm -f "${output_file}"
 
-            # Check completion based on item type
+            # Check agent status signals first (preferred method)
+            local agent_status=$(parse_agent_status "${output}")
+
+            if [[ -n "${agent_status}" ]]; then
+                log_info "${item_type} #${item_num} - agent status: ${agent_status}"
+
+                # Check for completion signals
+                if is_completion_status "${agent_status}"; then
+                    log_info "${item_type} #${item_num} complete - agent signaled: ${agent_status}"
+                    break
+                fi
+
+                # Check for blocked/failed signals
+                if is_terminal_failure_status "${agent_status}"; then
+                    log_error "${item_type} #${item_num} - agent signaled: ${agent_status}"
+                    break
+                fi
+            fi
+
+            # Fall back to existing detection methods if no status signal
             if [[ "${item_type}" == "pr" ]]; then
                 # For PR items: detect if changes were pushed
                 if echo "${output}" | grep -qE 'To (github\.com|git@github\.com)'; then
-                    log_info "PR #${item_num} complete - changes pushed"
+                    log_info "PR #${item_num} complete - changes pushed (detected from git output)"
                     break
                 fi
             else
@@ -446,7 +498,7 @@ main() {
                 local pr_count=$(gh pr list --repo "${AGENTIUM_REPOSITORY}" --state open \
                     --search "Closes #${item_num} in:body" --json number 2>/dev/null | jq '. | length')
                 if [[ ${pr_count} -gt 0 ]]; then
-                    log_info "Issue #${item_num} complete - PR created"
+                    log_info "Issue #${item_num} complete - PR created (detected from GitHub)"
                     break
                 fi
             fi

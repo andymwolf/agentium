@@ -20,7 +20,9 @@ type IterationResult struct {
 	Success        bool
 	TasksCompleted []string
 	PRsCreated     []string
-	PushedChanges  bool // True if git push was detected (for PR review sessions)
+	PushedChanges  bool   // True if git push was detected (for PR review sessions)
+	AgentStatus    string // Status signal: TESTS_PASSED, PR_CREATED, PUSHED, COMPLETE, etc.
+	StatusMessage  string // Optional message accompanying the status signal
 	Error          string
 	Summary        string
 	TokensUsed     int
