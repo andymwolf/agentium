@@ -43,23 +43,23 @@ type ClaudeAuthConfig struct {
 
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string
-	Repository    string
-	Tasks         []string
-	PRs           []string
-	Agent         string
-	MaxIterations int
-	MaxDuration   string
-	Prompt        string
-	GitHub        GitHubConfig
-	ClaudeAuth    ClaudeAuthConfig
+	ID            string         `json:"id"`
+	Repository    string         `json:"repository"`
+	Tasks         []string       `json:"tasks"`
+	PRs           []string       `json:"prs,omitempty"`
+	Agent         string         `json:"agent"`
+	MaxIterations int            `json:"max_iterations"`
+	MaxDuration   string         `json:"max_duration"`
+	Prompt        string         `json:"prompt"`
+	GitHub        GitHubConfig   `json:"github"`
+	ClaudeAuth    ClaudeAuthConfig `json:"claude_auth"`
 }
 
 // GitHubConfig contains GitHub authentication configuration
 type GitHubConfig struct {
-	AppID            int64
-	InstallationID   int64
-	PrivateKeySecret string
+	AppID            int64  `json:"app_id"`
+	InstallationID   int64  `json:"installation_id"`
+	PrivateKeySecret string `json:"private_key_secret"`
 }
 
 // ProvisionResult contains the result of provisioning

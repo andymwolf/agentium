@@ -120,41 +120,45 @@ resource "google_project_iam_member" "compute_admin" {
 
 # Cloud-init script
 locals {
-  claude_auth_write_file = var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ? "    - path: /etc/agentium/claude-auth.json\n        permissions: '0600'\n        encoding: b64\n        content: ${var.claude_auth_json}\n" : ""
-
   claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro" : ""
 
   cloud_init = <<-EOF
-    #cloud-config
-    package_update: true
-    packages:
-      - docker.io
-      - jq
-      - git
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - jq
+  - git
 
-    write_files:
-      - path: /etc/agentium/session.json
-        permissions: '0600'
-        content: |
-          ${var.session_config}
-    ${local.claude_auth_write_file}
-    runcmd:
-      - systemctl start docker
-      - systemctl enable docker
-      - usermod -aG docker ubuntu
-      - |
-        # Pull and run controller
-        docker pull ${var.controller_image}
-        docker run --rm \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -v /etc/agentium:/etc/agentium:ro \
-          -v /workspace:/workspace \
-          ${local.claude_auth_volume} \
-          -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
-          -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
-          --name agentium-controller \
-          ${var.controller_image}
-  EOF
+write_files:
+  - path: /etc/agentium/session.json
+    permissions: '0600'
+    content: |
+      ${var.session_config}
+%{ if var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ~}
+  - path: /etc/agentium/claude-auth.json
+    permissions: '0600'
+    encoding: b64
+    content: ${var.claude_auth_json}
+%{ endif ~}
+
+runcmd:
+  - systemctl start docker
+  - systemctl enable docker
+  - usermod -aG docker ubuntu
+  - |
+    # Pull and run controller
+    docker pull ${var.controller_image}
+    docker run --rm \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v /etc/agentium:/etc/agentium:ro \
+      -v /workspace:/workspace \
+      ${local.claude_auth_volume} \
+      -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
+      -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
+      --name agentium-controller \
+      ${var.controller_image}
+EOF
 }
 
 # Compute instance
