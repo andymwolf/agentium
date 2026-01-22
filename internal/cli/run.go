@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -211,7 +214,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// readAuthJSON reads and validates the Claude auth.json file
+// readAuthJSON reads Claude OAuth credentials from file or macOS Keychain
 func readAuthJSON(path string) ([]byte, error) {
 	// Expand ~ to home directory
 	if strings.HasPrefix(path, "~/") {
@@ -225,7 +228,14 @@ func readAuthJSON(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("auth.json not found at %s\n\nTo use OAuth authentication:\n  1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n  2. Run: claude login\n  3. Try again", path)
+			// On macOS, try reading from Keychain
+			if runtime.GOOS == "darwin" {
+				keychainData, keychainErr := readAuthFromKeychain()
+				if keychainErr == nil {
+					return keychainData, nil
+				}
+			}
+			return nil, fmt.Errorf("auth.json not found at %s and not in macOS Keychain\n\nTo use OAuth authentication:\n  1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n  2. Run: claude login\n  3. Try again", path)
 		}
 		return nil, fmt.Errorf("failed to read auth.json: %w", err)
 	}
@@ -236,6 +246,33 @@ func readAuthJSON(path string) ([]byte, error) {
 
 	if !json.Valid(data) {
 		return nil, fmt.Errorf("auth.json is not valid JSON")
+	}
+
+	return data, nil
+}
+
+// readAuthFromKeychain reads Claude Code OAuth credentials from the macOS Keychain
+func readAuthFromKeychain() ([]byte, error) {
+	// Determine the account name (macOS username)
+	u, err := user.Current()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	cmd := exec.Command("security", "find-generic-password",
+		"-s", "Claude Code-credentials",
+		"-a", u.Username,
+		"-w",
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read from Keychain: %w", err)
+	}
+
+	data := []byte(strings.TrimSpace(string(output)))
+
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("Keychain credential is not valid JSON")
 	}
 
 	return data, nil
