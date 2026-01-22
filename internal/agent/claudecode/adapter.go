@@ -146,6 +146,13 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 		}
 	}
 
+	// Detect successful git push (for PR review sessions)
+	// Matches patterns like: "To github.com:owner/repo.git" followed by commit hash range
+	pushPattern := regexp.MustCompile(`To (?:github\.com|git@github\.com)[^\n]*\n.*[a-f0-9]+\.\.[a-f0-9]+`)
+	if pushPattern.MatchString(stdout + stderr) {
+		result.PushedChanges = true
+	}
+
 	// Extract error messages
 	if exitCode != 0 {
 		// Look for common error patterns
