@@ -46,3 +46,9 @@ github_private_key_secret = "github-app-key"
 
 # Custom session ID (auto-generated if not provided)
 # session_id = "my-custom-session"
+
+# Pre-baked VM image (reduces cold start from ~5min to <1min)
+# Build with: cd bootstrap/packer && packer build -var "project_id=..." .
+# Use image family for latest: "projects/YOUR_PROJECT/global/images/family/agentium"
+# Use specific image: "projects/YOUR_PROJECT/global/images/agentium-v1-1234567890"
+# vm_image = ""

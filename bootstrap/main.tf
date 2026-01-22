@@ -59,8 +59,14 @@ resource "google_secret_manager_secret_iam_member" "anthropic_key" {
 }
 
 # Read cloud-init configuration
+# When using a pre-baked image, use the streamlined cloud-init (runtime-only).
+# Otherwise, use the full cloud-init that installs all dependencies.
 data "local_file" "cloud_init" {
   filename = "${path.module}/cloud-init.yaml"
+}
+
+data "local_file" "cloud_init_prebaked" {
+  filename = "${path.module}/cloud-init-prebaked.yaml"
 }
 
 # Compute instance
@@ -84,9 +90,10 @@ resource "google_compute_instance" "agentium" {
   }
 
   # Boot disk with SSD
+  # Uses pre-baked image if vm_image is set, otherwise stock Ubuntu 22.04 LTS
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = var.vm_image != "" ? var.vm_image : "ubuntu-os-cloud/ubuntu-2204-lts"
       size  = var.boot_disk_size_gb
       type  = "pd-ssd"
     }
@@ -109,8 +116,9 @@ resource "google_compute_instance" "agentium" {
 
   # Instance metadata
   metadata = {
-    # Cloud-init configuration
-    user-data = data.local_file.cloud_init.content
+    # Use streamlined cloud-init for pre-baked images (runtime-only config)
+    # Use full cloud-init for stock Ubuntu (installs all dependencies)
+    user-data = var.vm_image != "" ? data.local_file.cloud_init_prebaked.content : data.local_file.cloud_init.content
 
     # Agentium session configuration
     agentium-autostart        = "true"

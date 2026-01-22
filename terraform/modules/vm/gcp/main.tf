@@ -67,6 +67,12 @@ variable "max_run_duration" {
   default     = "7200s"
 }
 
+variable "vm_image" {
+  description = "Custom VM image to use (e.g., 'projects/my-project/global/images/agentium-v1-...'). If empty, uses stock Ubuntu 22.04 LTS."
+  type        = string
+  default     = ""
+}
+
 variable "network" {
   description = "VPC network name"
   type        = string
@@ -156,7 +162,7 @@ resource "google_compute_instance" "agentium" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = var.vm_image != "" ? var.vm_image : "ubuntu-os-cloud/ubuntu-2204-lts"
       size  = var.disk_size_gb
       type  = "pd-ssd"
     }

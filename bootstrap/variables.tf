@@ -117,3 +117,9 @@ variable "max_session_hours" {
     error_message = "Max session hours must be between 1 and 24."
   }
 }
+
+variable "vm_image" {
+  description = "Custom VM image to use (e.g., 'projects/my-project/global/images/agentium-v1-...'). If empty, uses stock Ubuntu 22.04 LTS with full cloud-init provisioning."
+  type        = string
+  default     = ""
+}
