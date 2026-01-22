@@ -24,8 +24,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 # Install Aider
 RUN pip install --no-cache-dir aider-chat
 
-# Create non-root user
-RUN useradd -m -u 1000 agentium
+# Create non-root user (remove any existing UID 1000 user from base image)
+RUN getent passwd 1000 > /dev/null 2>&1 && userdel -r $(getent passwd 1000 | cut -d: -f1) || true && \
+    useradd -m -u 1000 agentium
 
 # Create workspace
 RUN mkdir -p /workspace && chown agentium:agentium /workspace

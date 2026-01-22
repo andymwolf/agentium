@@ -26,8 +26,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user
-RUN useradd -m -u 1000 agentium
+# Create non-root user (remove node user which owns UID 1000 in base image)
+RUN userdel -r node && useradd -m -u 1000 agentium
 
 # Create workspace
 RUN mkdir -p /workspace && chown agentium:agentium /workspace
