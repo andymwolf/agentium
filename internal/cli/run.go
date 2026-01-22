@@ -188,11 +188,12 @@ func runSession(cmd *cobra.Command, args []string) error {
 
 	// Build VM config
 	vmConfig := provisioner.VMConfig{
-		Region:       cfg.Cloud.Region,
-		MachineType:  cfg.Cloud.MachineType,
-		UseSpot:      cfg.Cloud.UseSpot,
-		DiskSizeGB:   cfg.Cloud.DiskSizeGB,
-		Session:      sessionConfig,
+		Project:         cfg.Cloud.Project,
+		Region:          cfg.Cloud.Region,
+		MachineType:     cfg.Cloud.MachineType,
+		UseSpot:         cfg.Cloud.UseSpot,
+		DiskSizeGB:      cfg.Cloud.DiskSizeGB,
+		Session:         sessionConfig,
 		ControllerImage: cfg.Controller.Image,
 	}
 

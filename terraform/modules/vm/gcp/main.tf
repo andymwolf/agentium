@@ -1,14 +1,3 @@
-terraform {
-  required_version = ">= 1.0.0"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.0.0"
-    }
-  }
-}
-
 variable "session_id" {
   description = "Unique session identifier"
   type        = string
@@ -17,7 +6,6 @@ variable "session_id" {
 variable "project_id" {
   description = "GCP project ID"
   type        = string
-  default     = ""
 }
 
 variable "region" {
@@ -99,49 +87,40 @@ variable "subnetwork" {
 }
 
 locals {
-  project_id = var.project_id != "" ? var.project_id : data.google_project.current.project_id
-  zone       = var.zone != "" ? var.zone : "${var.region}-a"
+  zone = var.zone != "" ? var.zone : "${var.region}-a"
 }
-
-data "google_project" "current" {}
 
 # Service account for the VM
 resource "google_service_account" "agentium" {
   account_id   = "agentium-${substr(var.session_id, 0, 20)}"
   display_name = "Agentium Session ${var.session_id}"
-  project      = local.project_id
+  project      = var.project_id
 }
 
 # Grant secret accessor role
 resource "google_project_iam_member" "secret_accessor" {
-  project = local.project_id
+  project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 
 # Grant logging writer role
 resource "google_project_iam_member" "logging_writer" {
-  project = local.project_id
+  project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 
 # Grant compute instance admin (for self-deletion)
 resource "google_project_iam_member" "compute_admin" {
-  project = local.project_id
+  project = var.project_id
   role    = "roles/compute.instanceAdmin.v1"
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 
 # Cloud-init script
 locals {
-  claude_auth_write_file = var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ? <<-AUTHFILE
-      - path: /etc/agentium/claude-auth.json
-        permissions: '0600'
-        encoding: b64
-        content: ${var.claude_auth_json}
-  AUTHFILE
-  : ""
+  claude_auth_write_file = var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ? "    - path: /etc/agentium/claude-auth.json\n        permissions: '0600'\n        encoding: b64\n        content: ${var.claude_auth_json}\n" : ""
 
   claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro" : ""
 
@@ -183,7 +162,7 @@ resource "google_compute_instance" "agentium" {
   name         = var.session_id
   machine_type = var.machine_type
   zone         = local.zone
-  project      = local.project_id
+  project      = var.project_id
 
   boot_disk {
     initialize_params {
@@ -218,13 +197,11 @@ resource "google_compute_instance" "agentium" {
     on_host_maintenance         = var.use_spot ? "TERMINATE" : "MIGRATE"
     provisioning_model          = var.use_spot ? "SPOT" : "STANDARD"
     instance_termination_action = var.use_spot ? "DELETE" : null
-  }
 
-  # Hard timeout at cloud level
-  dynamic "scheduling" {
-    for_each = var.max_run_duration != "" ? [1] : []
-    content {
-      max_run_duration {
+    # Hard timeout at cloud level
+    dynamic "max_run_duration" {
+      for_each = var.max_run_duration != "" ? [1] : []
+      content {
         seconds = tonumber(trimsuffix(var.max_run_duration, "s"))
       }
     }
@@ -248,7 +225,7 @@ resource "google_compute_instance" "agentium" {
 resource "google_compute_firewall" "agentium_egress" {
   name    = "agentium-allow-egress-${substr(var.session_id, 0, 20)}"
   network = var.network
-  project = local.project_id
+  project = var.project_id
 
   direction = "EGRESS"
 

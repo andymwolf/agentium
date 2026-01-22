@@ -26,6 +26,7 @@ type Provisioner interface {
 
 // VMConfig contains configuration for provisioning a VM
 type VMConfig struct {
+	Project         string
 	Region          string
 	MachineType     string
 	UseSpot         bool

@@ -68,6 +68,7 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (*Provi
 	// Create terraform.tfvars
 	tfvars := fmt.Sprintf(`
 session_id         = "%s"
+project_id         = "%s"
 region             = "%s"
 machine_type       = "%s"
 use_spot           = %t
@@ -77,12 +78,13 @@ session_config     = %s
 claude_auth_mode   = "%s"
 `,
 		config.Session.ID,
+		config.Project,
 		config.Region,
 		config.MachineType,
 		config.UseSpot,
 		config.DiskSizeGB,
 		config.ControllerImage,
-		string(sessionJSON),
+		fmt.Sprintf("%q", string(sessionJSON)),
 		config.Session.ClaudeAuth.AuthMode,
 	)
 
