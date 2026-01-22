@@ -3,8 +3,12 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -13,7 +17,8 @@ import (
 
 // SecretManagerClient wraps the GCP Secret Manager client
 type SecretManagerClient struct {
-	client *secretmanager.Client
+	client    *secretmanager.Client
+	projectID string
 }
 
 // SecretFetcher defines the interface for fetching secrets
@@ -29,9 +34,74 @@ func NewSecretManagerClient(ctx context.Context, opts ...option.ClientOption) (*
 		return nil, fmt.Errorf("failed to create secret manager client: %w", err)
 	}
 
+	// Get the project ID from environment or metadata server
+	projectID, err := getProjectID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project ID: %w", err)
+	}
+
 	return &SecretManagerClient{
-		client: client,
+		client:    client,
+		projectID: projectID,
 	}, nil
+}
+
+// getProjectID retrieves the GCP project ID from environment variable or metadata server
+func getProjectID(ctx context.Context) (string, error) {
+	// Try environment variables first
+	if projectID := os.Getenv("GOOGLE_CLOUD_PROJECT"); projectID != "" {
+		return projectID, nil
+	}
+	if projectID := os.Getenv("GCP_PROJECT"); projectID != "" {
+		return projectID, nil
+	}
+	if projectID := os.Getenv("GCLOUD_PROJECT"); projectID != "" {
+		return projectID, nil
+	}
+
+	// Fall back to metadata server (works on GCP VMs, Cloud Run, etc.)
+	return getProjectIDFromMetadata(ctx)
+}
+
+// getProjectIDFromMetadata fetches the project ID from GCP metadata server
+func getProjectIDFromMetadata(ctx context.Context) (string, error) {
+	const metadataURL = "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+
+	// Create request with timeout
+	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create metadata request: %w", err)
+	}
+
+	// Required header for GCP metadata server
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	// Use a short timeout for metadata server
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch project ID from metadata server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metadata server returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read metadata response: %w", err)
+	}
+
+	projectID := strings.TrimSpace(string(body))
+	if projectID == "" {
+		return "", fmt.Errorf("empty project ID from metadata server")
+	}
+
+	return projectID, nil
 }
 
 // FetchSecret retrieves a secret from GCP Secret Manager
@@ -71,10 +141,9 @@ func (c *SecretManagerClient) normalizeSecretPath(secretPath string) string {
 		return secretPath + "/versions/latest"
 	}
 
-	// If it's just a secret name, we need to construct the path
-	// This is a simplified case - in production, you'd need project ID from config
+	// If it's just a secret name, construct the full path using the project ID
 	secretName := filepath.Base(secretPath)
-	return fmt.Sprintf("projects/*/secrets/%s/versions/latest", secretName)
+	return fmt.Sprintf("projects/%s/secrets/%s/versions/latest", c.projectID, secretName)
 }
 
 // Close closes the Secret Manager client

@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 )
 
@@ -29,40 +30,47 @@ func (m *mockSecretFetcher) Close() error {
 func TestNormalizeSecretPath(t *testing.T) {
 	tests := []struct {
 		name       string
+		projectID  string
 		secretPath string
 		want       string
 	}{
 		{
 			name:       "full path with version",
+			projectID:  "test-project",
 			secretPath: "projects/my-project/secrets/my-secret/versions/1",
 			want:       "projects/my-project/secrets/my-secret/versions/1",
 		},
 		{
 			name:       "full path with latest version",
+			projectID:  "test-project",
 			secretPath: "projects/my-project/secrets/my-secret/versions/latest",
 			want:       "projects/my-project/secrets/my-secret/versions/latest",
 		},
 		{
 			name:       "full path without version",
+			projectID:  "test-project",
 			secretPath: "projects/my-project/secrets/my-secret",
 			want:       "projects/my-project/secrets/my-secret/versions/latest",
 		},
 		{
 			name:       "secret name only",
+			projectID:  "test-project",
 			secretPath: "my-secret",
-			want:       "projects/*/secrets/my-secret/versions/latest",
+			want:       "projects/test-project/secrets/my-secret/versions/latest",
 		},
 		{
 			name:       "secret name with path prefix",
+			projectID:  "test-project",
 			secretPath: "path/to/my-secret",
-			want:       "projects/*/secrets/my-secret/versions/latest",
+			want:       "projects/test-project/secrets/my-secret/versions/latest",
 		},
 	}
 
-	client := &SecretManagerClient{}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			client := &SecretManagerClient{
+				projectID: tt.projectID,
+			}
 			got := client.normalizeSecretPath(tt.secretPath)
 			if got != tt.want {
 				t.Errorf("normalizeSecretPath(%q) = %q, want %q", tt.secretPath, got, tt.want)
@@ -208,5 +216,111 @@ func TestSecretManagerClient_Close_Nil(t *testing.T) {
 	err := client.Close()
 	if err != nil {
 		t.Errorf("Close() with nil client unexpected error: %v", err)
+	}
+}
+
+func TestGetProjectID(t *testing.T) {
+	tests := []struct {
+		name      string
+		envVars   map[string]string
+		wantErr   bool
+		checkFunc func(t *testing.T, projectID string)
+	}{
+		{
+			name: "GOOGLE_CLOUD_PROJECT env var",
+			envVars: map[string]string{
+				"GOOGLE_CLOUD_PROJECT": "test-project-1",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, projectID string) {
+				if projectID != "test-project-1" {
+					t.Errorf("getProjectID() = %q, want %q", projectID, "test-project-1")
+				}
+			},
+		},
+		{
+			name: "GCP_PROJECT env var",
+			envVars: map[string]string{
+				"GCP_PROJECT": "test-project-2",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, projectID string) {
+				if projectID != "test-project-2" {
+					t.Errorf("getProjectID() = %q, want %q", projectID, "test-project-2")
+				}
+			},
+		},
+		{
+			name: "GCLOUD_PROJECT env var",
+			envVars: map[string]string{
+				"GCLOUD_PROJECT": "test-project-3",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, projectID string) {
+				if projectID != "test-project-3" {
+					t.Errorf("getProjectID() = %q, want %q", projectID, "test-project-3")
+				}
+			},
+		},
+		{
+			name: "GOOGLE_CLOUD_PROJECT takes precedence",
+			envVars: map[string]string{
+				"GOOGLE_CLOUD_PROJECT": "test-project-1",
+				"GCP_PROJECT":          "test-project-2",
+				"GCLOUD_PROJECT":       "test-project-3",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, projectID string) {
+				if projectID != "test-project-1" {
+					t.Errorf("getProjectID() = %q, want %q", projectID, "test-project-1")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore environment
+			oldEnv := map[string]string{
+				"GOOGLE_CLOUD_PROJECT": os.Getenv("GOOGLE_CLOUD_PROJECT"),
+				"GCP_PROJECT":          os.Getenv("GCP_PROJECT"),
+				"GCLOUD_PROJECT":       os.Getenv("GCLOUD_PROJECT"),
+			}
+			defer func() {
+				for k, v := range oldEnv {
+					if v == "" {
+						os.Unsetenv(k)
+					} else {
+						os.Setenv(k, v)
+					}
+				}
+			}()
+
+			// Clear all project-related env vars
+			os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+			os.Unsetenv("GCP_PROJECT")
+			os.Unsetenv("GCLOUD_PROJECT")
+
+			// Set test env vars
+			for k, v := range tt.envVars {
+				os.Setenv(k, v)
+			}
+
+			ctx := context.Background()
+			projectID, err := getProjectID(ctx)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("getProjectID() expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("getProjectID() unexpected error: %v", err)
+				}
+				if tt.checkFunc != nil {
+					tt.checkFunc(t, projectID)
+				}
+			}
+		})
 	}
 }
