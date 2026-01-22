@@ -140,6 +140,147 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 	}
 }
 
+func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name              string
+		exitCode          int
+		stdout            string
+		stderr            string
+		wantAgentStatus   string
+		wantStatusMessage string
+		wantPushedChanges bool
+		wantSuccess       bool
+	}{
+		{
+			name:              "TESTS_PASSED status",
+			exitCode:          0,
+			stdout:            "Running tests...\nAGENTIUM_STATUS: TESTS_PASSED\nAll tests passed",
+			stderr:            "",
+			wantAgentStatus:   "TESTS_PASSED",
+			wantStatusMessage: "",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+		{
+			name:              "TESTS_FAILED status with message",
+			exitCode:          1,
+			stdout:            "Running tests...\nAGENTIUM_STATUS: TESTS_FAILED 3 tests failed in auth module",
+			stderr:            "",
+			wantAgentStatus:   "TESTS_FAILED",
+			wantStatusMessage: "3 tests failed in auth module",
+			wantPushedChanges: false,
+			wantSuccess:       false,
+		},
+		{
+			name:              "PR_CREATED status with URL",
+			exitCode:          0,
+			stdout:            "Creating PR...\nAGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/42",
+			stderr:            "",
+			wantAgentStatus:   "PR_CREATED",
+			wantStatusMessage: "https://github.com/org/repo/pull/42",
+			wantPushedChanges: true,
+			wantSuccess:       true,
+		},
+		{
+			name:              "PUSHED status",
+			exitCode:          0,
+			stdout:            "Pushing changes...\nAGENTIUM_STATUS: PUSHED",
+			stderr:            "",
+			wantAgentStatus:   "PUSHED",
+			wantStatusMessage: "",
+			wantPushedChanges: true,
+			wantSuccess:       true,
+		},
+		{
+			name:              "COMPLETE status",
+			exitCode:          0,
+			stdout:            "All work done\nAGENTIUM_STATUS: COMPLETE",
+			stderr:            "",
+			wantAgentStatus:   "COMPLETE",
+			wantStatusMessage: "",
+			wantPushedChanges: true,
+			wantSuccess:       true,
+		},
+		{
+			name:              "NOTHING_TO_DO status",
+			exitCode:          0,
+			stdout:            "Reviewed feedback, no changes needed\nAGENTIUM_STATUS: NOTHING_TO_DO",
+			stderr:            "",
+			wantAgentStatus:   "NOTHING_TO_DO",
+			wantStatusMessage: "",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+		{
+			name:              "BLOCKED status with reason",
+			exitCode:          0,
+			stdout:            "AGENTIUM_STATUS: BLOCKED need clarification on requirements",
+			stderr:            "",
+			wantAgentStatus:   "BLOCKED",
+			wantStatusMessage: "need clarification on requirements",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+		{
+			name:              "multiple statuses takes last one",
+			exitCode:          0,
+			stdout:            "AGENTIUM_STATUS: TESTS_RUNNING\nRunning...\nAGENTIUM_STATUS: TESTS_PASSED\nDone",
+			stderr:            "",
+			wantAgentStatus:   "TESTS_PASSED",
+			wantStatusMessage: "",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+		{
+			name:              "status in stderr",
+			exitCode:          0,
+			stdout:            "",
+			stderr:            "AGENTIUM_STATUS: ANALYZING reviewing changes",
+			wantAgentStatus:   "ANALYZING",
+			wantStatusMessage: "reviewing changes",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+		{
+			name:              "no status signal",
+			exitCode:          0,
+			stdout:            "Just some normal output without status",
+			stderr:            "",
+			wantAgentStatus:   "",
+			wantStatusMessage: "",
+			wantPushedChanges: false,
+			wantSuccess:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := a.ParseOutput(tt.exitCode, tt.stdout, tt.stderr)
+			if err != nil {
+				t.Fatalf("ParseOutput() returned error: %v", err)
+			}
+
+			if result.AgentStatus != tt.wantAgentStatus {
+				t.Errorf("AgentStatus = %q, want %q", result.AgentStatus, tt.wantAgentStatus)
+			}
+
+			if result.StatusMessage != tt.wantStatusMessage {
+				t.Errorf("StatusMessage = %q, want %q", result.StatusMessage, tt.wantStatusMessage)
+			}
+
+			if result.PushedChanges != tt.wantPushedChanges {
+				t.Errorf("PushedChanges = %v, want %v", result.PushedChanges, tt.wantPushedChanges)
+			}
+
+			if result.Success != tt.wantSuccess {
+				t.Errorf("Success = %v, want %v", result.Success, tt.wantSuccess)
+			}
+		})
+	}
+}
+
 func TestAdapter_ParseOutput(t *testing.T) {
 	a := New()
 

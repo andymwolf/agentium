@@ -18,6 +18,32 @@ import (
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 )
 
+// TaskPhase represents the current phase of a task in its lifecycle
+type TaskPhase string
+
+const (
+	PhaseImplement   TaskPhase = "IMPLEMENT"
+	PhaseTest        TaskPhase = "TEST"
+	PhasePRCreation  TaskPhase = "PR_CREATION"
+	PhaseReview      TaskPhase = "REVIEW"
+	PhaseComplete    TaskPhase = "COMPLETE"
+	PhaseBlocked     TaskPhase = "BLOCKED"
+	PhaseNothingToDo TaskPhase = "NOTHING_TO_DO"
+	// PR-specific phases
+	PhaseAnalyze TaskPhase = "ANALYZE"
+	PhasePush    TaskPhase = "PUSH"
+)
+
+// TaskState tracks the current state of a task being worked on
+type TaskState struct {
+	ID           string
+	Type         string // "issue" or "pr"
+	Phase        TaskPhase
+	TestRetries  int
+	LastStatus   string
+	PRNumber     string // Linked PR number (for issues that create PRs)
+}
+
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
 	ID            string   `json:"id"`
@@ -88,6 +114,7 @@ type Controller struct {
 	gitHubToken   string
 	completed     map[string]bool
 	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
+	taskStates    map[string]*TaskState
 	logger        *log.Logger
 	secretManager gcp.SecretFetcher
 }
@@ -113,16 +140,35 @@ func New(config SessionConfig) (*Controller, error) {
 		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
 	}
 
-	return &Controller{
+	c := &Controller{
 		config:        config,
 		agent:         agentAdapter,
 		workDir:       "/workspace",
 		iteration:     0,
 		maxDuration:   maxDuration,
 		completed:     make(map[string]bool),
+		taskStates:    make(map[string]*TaskState),
 		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
 		secretManager: secretManager,
-	}, nil
+	}
+
+	// Initialize task states for all tasks and PRs
+	for _, task := range config.Tasks {
+		c.taskStates[fmt.Sprintf("issue:%s", task)] = &TaskState{
+			ID:    task,
+			Type:  "issue",
+			Phase: PhaseImplement,
+		}
+	}
+	for _, pr := range config.PRs {
+		c.taskStates[fmt.Sprintf("pr:%s", pr)] = &TaskState{
+			ID:    pr,
+			Type:  "pr",
+			Phase: PhaseAnalyze,
+		}
+	}
+
+	return c, nil
 }
 
 // Run executes the main control loop
@@ -207,7 +253,18 @@ func (c *Controller) Run(ctx context.Context) error {
 
 		c.logger.Printf("Iteration %d completed: %s", c.iteration, result.Summary)
 
-		// Update completion state
+		// Log agent status if present
+		if result.AgentStatus != "" {
+			c.logger.Printf("Agent status: %s %s", result.AgentStatus, result.StatusMessage)
+		}
+
+		// Update task phases based on agent status
+		// For simplicity, update all active tasks (in practice, we'd track which task is being worked on)
+		for taskID := range c.taskStates {
+			c.updateTaskPhase(taskID, result)
+		}
+
+		// Update completion state (legacy)
 		for _, task := range result.TasksCompleted {
 			c.completed[task] = true
 		}
@@ -577,6 +634,49 @@ func (c *Controller) buildPromptWithIssues(issues []issueDetail) string {
 	return sb.String()
 }
 
+// updateTaskPhase transitions task phase based on agent status signals
+func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResult) {
+	state, exists := c.taskStates[taskID]
+	if !exists {
+		return
+	}
+
+	// Update based on agent status signal
+	switch result.AgentStatus {
+	case "TESTS_RUNNING":
+		state.Phase = PhaseTest
+	case "TESTS_PASSED":
+		if state.Type == "issue" {
+			state.Phase = PhasePRCreation
+		} else {
+			state.Phase = PhasePush
+		}
+		state.TestRetries = 0 // Reset retries on success
+	case "TESTS_FAILED":
+		state.TestRetries++
+		if state.TestRetries >= 3 {
+			state.Phase = PhaseBlocked
+			c.logger.Printf("Task %s blocked after %d test failures", taskID, state.TestRetries)
+		}
+	case "PR_CREATED":
+		state.Phase = PhaseComplete
+		state.PRNumber = result.StatusMessage
+	case "PUSHED":
+		state.Phase = PhaseComplete
+	case "COMPLETE":
+		state.Phase = PhaseComplete
+	case "NOTHING_TO_DO":
+		state.Phase = PhaseNothingToDo
+	case "BLOCKED", "FAILED":
+		state.Phase = PhaseBlocked
+	case "ANALYZING":
+		state.Phase = PhaseAnalyze
+	}
+
+	state.LastStatus = result.AgentStatus
+	c.logger.Printf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
+}
+
 func (c *Controller) shouldTerminate() bool {
 	// Check iteration limit
 	if c.iteration >= c.config.MaxIterations {
@@ -590,13 +690,31 @@ func (c *Controller) shouldTerminate() bool {
 		return true
 	}
 
-	// For PR review sessions: check if changes were pushed
+	// Check if all tasks have reached a terminal phase
+	if len(c.taskStates) > 0 {
+		allTerminal := true
+		for taskID, state := range c.taskStates {
+			switch state.Phase {
+			case PhaseComplete, PhaseNothingToDo, PhaseBlocked:
+				c.logger.Printf("Task %s in terminal phase: %s", taskID, state.Phase)
+				continue
+			default:
+				allTerminal = false
+			}
+		}
+		if allTerminal {
+			c.logger.Println("All tasks in terminal phase")
+			return true
+		}
+	}
+
+	// Legacy fallback: PR review sessions check if changes were pushed
 	if len(c.config.PRs) > 0 && c.pushedChanges {
-		c.logger.Println("PR review complete: changes pushed")
+		c.logger.Println("PR review complete: changes pushed (legacy detection)")
 		return true
 	}
 
-	// For issue sessions: check if all tasks are complete
+	// Legacy fallback: issue sessions check if all tasks are complete
 	allComplete := true
 	for _, task := range c.config.Tasks {
 		if !c.completed[task] {
@@ -605,7 +723,7 @@ func (c *Controller) shouldTerminate() bool {
 		}
 	}
 	if allComplete && len(c.config.Tasks) > 0 {
-		c.logger.Println("All tasks completed")
+		c.logger.Println("All tasks completed (legacy detection)")
 		return true
 	}
 
