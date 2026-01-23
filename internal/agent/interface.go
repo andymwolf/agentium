@@ -1,5 +1,12 @@
 package agent
 
+// ExistingWork represents prior work detected on GitHub for a given issue
+type ExistingWork struct {
+	Branch   string // Existing remote branch name (e.g. "agentium/issue-6-cloud-logging")
+	PRNumber string // Existing open PR number (e.g. "87")
+	PRTitle  string // Title of the existing PR
+}
+
 // Session represents an agent session with all necessary context
 type Session struct {
 	ID             string
@@ -13,8 +20,10 @@ type Session struct {
 	Prompt         string
 	Metadata       map[string]string
 	ClaudeAuthMode string // "api" or "oauth"
-	SystemPrompt   string // Content of SYSTEM.md (safety constraints, workflow, status signals)
-	ProjectPrompt  string // Content of .agentium/AGENT.md from target repo (may be empty)
+	SystemPrompt   string            // Content of SYSTEM.md (safety constraints, workflow, status signals)
+	ProjectPrompt  string            // Content of .agentium/AGENT.md from target repo (may be empty)
+	ActiveTask     string            // The single issue number currently being worked on
+	ExistingWork   *ExistingWork     // Prior work detected on GitHub for the active task
 }
 
 // IterationResult represents the outcome of a single agent iteration

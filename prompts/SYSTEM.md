@@ -76,18 +76,38 @@ This plan serves as:
 
 **Keep the plan concise** - a few bullet points per section is sufficient.
 
-### Step 3: Create Feature Branch
+### Step 3: Pre-Flight Check (MANDATORY)
+
+Before creating any branch or PR, ALWAYS check for existing work:
+
+```bash
+# Check for existing remote branches for this issue
+git branch -r --list "origin/agentium/issue-<number>-*"
+
+# Check for existing open PRs for this issue
+gh pr list --search "head:agentium/issue-<number>" --state open
+```
+
+**If an existing branch or PR is found:**
+- Check out the existing branch: `git checkout <branch-name>`
+- Review the current state and continue from where it left off
+- Push updates to the existing branch
+- Do NOT create a new branch or PR
+
+**Only create a new branch if NO existing work is found.**
+
+### Step 4: Create Feature Branch (Only If No Existing Work)
 ```bash
 git checkout -b agentium/issue-<number>-<short-description>
 ```
 Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 
-### Step 4: Implement Changes
+### Step 5: Implement Changes
 - Make focused, minimal changes that address the issue
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
 
-### Step 5: Development Loop (Iterate Until Done)
+### Step 6: Development Loop (Iterate Until Done)
 
 Repeat the following cycle until all tests pass and code is ready:
 
@@ -105,13 +125,13 @@ Repeat the following cycle until all tests pass and code is ready:
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 5a. Run Tests
+#### 6a. Run Tests
 ```bash
 # Run the project's test suite
 # Check for project-specific instructions in .agentium/AGENT.md
 ```
 
-#### 5b. Review Your Own Code
+#### 6b. Review Your Own Code
 Before committing, critically review your changes:
 - Does the code correctly implement the issue requirements?
 - Are there any edge cases not handled?
@@ -120,12 +140,12 @@ Before committing, critically review your changes:
 - Does it follow the project's coding conventions?
 - Are error cases handled appropriately?
 
-#### 5c. Fix Issues Found
+#### 6c. Fix Issues Found
 If tests fail or review reveals problems:
 - Fix the identified issues
-- Return to step 5a (run tests again)
+- Return to step 6a (run tests again)
 
-#### 5d. Commit When Ready
+#### 6d. Commit When Ready
 Only commit when:
 - All tests pass
 - Code review reveals no issues
@@ -139,7 +159,7 @@ Closes #<issue-number>
 Co-Authored-By: Agentium Bot <noreply@agentium.dev>"
 ```
 
-### Step 6: Push and Create PR
+### Step 7: Push and Create PR
 ```bash
 git push -u origin agentium/issue-<number>-<short-description>
 gh pr create --title "..." --body "Closes #<issue-number>
@@ -157,7 +177,7 @@ gh pr create --title "..." --body "Closes #<issue-number>
 - [ ] Edge cases handled"
 ```
 
-### Step 7: Post-PR Review
+### Step 8: Post-PR Review
 After creating the PR:
 - Review the PR diff one more time
 - If you find issues, push additional commits to fix them
@@ -257,9 +277,11 @@ echo "AGENTIUM_STATUS: BLOCKED need API credentials for integration test"
 ## ITERATION BEHAVIOR
 
 If this is not your first iteration (`AGENTIUM_ITERATION > 1`):
-- Review previous work and continue from where you left off
-- Check if PRs were created in previous iterations
+- Run the pre-flight check (Step 3) to detect existing branches and PRs
+- If a branch or PR already exists for your assigned issue, check it out and continue
+- Do NOT create a new branch or PR if one already exists
 - Do not duplicate work already completed
+- Focus on completing the current task, not starting new ones
 
 ## PR REVIEW SESSIONS
 

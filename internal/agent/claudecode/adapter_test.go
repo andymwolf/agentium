@@ -126,6 +126,33 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 				"Continue from where you left off",
 			},
 		},
+		{
+			name: "active task with focused prompt - uses prompt directly",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"6"},
+				ActiveTask: "6",
+				Prompt:     "## Your Task: Issue #6\n\nFocused prompt from controller",
+			},
+			iteration: 1,
+			contains: []string{
+				"Your Task: Issue #6",
+				"Focused prompt from controller",
+			},
+		},
+		{
+			name: "active task prompt does not include generic instructions",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"6"},
+				ActiveTask: "6",
+				Prompt:     "## Your Task: Issue #6\n\nDo something specific",
+			},
+			iteration: 1,
+			contains: []string{
+				"Your Task: Issue #6",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -137,6 +164,35 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdapter_BuildPrompt_ActiveTaskSkipsGenericInstructions(t *testing.T) {
+	a := New()
+	session := &agent.Session{
+		Repository: "github.com/org/repo",
+		Tasks:      []string{"6", "7"},
+		ActiveTask: "6",
+		Prompt:     "## Your Task: Issue #6\n\nCustom focused instructions",
+	}
+
+	prompt := a.BuildPrompt(session, 2)
+
+	// Should NOT contain generic multi-issue instructions
+	genericPhrases := []string{
+		"Create a new branch: agentium/issue-<number>",
+		"For each issue:",
+		"Issue #7", // Only issue #6 should be referenced
+	}
+	for _, phrase := range genericPhrases {
+		if strings.Contains(prompt, phrase) {
+			t.Errorf("BuildPrompt() with ActiveTask should not contain generic phrase %q, got:\n%s", phrase, prompt)
+		}
+	}
+
+	// Should contain the focused prompt
+	if !strings.Contains(prompt, "Custom focused instructions") {
+		t.Errorf("BuildPrompt() missing focused prompt content")
 	}
 }
 

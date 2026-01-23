@@ -3,6 +3,8 @@ package controller
 import (
 	"errors"
 	"testing"
+
+	"github.com/andywolf/agentium/internal/agent"
 )
 
 func TestLoadConfigFromEnv_EnvVar(t *testing.T) {
@@ -281,6 +283,177 @@ func TestLoadConfigFromEnv_FullConfig(t *testing.T) {
 func TestDefaultConfigPath(t *testing.T) {
 	if DefaultConfigPath != "/etc/agentium/session.json" {
 		t.Errorf("DefaultConfigPath = %q, want %q", DefaultConfigPath, "/etc/agentium/session.json")
+	}
+}
+
+func TestNextActiveTask(t *testing.T) {
+	tests := []struct {
+		name       string
+		tasks      []string
+		taskStates map[string]*TaskState
+		want       string
+	}{
+		{
+			name:  "first task is active",
+			tasks: []string{"6", "7"},
+			taskStates: map[string]*TaskState{
+				"issue:6": {ID: "6", Phase: PhaseImplement},
+				"issue:7": {ID: "7", Phase: PhaseImplement},
+			},
+			want: "6",
+		},
+		{
+			name:  "first task complete, second active",
+			tasks: []string{"6", "7"},
+			taskStates: map[string]*TaskState{
+				"issue:6": {ID: "6", Phase: PhaseComplete},
+				"issue:7": {ID: "7", Phase: PhaseImplement},
+			},
+			want: "7",
+		},
+		{
+			name:  "first blocked, second active",
+			tasks: []string{"6", "7"},
+			taskStates: map[string]*TaskState{
+				"issue:6": {ID: "6", Phase: PhaseBlocked},
+				"issue:7": {ID: "7", Phase: PhaseTest},
+			},
+			want: "7",
+		},
+		{
+			name:  "all tasks complete",
+			tasks: []string{"6", "7"},
+			taskStates: map[string]*TaskState{
+				"issue:6": {ID: "6", Phase: PhaseComplete},
+				"issue:7": {ID: "7", Phase: PhaseNothingToDo},
+			},
+			want: "",
+		},
+		{
+			name:       "no task state yet",
+			tasks:      []string{"6"},
+			taskStates: map[string]*TaskState{},
+			want:       "6",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				config:     SessionConfig{Tasks: tt.tasks},
+				taskStates: tt.taskStates,
+			}
+			got := c.nextActiveTask()
+			if got != tt.want {
+				t.Errorf("nextActiveTask() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildPromptForTask(t *testing.T) {
+	tests := []struct {
+		name         string
+		issueNumber  string
+		issueDetails []issueDetail
+		existingWork *agent.ExistingWork
+		contains     []string
+		notContains  []string
+	}{
+		{
+			name:        "fresh start - no existing work",
+			issueNumber: "42",
+			issueDetails: []issueDetail{
+				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
+			},
+			existingWork: nil,
+			contains: []string{
+				"Issue #42",
+				"Fix login bug",
+				"login page crashes",
+				"Create a new branch",
+				"Create a pull request",
+			},
+			notContains: []string{
+				"Existing Work Detected",
+				"Do NOT create a new branch",
+			},
+		},
+		{
+			name:        "existing PR found",
+			issueNumber: "6",
+			issueDetails: []issueDetail{
+				{Number: 6, Title: "Add cloud logging", Body: "Integrate GCP logging"},
+			},
+			existingWork: &agent.ExistingWork{
+				Branch:   "agentium/issue-6-cloud-logging",
+				PRNumber: "87",
+				PRTitle:  "Add Cloud Logging integration",
+			},
+			contains: []string{
+				"Issue #6",
+				"Existing Work Detected",
+				"PR #87",
+				"agentium/issue-6-cloud-logging",
+				"Do NOT create a new branch",
+				"Do NOT create a new PR",
+			},
+			notContains: []string{
+				"Create a new branch",
+			},
+		},
+		{
+			name:        "existing branch only (no PR)",
+			issueNumber: "7",
+			issueDetails: []issueDetail{
+				{Number: 7, Title: "Graceful shutdown", Body: "Implement shutdown"},
+			},
+			existingWork: &agent.ExistingWork{
+				Branch: "agentium/issue-7-graceful-shutdown",
+			},
+			contains: []string{
+				"Issue #7",
+				"Existing Work Detected",
+				"agentium/issue-7-graceful-shutdown",
+				"Do NOT create a new branch",
+				"Create a PR linking to the issue",
+			},
+			notContains: []string{
+				"Create a new branch",
+				"Do NOT create a new PR",
+			},
+		},
+		{
+			name:         "issue not in details",
+			issueNumber:  "99",
+			issueDetails: []issueDetail{},
+			existingWork: nil,
+			contains: []string{
+				"Issue #99",
+				"Create a new branch",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				config:       SessionConfig{Repository: "github.com/org/repo"},
+				issueDetails: tt.issueDetails,
+			}
+			got := c.buildPromptForTask(tt.issueNumber, tt.existingWork)
+
+			for _, substr := range tt.contains {
+				if !containsString(got, substr) {
+					t.Errorf("buildPromptForTask() missing %q in:\n%s", substr, got)
+				}
+			}
+			for _, substr := range tt.notContains {
+				if containsString(got, substr) {
+					t.Errorf("buildPromptForTask() should not contain %q in:\n%s", substr, got)
+				}
+			}
+		})
 	}
 }
 
