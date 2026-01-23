@@ -13,6 +13,8 @@ type Session struct {
 	Prompt         string
 	Metadata       map[string]string
 	ClaudeAuthMode string // "api" or "oauth"
+	SystemPrompt   string // Content of SYSTEM.md (safety constraints, workflow, status signals)
+	ProjectPrompt  string // Content of .agentium/AGENT.md from target repo (may be empty)
 }
 
 // IterationResult represents the outcome of a single agent iteration

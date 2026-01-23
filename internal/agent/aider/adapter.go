@@ -79,6 +79,20 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	var sb strings.Builder
 
+	// Prepend system prompt if available (Aider has no --system-prompt flag)
+	if session.SystemPrompt != "" {
+		sb.WriteString("=== SYSTEM INSTRUCTIONS ===\n\n")
+		sb.WriteString(session.SystemPrompt)
+		sb.WriteString("\n\n=== END SYSTEM INSTRUCTIONS ===\n\n")
+	}
+
+	// Append project-specific instructions if available
+	if session.ProjectPrompt != "" {
+		sb.WriteString("=== PROJECT INSTRUCTIONS ===\n\n")
+		sb.WriteString(session.ProjectPrompt)
+		sb.WriteString("\n\n=== END PROJECT INSTRUCTIONS ===\n\n")
+	}
+
 	sb.WriteString(fmt.Sprintf("Working on repository: %s\n\n", session.Repository))
 
 	if session.Prompt != "" {

@@ -18,6 +18,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
+	"github.com/andywolf/agentium/internal/prompt"
 )
 
 // TaskPhase represents the current phase of a task in its lifecycle
@@ -65,6 +66,9 @@ type SessionConfig struct {
 		AuthMode       string `json:"auth_mode"`
 		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 	} `json:"claude_auth"`
+	Prompts struct {
+		SystemMDURL string `json:"system_md_url,omitempty"`
+	} `json:"prompts,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -124,6 +128,8 @@ type Controller struct {
 	taskStates    map[string]*TaskState
 	logger        *log.Logger
 	secretManager gcp.SecretFetcher
+	systemPrompt  string // Loaded SYSTEM.md content
+	projectPrompt string // Loaded .agentium/AGENT.md content (may be empty)
 }
 
 // New creates a new session controller
@@ -211,6 +217,11 @@ func (c *Controller) Run(ctx context.Context) error {
 	// Clone repository
 	if err := c.cloneRepository(ctx); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
+	}
+
+	// Load system and project prompts
+	if err := c.loadPrompts(); err != nil {
+		c.logger.Printf("Warning: failed to load prompts: %v", err)
 	}
 
 	// Handle PR mode vs issue mode
@@ -390,6 +401,27 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 
 	c.logger.Printf("Generated installation token (expires at %s)", token.ExpiresAt.Format(time.RFC3339))
 	return token.Token, nil
+}
+
+func (c *Controller) loadPrompts() error {
+	// Load system prompt (hybrid fetch + embedded fallback)
+	systemPrompt, err := prompt.LoadSystemPrompt(c.config.Prompts.SystemMDURL)
+	if err != nil {
+		return fmt.Errorf("failed to load system prompt: %w", err)
+	}
+	c.systemPrompt = systemPrompt
+	c.logger.Println("System prompt loaded successfully")
+
+	// Load project prompt from workspace (.agentium/AGENT.md)
+	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
+	if err != nil {
+		c.logger.Printf("Warning: failed to load project prompt: %v", err)
+	} else if projectPrompt != "" {
+		c.projectPrompt = projectPrompt
+		c.logger.Println("Project prompt loaded from .agentium/AGENT.md")
+	}
+
+	return nil
 }
 
 func (c *Controller) cloneRepository(ctx context.Context) error {
@@ -758,6 +790,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		Prompt:         c.config.Prompt,
 		Metadata:       make(map[string]string),
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
+		SystemPrompt:   c.systemPrompt,
+		ProjectPrompt:  c.projectPrompt,
 	}
 
 	// Build environment and command

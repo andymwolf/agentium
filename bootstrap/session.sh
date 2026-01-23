@@ -30,7 +30,7 @@ trap cleanup EXIT
 
 # Configuration
 WORKSPACE="/workspace"
-SYSTEM_MD_URL="https://raw.githubusercontent.com/andymwolf/agentium/main/bootstrap/SYSTEM.md"
+SYSTEM_MD_URL="https://raw.githubusercontent.com/andymwolf/agentium/main/prompts/SYSTEM.md"
 LOG_PREFIX="[agentium]"
 
 # Logging functions

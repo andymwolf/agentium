@@ -64,11 +64,21 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	prompt := a.BuildPrompt(session, iteration)
 
-	return []string{
+	args := []string{
 		"--print",
 		"--dangerously-skip-permissions",
-		prompt,
 	}
+
+	if session.SystemPrompt != "" {
+		args = append(args, "--system-prompt", session.SystemPrompt)
+	}
+
+	if session.ProjectPrompt != "" {
+		args = append(args, "--append-system-prompt", session.ProjectPrompt)
+	}
+
+	args = append(args, prompt)
+	return args
 }
 
 // BuildPrompt constructs the prompt for Claude Code
