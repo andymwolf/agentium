@@ -2,11 +2,12 @@ package gcp
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 )
 
 // mockLogWriter is a test mock for the LogWriter interface
@@ -329,7 +330,7 @@ func TestCloudLogger_FlushError(t *testing.T) {
 	if err == nil {
 		t.Error("expected error from Close() when flush fails")
 	}
-	if !containsStr(err.Error(), "flush failed") {
+	if !strings.Contains(err.Error(), "flush failed") {
 		t.Errorf("error = %q, want to contain 'flush failed'", err.Error())
 	}
 }
@@ -425,12 +426,3 @@ func TestCloudLoggerConfig_Defaults(t *testing.T) {
 	}
 }
 
-// Helper: containsStr is a local test helper
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

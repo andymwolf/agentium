@@ -207,7 +207,7 @@ func New(config SessionConfig) (*Controller, error) {
 // logInfo logs at INFO level to both local logger and cloud logger
 func (c *Controller) logInfo(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	c.logger.Println(msg)
+	c.logger.Printf("%s", msg)
 	if c.cloudLogger != nil {
 		c.cloudLogger.Info(msg)
 	}
@@ -970,17 +970,10 @@ func (c *Controller) emitFinalLogs() {
 func (c *Controller) cleanup() {
 	c.logInfo("Cleaning up")
 
-	// Flush cloud logs before cleanup to ensure they survive VM termination
-	if c.cloudLogger != nil {
-		if err := c.cloudLogger.Flush(); err != nil {
-			c.logger.Printf("Warning: failed to flush cloud logs: %v", err)
-		}
-	}
-
 	// Clear sensitive data
 	c.gitHubToken = ""
 
-	// Close Cloud Logger
+	// Close Cloud Logger (flushes remaining logs to ensure they survive VM termination)
 	if c.cloudLogger != nil {
 		if err := c.cloudLogger.Close(); err != nil {
 			c.logger.Printf("Warning: failed to close cloud logger: %v", err)

@@ -3,10 +3,10 @@ package gcp
 import (
 	"context"
 	"fmt"
-	"sync"
+	"sync/atomic"
 	"time"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"google.golang.org/api/option"
 )
 
@@ -71,9 +71,8 @@ func (w *gcpLogWriter) Close() error {
 type CloudLogger struct {
 	writer    LogWriter
 	sessionID string
-	iteration int
-	labels    map[string]string
-	mu        sync.Mutex
+	iteration atomic.Int64
+	labels    map[string]string // immutable after construction; do not modify
 }
 
 // NewCloudLogger creates a new CloudLogger that sends logs to GCP Cloud Logging.
@@ -129,11 +128,11 @@ func NewCloudLoggerWithWriter(writer LogWriter, sessionID string, labels map[str
 	}
 }
 
-// SetIteration updates the current iteration number for subsequent log entries
+// SetIteration updates the current iteration number for subsequent log entries.
+// Note: SetIteration and log calls are not atomic as a pair. In concurrent use,
+// another goroutine may call SetIteration between this call and a subsequent log call.
 func (cl *CloudLogger) SetIteration(iteration int) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	cl.iteration = iteration
+	cl.iteration.Store(int64(iteration))
 }
 
 // Info logs a message at INFO severity
@@ -173,9 +172,7 @@ func (cl *CloudLogger) LogWithLabels(severity Severity, msg string, extraLabels 
 
 // log writes a structured log entry to Cloud Logging
 func (cl *CloudLogger) log(severity Severity, msg string, extraLabels map[string]string) {
-	cl.mu.Lock()
-	iteration := cl.iteration
-	cl.mu.Unlock()
+	iteration := int(cl.iteration.Load())
 
 	// Build the structured payload
 	payload := LogEntry{
