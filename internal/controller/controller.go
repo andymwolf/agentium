@@ -114,23 +114,49 @@ func LoadConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte
 	return config, nil
 }
 
+// LogFlusher represents a log writer that can flush pending writes
+type LogFlusher interface {
+	// Flush flushes any pending log writes
+	Flush() error
+	// Close closes the log writer and releases resources
+	Close() error
+}
+
+// ShutdownConfig holds configuration for the graceful shutdown process
+type ShutdownConfig struct {
+	// FlushTimeout is the maximum time to wait for log flush operations
+	FlushTimeout time.Duration
+	// ShutdownTimeout is the maximum total time for the shutdown sequence
+	ShutdownTimeout time.Duration
+}
+
+// DefaultShutdownConfig returns the default shutdown configuration
+func DefaultShutdownConfig() ShutdownConfig {
+	return ShutdownConfig{
+		FlushTimeout:    10 * time.Second,
+		ShutdownTimeout: 30 * time.Second,
+	}
+}
+
 // Controller manages the agent execution lifecycle
 type Controller struct {
-	config        SessionConfig
-	agent         agent.Agent
-	workDir       string
-	iteration     int
-	startTime     time.Time
-	maxDuration   time.Duration
-	gitHubToken   string
-	completed     map[string]bool
-	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
-	dockerAuthed  bool // Tracks if docker login to GHCR was done
-	taskStates    map[string]*TaskState
-	logger        *log.Logger
-	secretManager gcp.SecretFetcher
-	systemPrompt  string // Loaded SYSTEM.md content
-	projectPrompt string // Loaded .agentium/AGENT.md content (may be empty)
+	config         SessionConfig
+	agent          agent.Agent
+	workDir        string
+	iteration      int
+	startTime      time.Time
+	maxDuration    time.Duration
+	gitHubToken    string
+	completed      map[string]bool
+	pushedChanges  bool // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed   bool // Tracks if docker login to GHCR was done
+	taskStates     map[string]*TaskState
+	logger         *log.Logger
+	secretManager  gcp.SecretFetcher
+	systemPrompt   string // Loaded SYSTEM.md content
+	projectPrompt  string // Loaded .agentium/AGENT.md content (may be empty)
+	shutdownConfig ShutdownConfig
+	logWriters     []LogFlusher // Registered log writers that need flushing
 }
 
 // New creates a new session controller
@@ -160,15 +186,17 @@ func New(config SessionConfig) (*Controller, error) {
 	}
 
 	c := &Controller{
-		config:        config,
-		agent:         agentAdapter,
-		workDir:       workDir,
-		iteration:     0,
-		maxDuration:   maxDuration,
-		completed:     make(map[string]bool),
-		taskStates:    make(map[string]*TaskState),
-		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
-		secretManager: secretManager,
+		config:         config,
+		agent:          agentAdapter,
+		workDir:        workDir,
+		iteration:      0,
+		maxDuration:    maxDuration,
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		logger:         log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		secretManager:  secretManager,
+		shutdownConfig: DefaultShutdownConfig(),
+		logWriters:     make([]LogFlusher, 0),
 	}
 
 	// Initialize task states for all tasks and PRs
@@ -902,36 +930,149 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 }
 
 func (c *Controller) emitFinalLogs() {
-	c.logger.Println("=== Session Summary ===")
-	c.logger.Printf("Session ID: %s", c.config.ID)
-	c.logger.Printf("Duration: %s", time.Since(c.startTime).Round(time.Second))
-	c.logger.Printf("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
-
-	completedCount := 0
-	for _, task := range c.config.Tasks {
-		if c.completed[task] {
-			completedCount++
-		}
-	}
-	c.logger.Printf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
-	c.logger.Println("======================")
+	// Final logs are now emitted as part of the Shutdown sequence via emitSessionSummary.
+	// This method is kept for backward compatibility but delegates to the summary.
+	c.logger.Println("Session execution loop complete, preparing for shutdown")
 }
 
-func (c *Controller) cleanup() {
-	c.logger.Println("Cleaning up")
+// RegisterLogWriter registers a log writer that will be flushed during shutdown
+func (c *Controller) RegisterLogWriter(writer LogFlusher) {
+	c.logWriters = append(c.logWriters, writer)
+}
 
-	// Clear sensitive data
+// Shutdown performs a graceful shutdown sequence:
+// 1. Emit final session summary
+// 2. Flush all pending log writes (with timeout)
+// 3. Clear sensitive data from memory
+// 4. Close all resources
+// 5. Request VM termination
+func (c *Controller) Shutdown() {
+	c.logger.Println("Initiating graceful shutdown")
+
+	// Create a context with overall shutdown timeout
+	ctx, cancel := context.WithTimeout(context.Background(), c.shutdownConfig.ShutdownTimeout)
+	defer cancel()
+
+	// Step 1: Emit final session summary
+	c.emitSessionSummary()
+
+	// Step 2: Flush all pending log writes with timeout
+	c.flushLogs(ctx)
+
+	// Step 3: Clear sensitive data from memory
+	c.clearSensitiveData()
+
+	// Step 4: Close all resources
+	c.closeResources()
+
+	// Step 5: Request VM termination
+	c.terminateVM()
+
+	c.logger.Println("Graceful shutdown complete")
+}
+
+// emitSessionSummary logs a final summary of the session before shutdown
+func (c *Controller) emitSessionSummary() {
+	c.logger.Println("=== Final Session Summary ===")
+	c.logger.Printf("Session ID: %s", c.config.ID)
+
+	duration := time.Duration(0)
+	if !c.startTime.IsZero() {
+		duration = time.Since(c.startTime).Round(time.Second)
+	}
+	c.logger.Printf("Duration: %s", duration)
+	c.logger.Printf("Iterations completed: %d/%d", c.iteration, c.config.MaxIterations)
+
+	// Count task completion status
+	completedCount := 0
+	blockedCount := 0
+	for _, state := range c.taskStates {
+		switch state.Phase {
+		case PhaseComplete, PhaseNothingToDo:
+			completedCount++
+		case PhaseBlocked:
+			blockedCount++
+		}
+	}
+	totalTasks := len(c.config.Tasks) + len(c.config.PRs)
+	c.logger.Printf("Tasks completed: %d/%d (blocked: %d)", completedCount, totalTasks, blockedCount)
+
+	// Log individual task states
+	for taskID, state := range c.taskStates {
+		c.logger.Printf("  Task %s: phase=%s, status=%s", taskID, state.Phase, state.LastStatus)
+	}
+
+	c.logger.Println("=============================")
+}
+
+// flushLogs flushes all registered log writers with a timeout
+func (c *Controller) flushLogs(ctx context.Context) {
+	if len(c.logWriters) == 0 {
+		return
+	}
+
+	c.logger.Printf("Flushing %d log writer(s)...", len(c.logWriters))
+
+	// Create a sub-context with the flush-specific timeout
+	flushCtx, cancel := context.WithTimeout(ctx, c.shutdownConfig.FlushTimeout)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i, writer := range c.logWriters {
+			if err := writer.Flush(); err != nil {
+				c.logger.Printf("Warning: failed to flush log writer %d: %v", i, err)
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+		c.logger.Println("All log writers flushed successfully")
+	case <-flushCtx.Done():
+		c.logger.Println("Warning: log flush timed out, some logs may be lost")
+	}
+}
+
+// clearSensitiveData removes sensitive information from memory
+func (c *Controller) clearSensitiveData() {
+	c.logger.Println("Clearing sensitive data")
+
+	// Clear GitHub token
 	c.gitHubToken = ""
+
+	// Clear the config's private key secret path
+	c.config.GitHub.PrivateKeySecret = ""
+
+	// Clear Claude auth credentials
+	c.config.ClaudeAuth.AuthJSONBase64 = ""
+
+	// Clear any prompts that might contain sensitive info
+	c.config.Prompt = ""
+}
+
+// closeResources closes all open resources (log writers, secret manager, etc.)
+func (c *Controller) closeResources() {
+	// Close log writers
+	for i, writer := range c.logWriters {
+		if err := writer.Close(); err != nil {
+			c.logger.Printf("Warning: failed to close log writer %d: %v", i, err)
+		}
+	}
+	c.logWriters = nil
 
 	// Close Secret Manager client
 	if c.secretManager != nil {
 		if err := c.secretManager.Close(); err != nil {
 			c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
 		}
+		c.secretManager = nil
 	}
+}
 
-	// Request VM termination
-	c.terminateVM()
+func (c *Controller) cleanup() {
+	c.Shutdown()
 }
 
 func (c *Controller) terminateVM() {

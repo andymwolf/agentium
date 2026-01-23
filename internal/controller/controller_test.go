@@ -1,8 +1,13 @@
 package controller
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io"
+	"log"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigFromEnv_EnvVar(t *testing.T) {
@@ -291,4 +296,344 @@ func containsString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// mockLogFlusher implements LogFlusher for testing
+type mockLogFlusher struct {
+	flushed    bool
+	closed     bool
+	flushErr   error
+	closeErr   error
+	flushDelay time.Duration
+}
+
+func (m *mockLogFlusher) Flush() error {
+	if m.flushDelay > 0 {
+		time.Sleep(m.flushDelay)
+	}
+	m.flushed = true
+	return m.flushErr
+}
+
+func (m *mockLogFlusher) Close() error {
+	m.closed = true
+	return m.closeErr
+}
+
+func TestDefaultShutdownConfig(t *testing.T) {
+	cfg := DefaultShutdownConfig()
+
+	if cfg.FlushTimeout != 10*time.Second {
+		t.Errorf("FlushTimeout = %v, want %v", cfg.FlushTimeout, 10*time.Second)
+	}
+	if cfg.ShutdownTimeout != 30*time.Second {
+		t.Errorf("ShutdownTimeout = %v, want %v", cfg.ShutdownTimeout, 30*time.Second)
+	}
+}
+
+func TestController_RegisterLogWriter(t *testing.T) {
+	c := &Controller{
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+	}
+
+	writer1 := &mockLogFlusher{}
+	writer2 := &mockLogFlusher{}
+
+	c.RegisterLogWriter(writer1)
+	c.RegisterLogWriter(writer2)
+
+	if len(c.logWriters) != 2 {
+		t.Errorf("len(logWriters) = %d, want 2", len(c.logWriters))
+	}
+}
+
+func TestController_Shutdown_FlushesLogs(t *testing.T) {
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	writer1 := &mockLogFlusher{}
+	writer2 := &mockLogFlusher{}
+	c.RegisterLogWriter(writer1)
+	c.RegisterLogWriter(writer2)
+
+	c.Shutdown()
+
+	if !writer1.flushed {
+		t.Error("writer1 should have been flushed")
+	}
+	if !writer2.flushed {
+		t.Error("writer2 should have been flushed")
+	}
+}
+
+func TestController_Shutdown_ClosesLogWriters(t *testing.T) {
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	writer := &mockLogFlusher{}
+	c.RegisterLogWriter(writer)
+
+	c.Shutdown()
+
+	if !writer.closed {
+		t.Error("writer should have been closed")
+	}
+}
+
+func TestController_Shutdown_ClearsSensitiveData(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			ID: "test-session",
+			GitHub: struct {
+				AppID            int64  `json:"app_id"`
+				InstallationID   int64  `json:"installation_id"`
+				PrivateKeySecret string `json:"private_key_secret"`
+			}{
+				PrivateKeySecret: "projects/test/secrets/key",
+			},
+			ClaudeAuth: struct {
+				AuthMode       string `json:"auth_mode"`
+				AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+			}{
+				AuthJSONBase64: "base64-encoded-credentials",
+			},
+			Prompt: "sensitive-prompt-content",
+		},
+		gitHubToken:    "ghp_test-token-12345",
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	c.Shutdown()
+
+	if c.gitHubToken != "" {
+		t.Errorf("gitHubToken should be cleared, got %q", c.gitHubToken)
+	}
+	if c.config.GitHub.PrivateKeySecret != "" {
+		t.Errorf("PrivateKeySecret should be cleared, got %q", c.config.GitHub.PrivateKeySecret)
+	}
+	if c.config.ClaudeAuth.AuthJSONBase64 != "" {
+		t.Errorf("AuthJSONBase64 should be cleared, got %q", c.config.ClaudeAuth.AuthJSONBase64)
+	}
+	if c.config.Prompt != "" {
+		t.Errorf("Prompt should be cleared, got %q", c.config.Prompt)
+	}
+}
+
+func TestController_Shutdown_FlushTimeout(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{ID: "test-session"},
+		logWriters: []LogFlusher{
+			&mockLogFlusher{flushDelay: 5 * time.Second}, // Will take longer than timeout
+		},
+		shutdownConfig: ShutdownConfig{
+			FlushTimeout:    100 * time.Millisecond, // Very short timeout
+			ShutdownTimeout: 1 * time.Second,
+		},
+		logger:     log.New(io.Discard, "", 0),
+		completed:  make(map[string]bool),
+		taskStates: make(map[string]*TaskState),
+		startTime:  time.Now(),
+	}
+
+	start := time.Now()
+	c.Shutdown()
+	elapsed := time.Since(start)
+
+	// Should complete within the shutdown timeout, not wait for the full flush delay
+	if elapsed > 2*time.Second {
+		t.Errorf("Shutdown took %v, expected to timeout within 2s", elapsed)
+	}
+}
+
+func TestController_Shutdown_FlushError(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{ID: "test-session"},
+		logWriters: []LogFlusher{
+			&mockLogFlusher{flushErr: errors.New("flush failed")},
+		},
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	// Should not panic even with flush errors
+	c.Shutdown()
+}
+
+func TestController_Shutdown_CloseError(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{ID: "test-session"},
+		logWriters: []LogFlusher{
+			&mockLogFlusher{closeErr: errors.New("close failed")},
+		},
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	// Should not panic even with close errors
+	c.Shutdown()
+}
+
+func TestController_Shutdown_EmitsSessionSummary(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[controller] ", 0)
+
+	c := &Controller{
+		config: SessionConfig{
+			ID:            "test-session-123",
+			MaxIterations: 10,
+			Tasks:         []string{"1", "2"},
+		},
+		iteration:      5,
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         logger,
+		completed:      make(map[string]bool),
+		taskStates: map[string]*TaskState{
+			"issue:1": {ID: "1", Type: "issue", Phase: PhaseComplete, LastStatus: "COMPLETE"},
+			"issue:2": {ID: "2", Type: "issue", Phase: PhaseBlocked, LastStatus: "BLOCKED"},
+		},
+		startTime: time.Now().Add(-5 * time.Minute),
+	}
+
+	c.Shutdown()
+
+	output := buf.String()
+
+	// Verify session summary was emitted
+	if !containsString(output, "Final Session Summary") {
+		t.Error("output should contain 'Final Session Summary'")
+	}
+	if !containsString(output, "test-session-123") {
+		t.Error("output should contain session ID")
+	}
+	if !containsString(output, "5/10") {
+		t.Error("output should contain iterations '5/10'")
+	}
+	if !containsString(output, "blocked: 1") {
+		t.Error("output should contain blocked count")
+	}
+}
+
+func TestController_Shutdown_NoLogWriters(t *testing.T) {
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	// Should not panic with no log writers
+	c.Shutdown()
+}
+
+func TestController_Shutdown_ClosesSecretManager(t *testing.T) {
+	mockSM := &mockSecretManager{}
+
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+		secretManager:  mockSM,
+	}
+
+	c.Shutdown()
+
+	if !mockSM.closed {
+		t.Error("secret manager should have been closed")
+	}
+}
+
+func TestController_Shutdown_NilSecretManager(t *testing.T) {
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     make([]LogFlusher, 0),
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+		secretManager:  nil,
+	}
+
+	// Should not panic with nil secret manager
+	c.Shutdown()
+}
+
+func TestController_Cleanup_CallsShutdown(t *testing.T) {
+	writer := &mockLogFlusher{}
+
+	c := &Controller{
+		config:         SessionConfig{ID: "test-session"},
+		logWriters:     []LogFlusher{writer},
+		shutdownConfig: DefaultShutdownConfig(),
+		logger:         log.New(io.Discard, "", 0),
+		completed:      make(map[string]bool),
+		taskStates:     make(map[string]*TaskState),
+		startTime:      time.Now(),
+	}
+
+	c.cleanup()
+
+	// cleanup should invoke Shutdown which flushes and closes
+	if !writer.flushed {
+		t.Error("writer should have been flushed via cleanup -> Shutdown")
+	}
+	if !writer.closed {
+		t.Error("writer should have been closed via cleanup -> Shutdown")
+	}
+}
+
+func TestLogFlusherInterface(t *testing.T) {
+	// Verify that mockLogFlusher implements LogFlusher
+	var _ LogFlusher = (*mockLogFlusher)(nil)
+}
+
+// mockSecretManager implements SecretFetcher for testing
+type mockSecretManager struct {
+	closed bool
+}
+
+func (m *mockSecretManager) FetchSecret(ctx context.Context, secretPath string) (string, error) {
+	return "mock-secret", nil
+}
+
+func (m *mockSecretManager) Close() error {
+	m.closed = true
+	return nil
 }

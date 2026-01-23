@@ -30,18 +30,27 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle signals
+	// Handle signals for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
-		log.Printf("Received signal: %v", sig)
+		log.Printf("Received signal: %v, initiating graceful shutdown", sig)
 		cancel()
+		// On second signal, force exit
+		sig = <-sigCh
+		log.Printf("Received second signal: %v, forcing exit", sig)
+		os.Exit(1)
 	}()
 
 	// Run controller
 	if err := ctrl.Run(ctx); err != nil {
-		log.Printf("Controller exited with error: %v", err)
+		if ctx.Err() != nil {
+			log.Printf("Controller interrupted by signal, performing shutdown")
+			ctrl.Shutdown()
+		} else {
+			log.Printf("Controller exited with error: %v", err)
+		}
 		os.Exit(1)
 	}
 
