@@ -131,7 +131,7 @@ write_files:
       ${var.session_config}
 %{ if var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ~}
   - path: /etc/agentium/claude-auth.json
-    permissions: '0600'
+    permissions: '0644'
     encoding: b64
     content: ${var.claude_auth_json}
 %{ endif ~}
