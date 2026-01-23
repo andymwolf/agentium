@@ -16,6 +16,10 @@ func newTestSkills() []Skill {
 			Content: "ENVIRONMENT CONTENT",
 		},
 		{
+			Entry:   SkillEntry{Name: "status_signals", File: "status_signals.md", Priority: 30, Phases: nil},
+			Content: "STATUS_SIGNALS CONTENT",
+		},
+		{
 			Entry:   SkillEntry{Name: "planning", File: "planning.md", Priority: 40, Phases: []string{"IMPLEMENT", "ANALYZE"}},
 			Content: "PLANNING CONTENT",
 		},
@@ -43,7 +47,7 @@ func TestSelector_SelectForPhase_Implement(t *testing.T) {
 	result := s.SelectForPhase("IMPLEMENT")
 
 	// Should include universal skills + IMPLEMENT-phase skills
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "PLANNING CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "PLANNING CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(IMPLEMENT) missing %q", exp)
@@ -63,7 +67,7 @@ func TestSelector_SelectForPhase_Test(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("TEST")
 
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "TEST CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "TEST CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(TEST) missing %q", exp)
@@ -82,7 +86,7 @@ func TestSelector_SelectForPhase_Analyze(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("ANALYZE")
 
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "PLANNING CONTENT", "PR REVIEW CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "PLANNING CONTENT", "PR REVIEW CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(ANALYZE) missing %q", exp)
@@ -101,7 +105,7 @@ func TestSelector_SelectForPhase_PRCreation(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("PR_CREATION")
 
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "PR CREATION CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "PR CREATION CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(PR_CREATION) missing %q", exp)
@@ -120,7 +124,7 @@ func TestSelector_SelectForPhase_Push(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("PUSH")
 
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "PR REVIEW CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "PR REVIEW CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(PUSH) missing %q", exp)
@@ -139,6 +143,9 @@ func TestSelector_SelectForPhase_UnknownPhase(t *testing.T) {
 	if !strings.Contains(result, "ENVIRONMENT CONTENT") {
 		t.Error("SelectForPhase(UNKNOWN) missing universal skill: environment")
 	}
+	if !strings.Contains(result, "STATUS_SIGNALS CONTENT") {
+		t.Error("SelectForPhase(UNKNOWN) missing universal skill: status_signals")
+	}
 
 	// Should not include any phase-specific skills
 	phaseSpecific := []string{"PLANNING CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT", "PR CREATION CONTENT", "PR REVIEW CONTENT"}
@@ -153,9 +160,10 @@ func TestSelector_SelectForPhase_PriorityOrder(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("IMPLEMENT")
 
-	// Verify priority ordering: safety comes before environment, which comes before planning, etc.
+	// Verify priority ordering: safety comes before environment, which comes before status_signals, etc.
 	safetyIdx := strings.Index(result, "SAFETY CONTENT")
 	envIdx := strings.Index(result, "ENVIRONMENT CONTENT")
+	statusIdx := strings.Index(result, "STATUS_SIGNALS CONTENT")
 	planningIdx := strings.Index(result, "PLANNING CONTENT")
 	implementIdx := strings.Index(result, "IMPLEMENT CONTENT")
 	testIdx := strings.Index(result, "TEST CONTENT")
@@ -163,8 +171,11 @@ func TestSelector_SelectForPhase_PriorityOrder(t *testing.T) {
 	if safetyIdx > envIdx {
 		t.Error("safety should come before environment")
 	}
-	if envIdx > planningIdx {
-		t.Error("environment should come before planning")
+	if envIdx > statusIdx {
+		t.Error("environment should come before status_signals")
+	}
+	if statusIdx > planningIdx {
+		t.Error("status_signals should come before planning")
 	}
 	if planningIdx > implementIdx {
 		t.Error("planning should come before implement")
@@ -181,12 +192,12 @@ func TestSelector_SkillsForPhase(t *testing.T) {
 		phase    string
 		expected []string
 	}{
-		{"IMPLEMENT", []string{"safety", "environment", "planning", "implement", "test"}},
-		{"TEST", []string{"safety", "environment", "test"}},
-		{"ANALYZE", []string{"safety", "environment", "planning", "pr_review"}},
-		{"PR_CREATION", []string{"safety", "environment", "pr_creation"}},
-		{"PUSH", []string{"safety", "environment", "pr_review"}},
-		{"UNKNOWN", []string{"safety", "environment"}},
+		{"IMPLEMENT", []string{"safety", "environment", "status_signals", "planning", "implement", "test"}},
+		{"TEST", []string{"safety", "environment", "status_signals", "test"}},
+		{"ANALYZE", []string{"safety", "environment", "status_signals", "planning", "pr_review"}},
+		{"PR_CREATION", []string{"safety", "environment", "status_signals", "pr_creation"}},
+		{"PUSH", []string{"safety", "environment", "status_signals", "pr_review"}},
+		{"UNKNOWN", []string{"safety", "environment", "status_signals"}},
 	}
 
 	for _, tt := range tests {
@@ -211,8 +222,8 @@ func TestSelector_SelectForPhase_Separator(t *testing.T) {
 
 	// Verify parts are separated by double newlines
 	parts := strings.Split(result, "\n\n")
-	if len(parts) < 5 {
-		t.Errorf("Expected at least 5 parts separated by double newlines, got %d", len(parts))
+	if len(parts) < 6 {
+		t.Errorf("Expected at least 6 parts separated by double newlines, got %d", len(parts))
 	}
 }
 

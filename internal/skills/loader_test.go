@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -161,7 +162,7 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 			if !ok {
 				t.Fatalf("skill %q not found", name)
 			}
-			if !containsString(skill.Content, expected) {
+			if !strings.Contains(skill.Content, expected) {
 				t.Errorf("skill %q content does not contain %q", name, expected)
 			}
 		})
@@ -181,15 +182,3 @@ func TestLoadSkills_MissingFile(t *testing.T) {
 	}
 }
 
-func containsString(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && indexOf(s, substr) >= 0
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}

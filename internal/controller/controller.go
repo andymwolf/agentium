@@ -1165,6 +1165,9 @@ func (c *Controller) shouldTerminate() bool {
 }
 
 // determineActivePhase returns the current phase for the active task.
+// When no task state exists yet (first iteration), defaults are:
+// - "ANALYZE" for PR tasks (agent starts by reading review comments)
+// - "IMPLEMENT" for issue tasks (agent starts by writing code)
 func (c *Controller) determineActivePhase() string {
 	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 	if state, ok := c.taskStates[taskID]; ok {
