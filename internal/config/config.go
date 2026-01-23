@@ -16,12 +16,19 @@ type Config struct {
 	Session    SessionConfig    `mapstructure:"session"`
 	Controller ControllerConfig `mapstructure:"controller"`
 	Claude     ClaudeConfig     `mapstructure:"claude"`
+	Prompts    PromptsConfig    `mapstructure:"prompts"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings
 type ClaudeConfig struct {
 	AuthMode     string `mapstructure:"auth_mode"`      // "api" (default) or "oauth"
 	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json
+}
+
+// PromptsConfig contains settings for system and project prompt loading
+type PromptsConfig struct {
+	SystemMDURL  string `mapstructure:"system_md_url"`  // URL to fetch SYSTEM.md (overrides default)
+	FetchTimeout string `mapstructure:"fetch_timeout"`  // Timeout for fetching remote prompts (default: 5s)
 }
 
 // ProjectConfig contains project-level settings
