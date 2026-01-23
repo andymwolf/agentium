@@ -785,9 +785,9 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Mount Claude auth.json for OAuth mode
+	// Mount Claude credentials for OAuth mode
 	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro")
+		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
 	}
 
 	// Add image and command
