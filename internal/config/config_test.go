@@ -324,7 +324,7 @@ func TestApplyDefaults(t *testing.T) {
 					MaxDuration:   "2h",
 				},
 				Controller: ControllerConfig{
-					Image: "ghcr.io/andywolf/agentium-controller:latest",
+					Image: "ghcr.io/andymwolf/agentium-controller:latest",
 				},
 			},
 		},
@@ -352,7 +352,7 @@ func TestApplyDefaults(t *testing.T) {
 					MaxDuration:   "2h",
 				},
 				Controller: ControllerConfig{
-					Image: "ghcr.io/andywolf/agentium-controller:latest",
+					Image: "ghcr.io/andymwolf/agentium-controller:latest",
 				},
 			},
 		},
@@ -380,7 +380,7 @@ func TestApplyDefaults(t *testing.T) {
 					MaxDuration:   "2h",
 				},
 				Controller: ControllerConfig{
-					Image: "ghcr.io/andywolf/agentium-controller:latest",
+					Image: "ghcr.io/andymwolf/agentium-controller:latest",
 				},
 			},
 		},
@@ -415,7 +415,7 @@ func TestApplyDefaults(t *testing.T) {
 					MaxDuration:   "4h",
 				},
 				Controller: ControllerConfig{
-					Image: "ghcr.io/andywolf/agentium-controller:latest",
+					Image: "ghcr.io/andymwolf/agentium-controller:latest",
 				},
 			},
 		},
@@ -450,7 +450,7 @@ func TestApplyDefaults(t *testing.T) {
 					MaxDuration:   "2h",
 				},
 				Controller: ControllerConfig{
-					Image: "ghcr.io/andywolf/agentium-controller:latest",
+					Image: "ghcr.io/andymwolf/agentium-controller:latest",
 				},
 			},
 		},

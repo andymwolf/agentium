@@ -41,7 +41,7 @@ variable "disk_size_gb" {
 variable "controller_image" {
   description = "Docker image for the session controller"
   type        = string
-  default     = "ghcr.io/andywolf/agentium-controller:latest"
+  default     = "ghcr.io/andymwolf/agentium-controller:latest"
 }
 
 variable "session_config" {

@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultImage is the default Docker image for Claude Code
-	DefaultImage = "ghcr.io/andywolf/agentium-claudecode:latest"
+	DefaultImage = "ghcr.io/andymwolf/agentium-claudecode:latest"
 )
 
 // Adapter implements the Agent interface for Claude Code

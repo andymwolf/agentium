@@ -37,4 +37,4 @@ claude:
 
 # Controller settings (optional)
 controller:
-  image: "ghcr.io/andywolf/agentium-controller:latest"
+  image: "ghcr.io/andymwolf/agentium-controller:latest"

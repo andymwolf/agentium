@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultImage is the default Docker image for Aider
-	DefaultImage = "ghcr.io/andywolf/agentium-aider:latest"
+	DefaultImage = "ghcr.io/andymwolf/agentium-aider:latest"
 )
 
 // Adapter implements the Agent interface for Aider

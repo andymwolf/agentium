@@ -131,7 +131,7 @@ func applyDefaults(cfg *Config) {
 	}
 
 	if cfg.Controller.Image == "" {
-		cfg.Controller.Image = "ghcr.io/andywolf/agentium-controller:latest"
+		cfg.Controller.Image = "ghcr.io/andymwolf/agentium-controller:latest"
 	}
 
 	if cfg.Claude.AuthMode == "" {
