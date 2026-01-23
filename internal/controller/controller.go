@@ -123,6 +123,7 @@ type Controller struct {
 	dockerAuthed  bool // Tracks if docker login to GHCR was done
 	taskStates    map[string]*TaskState
 	logger        *log.Logger
+	cloudLogger   *gcp.CloudLogger
 	secretManager gcp.SecretFetcher
 }
 
@@ -152,6 +153,16 @@ func New(config SessionConfig) (*Controller, error) {
 		workDir = "/workspace"
 	}
 
+	// Initialize Cloud Logger for structured logging
+	cloudLogger := gcp.NewCloudLogger(
+		gcp.WithWriter(os.Stdout),
+		gcp.WithSessionID(config.ID),
+		gcp.WithLabels(map[string]string{
+			"agent":      config.Agent,
+			"repository": config.Repository,
+		}),
+	)
+
 	c := &Controller{
 		config:        config,
 		agent:         agentAdapter,
@@ -160,7 +171,8 @@ func New(config SessionConfig) (*Controller, error) {
 		maxDuration:   maxDuration,
 		completed:     make(map[string]bool),
 		taskStates:    make(map[string]*TaskState),
-		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		logger:        log.New(cloudLogger, "[controller] ", log.LstdFlags),
+		cloudLogger:   cloudLogger,
 		secretManager: secretManager,
 	}
 
@@ -254,6 +266,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 
 		c.iteration++
+		c.cloudLogger.SetIteration(c.iteration)
 		c.logger.Printf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
 
 		// Run agent iteration
@@ -877,10 +890,17 @@ func (c *Controller) cleanup() {
 	// Clear sensitive data
 	c.gitHubToken = ""
 
+	// Flush and close Cloud Logger to ensure logs survive VM termination
+	if c.cloudLogger != nil {
+		if err := c.cloudLogger.Close(); err != nil {
+			log.Printf("[controller] Warning: failed to close cloud logger: %v", err)
+		}
+	}
+
 	// Close Secret Manager client
 	if c.secretManager != nil {
 		if err := c.secretManager.Close(); err != nil {
-			c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
+			log.Printf("[controller] Warning: failed to close Secret Manager client: %v", err)
 		}
 	}
 
