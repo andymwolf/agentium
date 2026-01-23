@@ -56,7 +56,7 @@ variable "max_run_duration" {
 }
 
 variable "vm_image" {
-  description = "Custom VM image to use (e.g., 'projects/my-project/global/images/agentium-v1-...'). If empty, uses stock Ubuntu 22.04 LTS."
+  description = "Custom VM image to use. If empty, uses Container-Optimized OS (cos-stable)."
   type        = string
   default     = ""
 }
@@ -124,12 +124,6 @@ locals {
 
   cloud_init = <<-EOF
 #cloud-config
-package_update: true
-packages:
-  - docker.io
-  - jq
-  - git
-
 write_files:
   - path: /etc/agentium/session.json
     permissions: '0600'
@@ -143,9 +137,6 @@ write_files:
 %{ endif ~}
 
 runcmd:
-  - systemctl start docker
-  - systemctl enable docker
-  - usermod -aG docker ubuntu
   - |
     # Pull and run controller
     docker pull ${var.controller_image}
@@ -170,7 +161,7 @@ resource "google_compute_instance" "agentium" {
 
   boot_disk {
     initialize_params {
-      image = var.vm_image != "" ? var.vm_image : "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = var.vm_image != "" ? var.vm_image : "cos-cloud/cos-stable"
       size  = var.disk_size_gb
       type  = "pd-ssd"
     }
