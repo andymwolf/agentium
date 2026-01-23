@@ -1,8 +1,13 @@
 package controller
 
 import (
+	"bytes"
 	"errors"
+	"log"
 	"testing"
+	"time"
+
+	"github.com/andywolf/agentium/internal/cloud/gcp"
 )
 
 func TestLoadConfigFromEnv_EnvVar(t *testing.T) {
@@ -282,6 +287,181 @@ func TestDefaultConfigPath(t *testing.T) {
 	if DefaultConfigPath != "/etc/agentium/session.json" {
 		t.Errorf("DefaultConfigPath = %q, want %q", DefaultConfigPath, "/etc/agentium/session.json")
 	}
+}
+
+func TestClearSensitiveData(t *testing.T) {
+	c := &Controller{
+		gitHubToken: "ghs_secret_token_123",
+		config: SessionConfig{
+			Prompt: "some prompt with sensitive data",
+		},
+		logger:      log.New(&bytes.Buffer{}, "", 0),
+		cloudLogger: &mockLogger{},
+	}
+	c.config.GitHub.PrivateKeySecret = "projects/test/secrets/key"
+	c.config.ClaudeAuth.AuthJSONBase64 = "base64encodedcreds"
+
+	c.clearSensitiveData()
+
+	if c.gitHubToken != "" {
+		t.Errorf("gitHubToken not cleared: %q", c.gitHubToken)
+	}
+	if c.config.GitHub.PrivateKeySecret != "" {
+		t.Errorf("PrivateKeySecret not cleared: %q", c.config.GitHub.PrivateKeySecret)
+	}
+	if c.config.ClaudeAuth.AuthJSONBase64 != "" {
+		t.Errorf("AuthJSONBase64 not cleared: %q", c.config.ClaudeAuth.AuthJSONBase64)
+	}
+	if c.config.Prompt != "" {
+		t.Errorf("Prompt not cleared: %q", c.config.Prompt)
+	}
+}
+
+func TestFlushLogsWithTimeout_Success(t *testing.T) {
+	flushed := false
+	c := &Controller{
+		logger: log.New(&bytes.Buffer{}, "", 0),
+		cloudLogger: &mockLogger{
+			flushFn: func() error {
+				flushed = true
+				return nil
+			},
+		},
+	}
+
+	c.flushLogsWithTimeout()
+
+	if !flushed {
+		t.Error("flush was not called")
+	}
+}
+
+func TestFlushLogsWithTimeout_Error(t *testing.T) {
+	c := &Controller{
+		logger: log.New(&bytes.Buffer{}, "", 0),
+		cloudLogger: &mockLogger{
+			flushFn: func() error {
+				return errors.New("flush error")
+			},
+		},
+	}
+
+	// Should not panic even with error
+	c.flushLogsWithTimeout()
+}
+
+func TestFlushLogsWithTimeout_NilLogger(t *testing.T) {
+	c := &Controller{
+		logger:      log.New(&bytes.Buffer{}, "", 0),
+		cloudLogger: nil,
+	}
+
+	// Should not panic with nil cloud logger
+	c.flushLogsWithTimeout()
+}
+
+func TestGetTerminationReason_MaxIterations(t *testing.T) {
+	c := &Controller{
+		iteration:   10,
+		config:      SessionConfig{MaxIterations: 10},
+		startTime:   time.Now(),
+		maxDuration: 2 * time.Hour,
+		taskStates:  make(map[string]*TaskState),
+	}
+
+	reason := c.getTerminationReason()
+	if reason != "max_iterations_reached" {
+		t.Errorf("reason = %q, want %q", reason, "max_iterations_reached")
+	}
+}
+
+func TestGetTerminationReason_AllTasksTerminal(t *testing.T) {
+	c := &Controller{
+		iteration:   1,
+		config:      SessionConfig{MaxIterations: 10},
+		startTime:   time.Now(),
+		maxDuration: 2 * time.Hour,
+		taskStates: map[string]*TaskState{
+			"issue:1": {Phase: PhaseComplete},
+			"issue:2": {Phase: PhaseBlocked},
+		},
+	}
+
+	reason := c.getTerminationReason()
+	if reason != "all_tasks_terminal" {
+		t.Errorf("reason = %q, want %q", reason, "all_tasks_terminal")
+	}
+}
+
+func TestGetTerminationReason_PRPushed(t *testing.T) {
+	c := &Controller{
+		iteration:     1,
+		config:        SessionConfig{MaxIterations: 10, PRs: []string{"42"}},
+		startTime:     time.Now(),
+		maxDuration:   2 * time.Hour,
+		taskStates:    make(map[string]*TaskState),
+		pushedChanges: true,
+	}
+
+	reason := c.getTerminationReason()
+	if reason != "pr_changes_pushed" {
+		t.Errorf("reason = %q, want %q", reason, "pr_changes_pushed")
+	}
+}
+
+func TestGetTerminationReason_AllCompleted(t *testing.T) {
+	c := &Controller{
+		iteration:   1,
+		config:      SessionConfig{MaxIterations: 10, Tasks: []string{"1", "2"}},
+		startTime:   time.Now(),
+		maxDuration: 2 * time.Hour,
+		taskStates:  make(map[string]*TaskState),
+		completed:   map[string]bool{"1": true, "2": true},
+	}
+
+	reason := c.getTerminationReason()
+	if reason != "all_tasks_completed" {
+		t.Errorf("reason = %q, want %q", reason, "all_tasks_completed")
+	}
+}
+
+// mockLogger implements gcp.LoggerInterface for testing
+type mockLogger struct {
+	logs     []string
+	flushFn  func() error
+	closeFn  func() error
+}
+
+func (m *mockLogger) Log(severity gcp.Severity, message string, fields map[string]interface{}) {
+	m.logs = append(m.logs, string(severity)+": "+message)
+}
+
+func (m *mockLogger) LogInfo(message string) {
+	m.Log(gcp.SeverityInfo, message, nil)
+}
+
+func (m *mockLogger) LogWarning(message string) {
+	m.Log(gcp.SeverityWarning, message, nil)
+}
+
+func (m *mockLogger) LogError(message string) {
+	m.Log(gcp.SeverityError, message, nil)
+}
+
+func (m *mockLogger) SetIteration(iteration int) {}
+
+func (m *mockLogger) Flush() error {
+	if m.flushFn != nil {
+		return m.flushFn()
+	}
+	return nil
+}
+
+func (m *mockLogger) Close() error {
+	if m.closeFn != nil {
+		return m.closeFn()
+	}
+	return nil
 }
 
 func containsString(s, substr string) bool {

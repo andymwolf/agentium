@@ -8,9 +8,11 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -19,6 +21,13 @@ import (
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/prompt"
+)
+
+const (
+	// ShutdownTimeout is the maximum time to wait for graceful shutdown
+	ShutdownTimeout = 30 * time.Second
+	// LogFlushTimeout is the maximum time to wait for log flushing
+	LogFlushTimeout = 10 * time.Second
 )
 
 // TaskPhase represents the current phase of a task in its lifecycle
@@ -198,6 +207,11 @@ func New(config SessionConfig) (*Controller, error) {
 // Run executes the main control loop
 func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
+
+	// Set up graceful shutdown signal handling
+	ctx, cancel := c.setupShutdownHandler(ctx)
+	defer cancel()
+
 	c.logger.Printf("Starting session %s", c.config.ID)
 	c.cloudLogger.Log(gcp.SeverityInfo, "Session starting", map[string]interface{}{
 		"repository":     c.config.Repository,
@@ -267,7 +281,14 @@ func (c *Controller) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Println("Context cancelled, shutting down")
+			c.logger.Println("Context cancelled, initiating graceful shutdown")
+			c.cloudLogger.Log(gcp.SeverityWarning, "Context cancelled, shutting down", map[string]interface{}{
+				"iteration": c.iteration,
+				"elapsed":   time.Since(c.startTime).String(),
+			})
+			// Emit final summary and clean up even on cancellation
+			c.emitFinalLogs()
+			c.cleanup()
 			return ctx.Err()
 		default:
 		}
@@ -932,43 +953,98 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 }
 
 func (c *Controller) emitFinalLogs() {
+	duration := time.Since(c.startTime)
+
 	c.logger.Println("=== Session Summary ===")
 	c.logger.Printf("Session ID: %s", c.config.ID)
-	c.logger.Printf("Duration: %s", time.Since(c.startTime).Round(time.Second))
+	c.logger.Printf("Duration: %s", duration.Round(time.Second))
 	c.logger.Printf("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
 
 	completedCount := 0
+	blockedCount := 0
 	for _, task := range c.config.Tasks {
 		if c.completed[task] {
 			completedCount++
 		}
 	}
+
+	// Count task phases
+	taskPhases := make(map[string]int)
+	for _, state := range c.taskStates {
+		taskPhases[string(state.Phase)]++
+		if state.Phase == PhaseBlocked {
+			blockedCount++
+		}
+	}
+
 	c.logger.Printf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
+	if blockedCount > 0 {
+		c.logger.Printf("Tasks blocked: %d", blockedCount)
+	}
 	c.logger.Println("======================")
 
 	// Emit structured session summary to cloud logger
 	c.cloudLogger.Log(gcp.SeverityInfo, "Session complete", map[string]interface{}{
-		"duration_seconds":  time.Since(c.startTime).Seconds(),
-		"iterations":        c.iteration,
-		"max_iterations":    c.config.MaxIterations,
-		"tasks_completed":   completedCount,
-		"tasks_total":       len(c.config.Tasks),
-		"pushed_changes":    c.pushedChanges,
+		"duration_seconds": duration.Seconds(),
+		"iterations":       c.iteration,
+		"max_iterations":   c.config.MaxIterations,
+		"tasks_completed":  completedCount,
+		"tasks_blocked":    blockedCount,
+		"tasks_total":      len(c.config.Tasks),
+		"pushed_changes":   c.pushedChanges,
+		"task_phases":      taskPhases,
+		"termination":      c.getTerminationReason(),
 	})
 }
 
-func (c *Controller) cleanup() {
-	c.logger.Println("Cleaning up")
-
-	// Flush cloud logs before cleanup (ensure logs survive VM termination)
-	if c.cloudLogger != nil {
-		if err := c.cloudLogger.Flush(); err != nil {
-			c.logger.Printf("Warning: failed to flush cloud logs: %v", err)
-		}
+// getTerminationReason returns why the session is terminating
+func (c *Controller) getTerminationReason() string {
+	if c.iteration >= c.config.MaxIterations {
+		return "max_iterations_reached"
+	}
+	if time.Since(c.startTime) >= c.maxDuration {
+		return "max_duration_reached"
 	}
 
-	// Clear sensitive data
-	c.gitHubToken = ""
+	allTerminal := true
+	for _, state := range c.taskStates {
+		switch state.Phase {
+		case PhaseComplete, PhaseNothingToDo, PhaseBlocked:
+			continue
+		default:
+			allTerminal = false
+		}
+	}
+	if allTerminal && len(c.taskStates) > 0 {
+		return "all_tasks_terminal"
+	}
+
+	if len(c.config.PRs) > 0 && c.pushedChanges {
+		return "pr_changes_pushed"
+	}
+
+	allComplete := true
+	for _, task := range c.config.Tasks {
+		if !c.completed[task] {
+			allComplete = false
+			break
+		}
+	}
+	if allComplete && len(c.config.Tasks) > 0 {
+		return "all_tasks_completed"
+	}
+
+	return "unknown"
+}
+
+func (c *Controller) cleanup() {
+	c.logger.Println("Initiating graceful shutdown")
+
+	// Flush cloud logs with timeout to ensure logs survive VM termination
+	c.flushLogsWithTimeout()
+
+	// Clear sensitive data from memory
+	c.clearSensitiveData()
 
 	// Close cloud logger
 	if c.cloudLogger != nil {
@@ -984,8 +1060,80 @@ func (c *Controller) cleanup() {
 		}
 	}
 
+	c.logger.Println("Graceful shutdown complete")
+
 	// Request VM termination
 	c.terminateVM()
+}
+
+// setupShutdownHandler sets up OS signal handling for graceful shutdown.
+// It listens for SIGTERM and SIGINT signals and cancels the context when received.
+func (c *Controller) setupShutdownHandler(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		select {
+		case sig := <-sigChan:
+			c.logger.Printf("Received signal %v, initiating graceful shutdown", sig)
+			c.cloudLogger.Log(gcp.SeverityWarning, "Shutdown signal received", map[string]interface{}{
+				"signal": sig.String(),
+			})
+			cancel()
+		case <-ctx.Done():
+			// Context was cancelled elsewhere
+		}
+		signal.Stop(sigChan)
+	}()
+
+	return ctx, cancel
+}
+
+// flushLogsWithTimeout flushes all pending log writes with a timeout.
+// This ensures logs are persisted to Cloud Logging before VM termination.
+func (c *Controller) flushLogsWithTimeout() {
+	if c.cloudLogger == nil {
+		return
+	}
+
+	c.logger.Println("Flushing logs before shutdown...")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.cloudLogger.Flush()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			c.logger.Printf("Warning: failed to flush cloud logs: %v", err)
+		} else {
+			c.logger.Println("Logs flushed successfully")
+		}
+	case <-time.After(LogFlushTimeout):
+		c.logger.Printf("Warning: log flush timed out after %v", LogFlushTimeout)
+		c.cloudLogger.Log(gcp.SeverityWarning, "Log flush timed out", map[string]interface{}{
+			"timeout": LogFlushTimeout.String(),
+		})
+	}
+}
+
+// clearSensitiveData removes sensitive data from memory.
+// This is called during shutdown to prevent data leakage.
+func (c *Controller) clearSensitiveData() {
+	c.logger.Println("Clearing sensitive data")
+
+	// Clear GitHub token
+	c.gitHubToken = ""
+
+	// Clear config fields that may contain secrets
+	c.config.GitHub.PrivateKeySecret = ""
+	c.config.ClaudeAuth.AuthJSONBase64 = ""
+
+	// Clear the prompt (may contain issue content or credentials)
+	c.config.Prompt = ""
 }
 
 func (c *Controller) terminateVM() {
