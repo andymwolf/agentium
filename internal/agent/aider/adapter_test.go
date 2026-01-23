@@ -170,6 +170,70 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuildPrompt_IterationContext(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name             string
+		session          *agent.Session
+		wantContains     []string
+		notWantContains  []string
+	}{
+		{
+			name: "nil IterationContext uses SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt content",
+			},
+			wantContains: []string{"monolithic system prompt content"},
+		},
+		{
+			name: "IterationContext with SkillsPrompt overrides SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt content",
+				IterationContext: &agent.IterationContext{
+					Phase:        "TEST",
+					SkillsPrompt: "composed skills for TEST phase",
+				},
+			},
+			wantContains:    []string{"composed skills for TEST phase"},
+			notWantContains: []string{"monolithic system prompt content"},
+		},
+		{
+			name: "IterationContext with empty SkillsPrompt falls back to SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt content",
+				IterationContext: &agent.IterationContext{
+					Phase:        "TEST",
+					SkillsPrompt: "",
+				},
+			},
+			wantContains: []string{"monolithic system prompt content"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := a.BuildPrompt(tt.session, 1)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("BuildPrompt() missing %q", want)
+				}
+			}
+			for _, notWant := range tt.notWantContains {
+				if strings.Contains(prompt, notWant) {
+					t.Errorf("BuildPrompt() should not contain %q", notWant)
+				}
+			}
+		})
+	}
+}
+
 func TestAdapter_ParseOutput(t *testing.T) {
 	a := New()
 

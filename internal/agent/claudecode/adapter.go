@@ -69,8 +69,14 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		"--dangerously-skip-permissions",
 	}
 
-	if session.SystemPrompt != "" {
-		args = append(args, "--system-prompt", session.SystemPrompt)
+	// Prefer phase-aware skills prompt over monolithic system prompt
+	systemPrompt := session.SystemPrompt
+	if session.IterationContext != nil && session.IterationContext.SkillsPrompt != "" {
+		systemPrompt = session.IterationContext.SkillsPrompt
+	}
+
+	if systemPrompt != "" {
+		args = append(args, "--system-prompt", systemPrompt)
 	}
 
 	if session.ProjectPrompt != "" {
