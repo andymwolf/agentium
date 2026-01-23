@@ -68,7 +68,6 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	prompt := a.BuildPrompt(session, iteration)
 
 	return []string{
-		"aider",
 		"--model", a.model,
 		"--yes-always",
 		"--no-git",

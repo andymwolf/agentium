@@ -68,12 +68,12 @@ func TestAdapter_BuildCommand(t *testing.T) {
 		t.Fatalf("BuildCommand() returned %d args, want at least 3", len(cmd))
 	}
 
-	if cmd[0] != "claude" {
-		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "claude")
+	if cmd[0] != "--print" {
+		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--print")
 	}
 
-	if cmd[1] != "--print" {
-		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--print")
+	if cmd[1] != "--dangerously-skip-permissions" {
+		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--dangerously-skip-permissions")
 	}
 }
 

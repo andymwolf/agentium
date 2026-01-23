@@ -77,8 +77,8 @@ func TestAdapter_BuildCommand(t *testing.T) {
 		t.Fatalf("BuildCommand() returned empty command")
 	}
 
-	if cmd[0] != "aider" {
-		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "aider")
+	if cmd[0] != "--model" {
+		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--model")
 	}
 
 	// Check for expected flags

@@ -65,7 +65,6 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	prompt := a.BuildPrompt(session, iteration)
 
 	return []string{
-		"claude",
 		"--print",
 		"--dangerously-skip-permissions",
 		prompt,
