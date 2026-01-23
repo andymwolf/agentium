@@ -93,6 +93,14 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 		sb.WriteString("\n\n=== END PROJECT INSTRUCTIONS ===\n\n")
 	}
 
+	// When the controller provides a focused per-task prompt (ActiveTask is set),
+	// use it directly — it already contains repository context and instructions.
+	if session.ActiveTask != "" && session.Prompt != "" {
+		sb.WriteString(session.Prompt)
+		return sb.String()
+	}
+
+	// Legacy fallback: build a generic multi-issue prompt
 	sb.WriteString(fmt.Sprintf("Working on repository: %s\n\n", session.Repository))
 
 	if session.Prompt != "" {

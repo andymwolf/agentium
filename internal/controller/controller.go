@@ -125,6 +125,12 @@ func LoadConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte
 	return config, nil
 }
 
+// TaskQueueItem represents a single item in the unified task queue
+type TaskQueueItem struct {
+	Type string // "pr" or "issue"
+	ID   string // PR number or issue number
+}
+
 // ShutdownHook is a function that will be called during graceful shutdown.
 // It receives a context with timeout and should respect cancellation.
 type ShutdownHook func(ctx context.Context) error
@@ -134,25 +140,31 @@ type Controller struct {
 	config        SessionConfig
 	agent         agent.Agent
 	workDir       string
-	iteration     int
-	startTime     time.Time
-	maxDuration   time.Duration
-	gitHubToken   string
-	completed     map[string]bool
-	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
-	dockerAuthed  bool // Tracks if docker login to GHCR was done
-	taskStates    map[string]*TaskState
-	logger        *log.Logger
-	cloudLogger   *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
-	secretManager gcp.SecretFetcher
-	systemPrompt  string // Loaded SYSTEM.md content
-	projectPrompt string // Loaded .agentium/AGENT.md content (may be empty)
+	iteration              int
+	startTime              time.Time
+	maxDuration            time.Duration
+	gitHubToken            string
+	completed              map[string]bool
+	pushedChanges          bool                // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed           bool                // Tracks if docker login to GHCR was done
+	taskStates             map[string]*TaskState
+	logger                 *log.Logger
+	cloudLogger            *gcp.CloudLogger    // Structured cloud logging (may be nil if unavailable)
+	secretManager          gcp.SecretFetcher
+	systemPrompt           string              // Loaded SYSTEM.md content
+	projectPrompt          string              // Loaded .agentium/AGENT.md content (may be empty)
+	taskQueue              []TaskQueueItem     // Ordered queue: PRs first, then issues
+	issueDetails           []issueDetail       // Fetched issue details for prompt building
+	prDetails              []prWithReviews     // Fetched PR details for prompt building
+	activeTask             string              // Current task ID being focused on
+	activeTaskType         string              // "pr" or "issue"
+	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
 
 	// Shutdown management
-	shutdownHooks []ShutdownHook
-	shutdownOnce  sync.Once
-	shutdownCh    chan struct{} // Closed when shutdown is initiated
-	logFlushFn    func() error // Function to flush pending logs
+	shutdownHooks          []ShutdownHook
+	shutdownOnce           sync.Once
+	shutdownCh             chan struct{}        // Closed when shutdown is initiated
+	logFlushFn             func() error        // Function to flush pending logs
 }
 
 // New creates a new session controller
@@ -207,20 +219,22 @@ func New(config SessionConfig) (*Controller, error) {
 		shutdownCh:    make(chan struct{}),
 	}
 
-	// Initialize task states for all tasks and PRs
-	for _, task := range config.Tasks {
-		c.taskStates[fmt.Sprintf("issue:%s", task)] = &TaskState{
-			ID:    task,
-			Type:  "issue",
-			Phase: PhaseImplement,
-		}
-	}
+	// Initialize task states and build unified task queue (PRs first, then issues)
 	for _, pr := range config.PRs {
 		c.taskStates[fmt.Sprintf("pr:%s", pr)] = &TaskState{
 			ID:    pr,
 			Type:  "pr",
 			Phase: PhaseAnalyze,
 		}
+		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "pr", ID: pr})
+	}
+	for _, task := range config.Tasks {
+		c.taskStates[fmt.Sprintf("issue:%s", task)] = &TaskState{
+			ID:    task,
+			Type:  "issue",
+			Phase: PhaseImplement,
+		}
+		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "issue", ID: task})
 	}
 
 	return c, nil
@@ -305,32 +319,23 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load prompts: %w", err)
 	}
 
-	// Handle PR mode vs issue mode
+	// Fetch all task details upfront
 	if len(c.config.PRs) > 0 {
-		// PR review session: fetch PR details and checkout PR branch
 		prDetails, err := c.fetchPRDetails(ctx)
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch PR details: %v", err)
+			c.logWarning("failed to fetch PR details: %v", err)
 		}
-
-		// Build PR-specific prompt
-		if len(prDetails) > 0 {
-			c.config.Prompt = c.buildPromptWithPRs(prDetails)
-		}
-	} else {
-		// Issue session: fetch issue details
+		c.prDetails = prDetails
+	}
+	if len(c.config.Tasks) > 0 {
 		issues, err := c.fetchIssueDetails(ctx)
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch issue details: %v", err)
+			c.logWarning("failed to fetch issue details: %v", err)
 		}
-
-		// Build initial prompt with issue context
-		if len(issues) > 0 {
-			c.config.Prompt = c.buildPromptWithIssues(issues)
-		}
+		c.issueDetails = issues
 	}
 
-	// Main execution loop
+	// Main execution loop - processes tasks sequentially (PRs first, then issues)
 	for {
 		select {
 		case <-ctx.Done():
@@ -345,6 +350,35 @@ func (c *Controller) Run(ctx context.Context) error {
 		if c.shouldTerminate() {
 			c.logInfo("Termination condition met")
 			break
+		}
+
+		// Get next task from unified queue
+		nextTask := c.nextQueuedTask()
+		if nextTask == nil {
+			c.logInfo("No active tasks remaining")
+			break
+		}
+
+		c.activeTask = nextTask.ID
+		c.activeTaskType = nextTask.Type
+
+		// Build prompt based on task type
+		if nextTask.Type == "pr" {
+			c.logInfo("Focusing on PR #%s", nextTask.ID)
+			if err := c.preparePRTask(ctx, nextTask.ID); err != nil {
+				c.logError("Failed to prepare PR #%s: %v", nextTask.ID, err)
+				// Mark as blocked and continue to next task
+				taskID := fmt.Sprintf("pr:%s", nextTask.ID)
+				if state, ok := c.taskStates[taskID]; ok {
+					state.Phase = PhaseBlocked
+				}
+				continue
+			}
+		} else {
+			c.logInfo("Focusing on issue #%s", nextTask.ID)
+			existingWork := c.detectExistingWork(ctx, nextTask.ID)
+			c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork)
+			c.activeTaskExistingWork = existingWork
 		}
 
 		c.iteration++
@@ -367,11 +401,9 @@ func (c *Controller) Run(ctx context.Context) error {
 			c.logInfo("Agent status: %s %s", result.AgentStatus, result.StatusMessage)
 		}
 
-		// Update task phases based on agent status
-		// For simplicity, update all active tasks (in practice, we'd track which task is being worked on)
-		for taskID := range c.taskStates {
-			c.updateTaskPhase(taskID, result)
-		}
+		// Update task phase for the active task
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		c.updateTaskPhase(taskID, result)
 
 		// Update completion state (legacy)
 		for _, task := range result.TasksCompleted {
@@ -642,22 +674,6 @@ func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error
 
 		prWithRev := prWithReviews{Detail: pr}
 
-		// Checkout PR branch
-		c.logger.Printf("Checking out PR branch: %s", pr.HeadRefName)
-		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
-		checkoutCmd.Dir = c.workDir
-		if err := checkoutCmd.Run(); err != nil {
-			// Try fetching and checking out
-			fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin", pr.HeadRefName)
-			fetchCmd.Dir = c.workDir
-			fetchCmd.Run()
-			checkoutCmd = exec.CommandContext(ctx, "git", "checkout", pr.HeadRefName)
-			checkoutCmd.Dir = c.workDir
-			if err := checkoutCmd.Run(); err != nil {
-				c.logger.Printf("Warning: failed to checkout PR branch %s: %v", pr.HeadRefName, err)
-			}
-		}
-
 		// Fetch reviews requesting changes
 		repoPath := c.config.Repository
 		reviewCmd := exec.CommandContext(ctx, "gh", "api",
@@ -779,6 +795,254 @@ func (c *Controller) buildPromptWithIssues(issues []issueDetail) string {
 	return sb.String()
 }
 
+// nextQueuedTask returns the first task in the queue that hasn't reached a terminal phase.
+// The queue is ordered PRs first, then issues, ensuring sequential processing.
+func (c *Controller) nextQueuedTask() *TaskQueueItem {
+	for i := range c.taskQueue {
+		item := &c.taskQueue[i]
+		taskID := fmt.Sprintf("%s:%s", item.Type, item.ID)
+		state := c.taskStates[taskID]
+		if state == nil {
+			return item
+		}
+		switch state.Phase {
+		case PhaseComplete, PhaseNothingToDo, PhaseBlocked:
+			continue
+		default:
+			return item
+		}
+	}
+	return nil
+}
+
+// preparePRTask checks out the PR branch and builds the prompt for a single PR review task.
+func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
+	// Find the PR detail from pre-fetched data
+	var prData *prWithReviews
+	for i := range c.prDetails {
+		if fmt.Sprintf("%d", c.prDetails[i].Detail.Number) == prNumber {
+			prData = &c.prDetails[i]
+			break
+		}
+	}
+
+	if prData == nil {
+		return fmt.Errorf("PR #%s not found in fetched details", prNumber)
+	}
+
+	// Checkout PR branch
+	c.logInfo("Checking out PR branch: %s", prData.Detail.HeadRefName)
+	checkoutCmd := exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
+	checkoutCmd.Dir = c.workDir
+	if err := checkoutCmd.Run(); err != nil {
+		// Try fetching first
+		fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin", prData.Detail.HeadRefName)
+		fetchCmd.Dir = c.workDir
+		fetchCmd.Run()
+		checkoutCmd = exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
+		checkoutCmd.Dir = c.workDir
+		if err := checkoutCmd.Run(); err != nil {
+			return fmt.Errorf("failed to checkout PR branch %s: %w", prData.Detail.HeadRefName, err)
+		}
+	}
+
+	// Build prompt for this single PR
+	c.config.Prompt = c.buildPromptForPR(*prData)
+	c.activeTaskExistingWork = nil // Not applicable for PR reviews
+	return nil
+}
+
+// buildPromptForPR builds a focused prompt for a single PR review task.
+func (c *Controller) buildPromptForPR(pr prWithReviews) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
+	sb.WriteString("## PR REVIEW SESSION\n\n")
+	sb.WriteString("You are addressing code review feedback on an existing pull request.\n\n")
+
+	sb.WriteString(fmt.Sprintf("### PR #%d: %s\n", pr.Detail.Number, pr.Detail.Title))
+	sb.WriteString(fmt.Sprintf("Branch: %s\n\n", pr.Detail.HeadRefName))
+
+	if len(pr.Reviews) > 0 {
+		sb.WriteString("**Review Feedback:**\n")
+		for _, review := range pr.Reviews {
+			if review.Body != "" {
+				body := review.Body
+				if len(body) > 500 {
+					body = body[:500] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("- [%s] %s\n", review.State, body))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(pr.Comments) > 0 {
+		sb.WriteString("**Inline Comments:**\n")
+		for _, comment := range pr.Comments {
+			body := comment.Body
+			if len(body) > 300 {
+				body = body[:300] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("- File: %s (line %d)\n", comment.Path, comment.Line))
+			sb.WriteString(fmt.Sprintf("  Comment: %s\n", body))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## Instructions\n\n")
+	sb.WriteString("1. You are ALREADY on the PR branch - do NOT create a new branch\n")
+	sb.WriteString("2. Read and understand the review comments\n")
+	sb.WriteString("3. Make targeted changes to address the feedback\n")
+	sb.WriteString("4. Run tests to verify your changes\n")
+	sb.WriteString("5. Commit with message: \"Address review feedback\"\n")
+	sb.WriteString("6. Push your changes: `git push origin HEAD`\n\n")
+	sb.WriteString("## DO NOT\n\n")
+	sb.WriteString("- Create a new branch (you're already on the PR branch)\n")
+	sb.WriteString("- Close or merge the PR\n")
+	sb.WriteString("- Dismiss reviews\n")
+	sb.WriteString("- Force push (unless absolutely necessary)\n")
+	sb.WriteString("- Make unrelated changes\n")
+
+	return sb.String()
+}
+
+// detectExistingWork checks GitHub for existing branches and PRs related to an issue.
+func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string) *agent.ExistingWork {
+	// Check for existing open PRs with branch matching agentium/issue-<N>
+	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
+		"--repo", c.config.Repository,
+		"--state", "open",
+		"--json", "number,title,headRefName",
+		"--limit", "10",
+	)
+	cmd.Dir = c.workDir
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+
+	if output, err := cmd.Output(); err == nil {
+		var prs []struct {
+			Number      int    `json:"number"`
+			Title       string `json:"title"`
+			HeadRefName string `json:"headRefName"`
+		}
+		if err := json.Unmarshal(output, &prs); err == nil {
+			branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
+			for _, pr := range prs {
+				if strings.HasPrefix(pr.HeadRefName, branchPrefix) {
+					c.logInfo("Found existing PR #%d for issue #%s on branch %s",
+						pr.Number, issueNumber, pr.HeadRefName)
+					return &agent.ExistingWork{
+						PRNumber: fmt.Sprintf("%d", pr.Number),
+						PRTitle:  pr.Title,
+						Branch:   pr.HeadRefName,
+					}
+				}
+			}
+		}
+	} else {
+		c.logWarning("failed to list PRs for existing work detection on issue #%s: %v", issueNumber, err)
+	}
+
+	// No PR found; check for existing remote branches
+	cmd = exec.CommandContext(ctx, "git", "branch", "-r", "--list",
+		fmt.Sprintf("origin/agentium/issue-%s-*", issueNumber),
+	)
+	cmd.Dir = c.workDir
+
+	if output, err := cmd.Output(); err == nil {
+		branches := strings.TrimSpace(string(output))
+		if branches != "" {
+			// Take the first matching branch
+			lines := strings.Split(branches, "\n")
+			branch := strings.TrimSpace(lines[0])
+			branch = strings.TrimPrefix(branch, "origin/")
+			c.logInfo("Found existing branch for issue #%s: %s", issueNumber, branch)
+			return &agent.ExistingWork{
+				Branch: branch,
+			}
+		}
+	} else {
+		c.logWarning("failed to list remote branches for existing work detection on issue #%s: %v", issueNumber, err)
+	}
+
+	c.logInfo("No existing work found for issue #%s", issueNumber)
+	return nil
+}
+
+// buildPromptForTask builds a focused prompt for a single issue, incorporating existing work context.
+func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.ExistingWork) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
+
+	// Find the issue detail
+	var issue *issueDetail
+	for i := range c.issueDetails {
+		if fmt.Sprintf("%d", c.issueDetails[i].Number) == issueNumber {
+			issue = &c.issueDetails[i]
+			break
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("## Your Task: Issue #%s\n\n", issueNumber))
+	if issue != nil {
+		sb.WriteString(fmt.Sprintf("**Title:** %s\n\n", issue.Title))
+		if issue.Body != "" {
+			body := issue.Body
+			if len(body) > 1000 {
+				body = body[:1000] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", body))
+		}
+	}
+
+	if existingWork != nil {
+		// Existing work found — instruct continuation
+		sb.WriteString("## Existing Work Detected\n\n")
+		if existingWork.PRNumber != "" {
+			sb.WriteString(fmt.Sprintf("An open PR already exists for this issue: **PR #%s** (%s)\n",
+				existingWork.PRNumber, existingWork.PRTitle))
+			sb.WriteString(fmt.Sprintf("Branch: `%s`\n\n", existingWork.Branch))
+			sb.WriteString("### Instructions\n\n")
+			sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
+			sb.WriteString("2. Review the current state of the code on this branch\n")
+			sb.WriteString("3. Continue implementation or fix any issues found\n")
+			sb.WriteString("4. Run tests to verify correctness\n")
+			sb.WriteString(fmt.Sprintf("5. Push updates to the existing branch: `git push origin %s`\n", existingWork.Branch))
+			sb.WriteString("6. The existing PR will update automatically\n\n")
+			sb.WriteString("### DO NOT\n\n")
+			sb.WriteString("- Do NOT create a new branch\n")
+			sb.WriteString("- Do NOT create a new PR\n")
+			sb.WriteString("- Do NOT close or delete the existing PR\n")
+		} else {
+			sb.WriteString(fmt.Sprintf("An existing branch was found for this issue: `%s`\n\n", existingWork.Branch))
+			sb.WriteString("### Instructions\n\n")
+			sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
+			sb.WriteString("2. Review what's already been done on this branch\n")
+			sb.WriteString("3. Continue implementation or fix issues\n")
+			sb.WriteString("4. Run tests to verify correctness\n")
+			sb.WriteString("5. Commit and push your changes\n")
+			sb.WriteString("6. Create a PR linking to the issue (if one doesn't exist yet)\n\n")
+			sb.WriteString("### DO NOT\n\n")
+			sb.WriteString("- Do NOT create a new branch (use the existing one)\n")
+		}
+	} else {
+		// No existing work — fresh start
+		sb.WriteString("### Instructions\n\n")
+		sb.WriteString(fmt.Sprintf("1. Create a new branch: `agentium/issue-%s-<short-description>`\n", issueNumber))
+		sb.WriteString("2. Implement the fix or feature\n")
+		sb.WriteString("3. Run tests to verify correctness\n")
+		sb.WriteString("4. Commit your changes with a descriptive message\n")
+		sb.WriteString("5. Push the branch\n")
+		sb.WriteString("6. Create a pull request linking to the issue\n\n")
+	}
+
+	sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
+	sb.WriteString(fmt.Sprintf("The repository is already cloned at %s.\n", c.workDir))
+
+	return sb.String()
+}
+
 // updateTaskPhase transitions task phase based on agent status signals
 func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResult) {
 	state, exists := c.taskStates[taskID]
@@ -889,6 +1153,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 		SystemPrompt:   c.systemPrompt,
 		ProjectPrompt:  c.projectPrompt,
+		ActiveTask:     c.activeTask,
+		ExistingWork:   c.activeTaskExistingWork,
 	}
 
 	// Build environment and command

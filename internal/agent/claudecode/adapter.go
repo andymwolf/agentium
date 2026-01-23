@@ -83,6 +83,14 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 
 // BuildPrompt constructs the prompt for Claude Code
 func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
+	// When the controller provides a focused per-task prompt (ActiveTask is set),
+	// use it directly — it already contains repository context, issue details,
+	// existing work detection, and appropriate instructions.
+	if session.ActiveTask != "" && session.Prompt != "" {
+		return session.Prompt
+	}
+
+	// Legacy fallback: build a generic multi-issue prompt
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", session.Repository))
