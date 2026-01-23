@@ -128,6 +128,7 @@ type Controller struct {
 	dockerAuthed  bool // Tracks if docker login to GHCR was done
 	taskStates    map[string]*TaskState
 	logger        *log.Logger
+	cloudLogger   *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
 	secretManager gcp.SecretFetcher
 	systemPrompt  string // Loaded SYSTEM.md content
 	projectPrompt string // Loaded .agentium/AGENT.md content (may be empty)
@@ -159,6 +160,18 @@ func New(config SessionConfig) (*Controller, error) {
 		workDir = "/workspace"
 	}
 
+	// Initialize Cloud Logging (non-fatal if unavailable)
+	var cloudLogger *gcp.CloudLogger
+	cloudLoggerInstance, err := gcp.NewCloudLogger(context.Background(), gcp.CloudLoggerConfig{
+		SessionID:  config.ID,
+		Repository: config.Repository,
+	})
+	if err != nil {
+		log.Printf("[controller] Warning: Cloud Logging unavailable, using local logs only: %v", err)
+	} else {
+		cloudLogger = cloudLoggerInstance
+	}
+
 	c := &Controller{
 		config:        config,
 		agent:         agentAdapter,
@@ -168,6 +181,7 @@ func New(config SessionConfig) (*Controller, error) {
 		completed:     make(map[string]bool),
 		taskStates:    make(map[string]*TaskState),
 		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		cloudLogger:   cloudLogger,
 		secretManager: secretManager,
 	}
 
@@ -190,20 +204,47 @@ func New(config SessionConfig) (*Controller, error) {
 	return c, nil
 }
 
+// logInfo logs at INFO level to both local logger and cloud logger
+func (c *Controller) logInfo(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	c.logger.Printf("%s", msg)
+	if c.cloudLogger != nil {
+		c.cloudLogger.Info(msg)
+	}
+}
+
+// logWarning logs at WARNING level to both local logger and cloud logger
+func (c *Controller) logWarning(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	c.logger.Printf("Warning: %s", msg)
+	if c.cloudLogger != nil {
+		c.cloudLogger.Warning(msg)
+	}
+}
+
+// logError logs at ERROR level to both local logger and cloud logger
+func (c *Controller) logError(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	c.logger.Printf("Error: %s", msg)
+	if c.cloudLogger != nil {
+		c.cloudLogger.Error(msg)
+	}
+}
+
 // Run executes the main control loop
 func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
-	c.logger.Printf("Starting session %s", c.config.ID)
-	c.logger.Printf("Repository: %s", c.config.Repository)
+	c.logInfo("Starting session %s", c.config.ID)
+	c.logInfo("Repository: %s", c.config.Repository)
 	if len(c.config.Tasks) > 0 {
-		c.logger.Printf("Tasks: %v", c.config.Tasks)
+		c.logInfo("Tasks: %v", c.config.Tasks)
 	}
 	if len(c.config.PRs) > 0 {
-		c.logger.Printf("PRs: %v", c.config.PRs)
+		c.logInfo("PRs: %v", c.config.PRs)
 	}
-	c.logger.Printf("Agent: %s", c.config.Agent)
-	c.logger.Printf("Max iterations: %d", c.config.MaxIterations)
-	c.logger.Printf("Max duration: %s", c.maxDuration)
+	c.logInfo("Agent: %s", c.config.Agent)
+	c.logInfo("Max iterations: %d", c.config.MaxIterations)
+	c.logInfo("Max duration: %s", c.maxDuration)
 
 	// Initialize workspace
 	if err := c.initializeWorkspace(ctx); err != nil {
@@ -254,32 +295,35 @@ func (c *Controller) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Println("Context cancelled, shutting down")
+			c.logInfo("Context cancelled, shutting down")
 			return ctx.Err()
 		default:
 		}
 
 		// Check termination conditions
 		if c.shouldTerminate() {
-			c.logger.Println("Termination condition met")
+			c.logInfo("Termination condition met")
 			break
 		}
 
 		c.iteration++
-		c.logger.Printf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
+		if c.cloudLogger != nil {
+			c.cloudLogger.SetIteration(c.iteration)
+		}
+		c.logInfo("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
 
 		// Run agent iteration
 		result, err := c.runIteration(ctx)
 		if err != nil {
-			c.logger.Printf("Iteration %d failed: %v", c.iteration, err)
+			c.logError("Iteration %d failed: %v", c.iteration, err)
 			continue
 		}
 
-		c.logger.Printf("Iteration %d completed: %s", c.iteration, result.Summary)
+		c.logInfo("Iteration %d completed: %s", c.iteration, result.Summary)
 
 		// Log agent status if present
 		if result.AgentStatus != "" {
-			c.logger.Printf("Agent status: %s %s", result.AgentStatus, result.StatusMessage)
+			c.logInfo("Agent status: %s %s", result.AgentStatus, result.StatusMessage)
 		}
 
 		// Update task phases based on agent status
@@ -295,13 +339,13 @@ func (c *Controller) Run(ctx context.Context) error {
 
 		// Check PRs created (for issue sessions)
 		if len(result.PRsCreated) > 0 {
-			c.logger.Printf("PRs created: %v", result.PRsCreated)
+			c.logInfo("PRs created: %v", result.PRsCreated)
 		}
 
 		// Check if changes were pushed (for PR review sessions)
 		if result.PushedChanges {
 			c.pushedChanges = true
-			c.logger.Println("Changes pushed to PR branch")
+			c.logInfo("Changes pushed to PR branch")
 		}
 	}
 
@@ -902,10 +946,10 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 }
 
 func (c *Controller) emitFinalLogs() {
-	c.logger.Println("=== Session Summary ===")
-	c.logger.Printf("Session ID: %s", c.config.ID)
-	c.logger.Printf("Duration: %s", time.Since(c.startTime).Round(time.Second))
-	c.logger.Printf("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
+	c.logInfo("=== Session Summary ===")
+	c.logInfo("Session ID: %s", c.config.ID)
+	c.logInfo("Duration: %s", time.Since(c.startTime).Round(time.Second))
+	c.logInfo("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
 
 	completedCount := 0
 	for _, task := range c.config.Tasks {
@@ -913,15 +957,28 @@ func (c *Controller) emitFinalLogs() {
 			completedCount++
 		}
 	}
-	c.logger.Printf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
-	c.logger.Println("======================")
+	c.logInfo("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
+
+	// Log task state summary
+	for taskID, state := range c.taskStates {
+		c.logInfo("Task %s: phase=%s, retries=%d", taskID, state.Phase, state.TestRetries)
+	}
+
+	c.logInfo("======================")
 }
 
 func (c *Controller) cleanup() {
-	c.logger.Println("Cleaning up")
+	c.logInfo("Cleaning up")
 
 	// Clear sensitive data
 	c.gitHubToken = ""
+
+	// Close Cloud Logger (flushes remaining logs to ensure they survive VM termination)
+	if c.cloudLogger != nil {
+		if err := c.cloudLogger.Close(); err != nil {
+			c.logger.Printf("Warning: failed to close cloud logger: %v", err)
+		}
+	}
 
 	// Close Secret Manager client
 	if c.secretManager != nil {
