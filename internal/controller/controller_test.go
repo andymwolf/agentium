@@ -611,6 +611,7 @@ func TestBuildPromptForTask(t *testing.T) {
 			c := &Controller{
 				config:       SessionConfig{Repository: "github.com/org/repo"},
 				issueDetails: tt.issueDetails,
+				workDir:      "/workspace",
 			}
 			got := c.buildPromptForTask(tt.issueNumber, tt.existingWork)
 

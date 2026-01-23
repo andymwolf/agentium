@@ -125,15 +125,15 @@ type Controller struct {
 	config        SessionConfig
 	agent         agent.Agent
 	workDir       string
-	iteration     int
-	startTime     time.Time
-	maxDuration   time.Duration
-	gitHubToken   string
-	completed     map[string]bool
-	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
-	dockerAuthed  bool // Tracks if docker login to GHCR was done
-	taskStates    map[string]*TaskState
-	logger        *log.Logger
+	iteration              int
+	startTime              time.Time
+	maxDuration            time.Duration
+	gitHubToken            string
+	completed              map[string]bool
+	pushedChanges          bool                // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed           bool                // Tracks if docker login to GHCR was done
+	taskStates             map[string]*TaskState
+	logger                 *log.Logger
 	cloudLogger            *gcp.CloudLogger    // Structured cloud logging (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
 	systemPrompt           string              // Loaded SYSTEM.md content
@@ -885,7 +885,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 			HeadRefName string `json:"headRefName"`
 		}
 		if err := json.Unmarshal(output, &prs); err == nil {
-			branchPrefix := fmt.Sprintf("agentium/issue-%s", issueNumber)
+			branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
 			for _, pr := range prs {
 				if strings.HasPrefix(pr.HeadRefName, branchPrefix) {
 					c.logInfo("Found existing PR #%d for issue #%s on branch %s",
@@ -898,6 +898,8 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 				}
 			}
 		}
+	} else {
+		c.logWarning("failed to list PRs for existing work detection on issue #%s: %v", issueNumber, err)
 	}
 
 	// No PR found; check for existing remote branches
@@ -918,6 +920,8 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 				Branch: branch,
 			}
 		}
+	} else {
+		c.logWarning("failed to list remote branches for existing work detection on issue #%s: %v", issueNumber, err)
 	}
 
 	c.logInfo("No existing work found for issue #%s", issueNumber)
@@ -993,7 +997,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 	}
 
 	sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
-	sb.WriteString("The repository is already cloned at /workspace.\n")
+	sb.WriteString(fmt.Sprintf("The repository is already cloned at %s.\n", c.workDir))
 
 	return sb.String()
 }
