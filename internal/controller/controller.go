@@ -822,6 +822,25 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
+	// Log agent output for debugging
+	if exitCode != 0 {
+		stderrStr := string(stderrBytes)
+		stdoutStr := string(stdoutBytes)
+		if len(stderrStr) > 500 {
+			stderrStr = stderrStr[:500]
+		}
+		if len(stdoutStr) > 500 {
+			stdoutStr = stdoutStr[:500]
+		}
+		c.logger.Printf("Agent exited with code %d", exitCode)
+		if stderrStr != "" {
+			c.logger.Printf("Agent stderr: %s", stderrStr)
+		}
+		if stdoutStr != "" {
+			c.logger.Printf("Agent stdout: %s", stdoutStr)
+		}
+	}
+
 	// Parse output
 	result, parseErr := c.agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
 	if parseErr != nil {
