@@ -120,6 +120,7 @@ type Controller struct {
 	gitHubToken   string
 	completed     map[string]bool
 	pushedChanges bool // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed  bool // Tracks if docker login to GHCR was done
 	taskStates    map[string]*TaskState
 	logger        *log.Logger
 	secretManager gcp.SecretFetcher
@@ -759,6 +760,18 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	command := c.agent.BuildCommand(session, c.iteration)
 
 	c.logger.Printf("Running agent: %s %v", c.agent.ContainerImage(), command)
+
+	// Authenticate with GHCR if needed (once per session)
+	if !c.dockerAuthed && strings.Contains(c.agent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
+		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
+			"-u", "x-access-token", "--password-stdin")
+		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
+		if out, err := loginCmd.CombinedOutput(); err != nil {
+			c.logger.Printf("Warning: docker login to ghcr.io failed: %v (%s)", err, string(out))
+		} else {
+			c.dockerAuthed = true
+		}
+	}
 
 	// Run agent container
 	args := []string{
