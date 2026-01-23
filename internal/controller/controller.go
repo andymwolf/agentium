@@ -147,10 +147,15 @@ func New(config SessionConfig) (*Controller, error) {
 		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
 	}
 
+	workDir := os.Getenv("AGENTIUM_WORKDIR")
+	if workDir == "" {
+		workDir = "/workspace"
+	}
+
 	c := &Controller{
 		config:        config,
 		agent:         agentAdapter,
-		workDir:       "/workspace",
+		workDir:       workDir,
 		iteration:     0,
 		maxDuration:   maxDuration,
 		completed:     make(map[string]bool),

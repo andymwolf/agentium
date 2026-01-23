@@ -139,14 +139,16 @@ write_files:
 runcmd:
   - |
     # Pull and run controller
+    mkdir -p /home/workspace
     docker pull ${var.controller_image}
     docker run --rm \
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v /etc/agentium:/etc/agentium:ro \
-      -v /workspace:/workspace \
+      -v /home/workspace:/home/workspace \
       ${local.claude_auth_volume} \
       -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
       -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
+      -e AGENTIUM_WORKDIR=/home/workspace \
       --name agentium-controller \
       ${var.controller_image}
 EOF
