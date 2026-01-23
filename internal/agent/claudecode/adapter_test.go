@@ -196,6 +196,77 @@ func TestAdapter_BuildPrompt_ActiveTaskSkipsGenericInstructions(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuildCommand_IterationContext(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name                string
+		session             *agent.Session
+		wantSystemPrompt    string
+		notWantSystemPrompt string
+	}{
+		{
+			name: "nil IterationContext uses SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt",
+			},
+			wantSystemPrompt: "monolithic system prompt",
+		},
+		{
+			name: "IterationContext with SkillsPrompt overrides SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt",
+				IterationContext: &agent.IterationContext{
+					Phase:        "IMPLEMENT",
+					SkillsPrompt: "composed skills prompt",
+				},
+			},
+			wantSystemPrompt:    "composed skills prompt",
+			notWantSystemPrompt: "monolithic system prompt",
+		},
+		{
+			name: "IterationContext with empty SkillsPrompt falls back to SystemPrompt",
+			session: &agent.Session{
+				Repository:   "github.com/org/repo",
+				Tasks:        []string{"1"},
+				SystemPrompt: "monolithic system prompt",
+				IterationContext: &agent.IterationContext{
+					Phase:        "IMPLEMENT",
+					SkillsPrompt: "",
+				},
+			},
+			wantSystemPrompt: "monolithic system prompt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := a.BuildCommand(tt.session, 1)
+
+			// Find the --system-prompt value
+			var systemPromptValue string
+			for i, arg := range cmd {
+				if arg == "--system-prompt" && i+1 < len(cmd) {
+					systemPromptValue = cmd[i+1]
+					break
+				}
+			}
+
+			if tt.wantSystemPrompt != "" && systemPromptValue != tt.wantSystemPrompt {
+				t.Errorf("system prompt = %q, want %q", systemPromptValue, tt.wantSystemPrompt)
+			}
+
+			if tt.notWantSystemPrompt != "" && systemPromptValue == tt.notWantSystemPrompt {
+				t.Errorf("system prompt should not be %q", tt.notWantSystemPrompt)
+			}
+		})
+	}
+}
+
 func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 	a := New()
 

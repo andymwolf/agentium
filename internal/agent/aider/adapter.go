@@ -79,10 +79,16 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	var sb strings.Builder
 
+	// Prefer phase-aware skills prompt over monolithic system prompt
+	systemPrompt := session.SystemPrompt
+	if session.IterationContext != nil && session.IterationContext.SkillsPrompt != "" {
+		systemPrompt = session.IterationContext.SkillsPrompt
+	}
+
 	// Prepend system prompt if available (Aider has no --system-prompt flag)
-	if session.SystemPrompt != "" {
+	if systemPrompt != "" {
 		sb.WriteString("=== SYSTEM INSTRUCTIONS ===\n\n")
-		sb.WriteString(session.SystemPrompt)
+		sb.WriteString(systemPrompt)
 		sb.WriteString("\n\n=== END SYSTEM INSTRUCTIONS ===\n\n")
 	}
 

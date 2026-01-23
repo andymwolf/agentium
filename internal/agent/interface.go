@@ -7,6 +7,13 @@ type ExistingWork struct {
 	PRTitle  string // Title of the existing PR
 }
 
+// IterationContext provides phase-aware context for a single iteration.
+// When non-nil, SkillsPrompt should be preferred over Session.SystemPrompt.
+type IterationContext struct {
+	Phase        string // e.g., "IMPLEMENT", "TEST"
+	SkillsPrompt string // Composed from phase-relevant skills
+}
+
 // Session represents an agent session with all necessary context
 type Session struct {
 	ID             string
@@ -22,8 +29,9 @@ type Session struct {
 	ClaudeAuthMode string // "api" or "oauth"
 	SystemPrompt   string            // Content of SYSTEM.md (safety constraints, workflow, status signals)
 	ProjectPrompt  string            // Content of .agentium/AGENT.md from target repo (may be empty)
-	ActiveTask     string            // The single issue number currently being worked on
-	ExistingWork   *ExistingWork     // Prior work detected on GitHub for the active task
+	ActiveTask       string            // The single issue number currently being worked on
+	ExistingWork     *ExistingWork     // Prior work detected on GitHub for the active task
+	IterationContext *IterationContext // Phase-aware skill context (nil = legacy mode)
 }
 
 // IterationResult represents the outcome of a single agent iteration

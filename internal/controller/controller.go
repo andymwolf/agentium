@@ -22,6 +22,7 @@ import (
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/prompt"
+	"github.com/andywolf/agentium/internal/skills"
 )
 
 const (
@@ -81,6 +82,9 @@ type SessionConfig struct {
 		SystemMDURL  string `json:"system_md_url,omitempty"`
 		FetchTimeout string `json:"fetch_timeout,omitempty"` // Duration string (e.g. "5s", "10s")
 	} `json:"prompts,omitempty"`
+	Skills struct {
+		Enabled bool `json:"enabled,omitempty"`
+	} `json:"skills,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -159,6 +163,7 @@ type Controller struct {
 	activeTask             string              // Current task ID being focused on
 	activeTaskType         string              // "pr" or "issue"
 	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
+	skillSelector          *skills.Selector    // Phase-aware skill selector (nil = legacy mode)
 
 	// Shutdown management
 	shutdownHooks          []ShutdownHook
@@ -548,6 +553,26 @@ func (c *Controller) loadPrompts() error {
 	} else if projectPrompt != "" {
 		c.projectPrompt = projectPrompt
 		c.logger.Println("Project prompt loaded from .agentium/AGENT.md")
+	}
+
+	// Initialize phase-aware skills if enabled
+	if c.config.Skills.Enabled {
+		manifest, err := skills.LoadManifest()
+		if err != nil {
+			c.logWarning("failed to load skills manifest, falling back to monolithic prompt: %v", err)
+		} else {
+			loaded, err := skills.LoadSkills(manifest)
+			if err != nil {
+				c.logWarning("failed to load skills, falling back to monolithic prompt: %v", err)
+			} else {
+				c.skillSelector = skills.NewSelector(loaded)
+				names := make([]string, len(loaded))
+				for i, s := range loaded {
+					names[i] = s.Entry.Name
+				}
+				c.logInfo("Skills loaded: %v", names)
+			}
+		}
 	}
 
 	return nil
@@ -1139,6 +1164,18 @@ func (c *Controller) shouldTerminate() bool {
 	return false
 }
 
+// determineActivePhase returns the current phase for the active task.
+func (c *Controller) determineActivePhase() string {
+	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	if state, ok := c.taskStates[taskID]; ok {
+		return string(state.Phase)
+	}
+	if c.activeTaskType == "pr" {
+		return "ANALYZE"
+	}
+	return "IMPLEMENT"
+}
+
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
 	session := &agent.Session{
 		ID:             c.config.ID,
@@ -1155,6 +1192,16 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		ProjectPrompt:  c.projectPrompt,
 		ActiveTask:     c.activeTask,
 		ExistingWork:   c.activeTaskExistingWork,
+	}
+
+	// Compose phase-aware skills if selector is available
+	if c.skillSelector != nil {
+		phase := c.determineActivePhase()
+		session.IterationContext = &agent.IterationContext{
+			Phase:        phase,
+			SkillsPrompt: c.skillSelector.SelectForPhase(phase),
+		}
+		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phase))
 	}
 
 	// Build environment and command

@@ -1,0 +1,48 @@
+skills:
+  - name: safety
+    file: safety.md
+    priority: 10
+    phases: []
+
+  - name: environment
+    file: environment.md
+    priority: 20
+    phases: []
+
+  - name: status_signals
+    file: status_signals.md
+    priority: 30
+    phases: []
+
+  - name: planning
+    file: planning.md
+    priority: 40
+    phases:
+      - IMPLEMENT
+      - ANALYZE
+
+  - name: implement
+    file: implement.md
+    priority: 50
+    phases:
+      - IMPLEMENT
+
+  - name: test
+    file: test.md
+    priority: 60
+    phases:
+      - TEST
+      - IMPLEMENT
+
+  - name: pr_creation
+    file: pr_creation.md
+    priority: 70
+    phases:
+      - PR_CREATION
+
+  - name: pr_review
+    file: pr_review.md
+    priority: 80
+    phases:
+      - ANALYZE
+      - PUSH
