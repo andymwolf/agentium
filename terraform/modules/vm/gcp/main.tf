@@ -120,7 +120,7 @@ resource "google_project_iam_member" "compute_admin" {
 
 # Cloud-init script
 locals {
-  claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.config/claude-code/auth.json:ro" : ""
+  claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro" : ""
 
   cloud_init = <<-EOF
 #cloud-config

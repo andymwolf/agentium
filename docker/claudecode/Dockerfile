@@ -29,19 +29,20 @@ RUN npm install -g @anthropic-ai/claude-code
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
 
-# Create workspace
-RUN mkdir -p /workspace && chown agentium:agentium /workspace
-
-# Configure git for the user
-RUN git config --global user.email "agentium@example.com" && \
-    git config --global user.name "Agentium Bot" && \
-    git config --global init.defaultBranch main
+# Create workspace and Claude config directory
+RUN mkdir -p /workspace && chown agentium:agentium /workspace && \
+    mkdir -p /home/agentium/.claude && chown agentium:agentium /home/agentium/.claude
 
 # Set working directory
 WORKDIR /workspace
 
 # Switch to non-root user
 USER agentium
+
+# Configure git for the agentium user
+RUN git config --global user.email "agentium@example.com" && \
+    git config --global user.name "Agentium Bot" && \
+    git config --global init.defaultBranch main
 
 # Default entrypoint
 ENTRYPOINT ["claude"]
