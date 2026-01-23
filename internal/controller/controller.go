@@ -67,7 +67,8 @@ type SessionConfig struct {
 		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 	} `json:"claude_auth"`
 	Prompts struct {
-		SystemMDURL string `json:"system_md_url,omitempty"`
+		SystemMDURL  string `json:"system_md_url,omitempty"`
+		FetchTimeout string `json:"fetch_timeout,omitempty"` // Duration string (e.g. "5s", "10s")
 	} `json:"prompts,omitempty"`
 }
 
@@ -221,7 +222,7 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	// Load system and project prompts
 	if err := c.loadPrompts(); err != nil {
-		c.logger.Printf("Warning: failed to load prompts: %v", err)
+		return fmt.Errorf("failed to load prompts: %w", err)
 	}
 
 	// Handle PR mode vs issue mode
@@ -404,8 +405,19 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 }
 
 func (c *Controller) loadPrompts() error {
+	// Parse configured fetch timeout
+	var fetchTimeout time.Duration
+	if c.config.Prompts.FetchTimeout != "" {
+		parsed, err := time.ParseDuration(c.config.Prompts.FetchTimeout)
+		if err != nil {
+			c.logger.Printf("Warning: invalid fetch_timeout %q, using default", c.config.Prompts.FetchTimeout)
+		} else {
+			fetchTimeout = parsed
+		}
+	}
+
 	// Load system prompt (hybrid fetch + embedded fallback)
-	systemPrompt, err := prompt.LoadSystemPrompt(c.config.Prompts.SystemMDURL)
+	systemPrompt, err := prompt.LoadSystemPrompt(c.config.Prompts.SystemMDURL, fetchTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to load system prompt: %w", err)
 	}

@@ -1,5 +1,7 @@
 package prompt
 
+//go:generate cp ../../prompts/SYSTEM.md system.md
+
 import (
 	_ "embed"
 	"fmt"
@@ -19,15 +21,22 @@ const DefaultSystemMDURL = "https://raw.githubusercontent.com/andymwolf/agentium
 // DefaultFetchTimeout is the default timeout for fetching remote prompts
 const DefaultFetchTimeout = 5 * time.Second
 
+// maxPromptSize is the maximum size of a fetched prompt (1MB)
+const maxPromptSize = 1 << 20
+
 // LoadSystemPrompt attempts to fetch the latest SYSTEM.md from fetchURL,
 // falling back to the embedded version on failure.
 // If fetchURL is empty, DefaultSystemMDURL is used.
-func LoadSystemPrompt(fetchURL string) (string, error) {
+// If timeout is zero, DefaultFetchTimeout is used.
+func LoadSystemPrompt(fetchURL string, timeout time.Duration) (string, error) {
 	if fetchURL == "" {
 		fetchURL = DefaultSystemMDURL
 	}
+	if timeout == 0 {
+		timeout = DefaultFetchTimeout
+	}
 
-	content, err := fetchRemotePrompt(fetchURL, DefaultFetchTimeout)
+	content, err := fetchRemotePrompt(fetchURL, timeout)
 	if err == nil && content != "" {
 		return content, nil
 	}
@@ -57,6 +66,7 @@ func LoadProjectPrompt(workDir string) (string, error) {
 }
 
 // fetchRemotePrompt fetches content from a URL with the given timeout.
+// Response body is limited to maxPromptSize bytes to prevent unbounded allocation.
 func fetchRemotePrompt(url string, timeout time.Duration) (string, error) {
 	client := &http.Client{Timeout: timeout}
 
@@ -70,7 +80,7 @@ func fetchRemotePrompt(url string, timeout time.Duration) (string, error) {
 		return "", fmt.Errorf("fetch %s returned status %d", url, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPromptSize))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response from %s: %w", url, err)
 	}
