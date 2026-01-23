@@ -8,9 +8,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -19,6 +22,14 @@ import (
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/prompt"
+)
+
+const (
+	// ShutdownTimeout is the maximum time to wait for graceful shutdown
+	ShutdownTimeout = 30 * time.Second
+
+	// LogFlushTimeout is the maximum time to wait for log flush operations
+	LogFlushTimeout = 10 * time.Second
 )
 
 // TaskPhase represents the current phase of a task in its lifecycle
@@ -120,6 +131,10 @@ type TaskQueueItem struct {
 	ID   string // PR number or issue number
 }
 
+// ShutdownHook is a function that will be called during graceful shutdown.
+// It receives a context with timeout and should respect cancellation.
+type ShutdownHook func(ctx context.Context) error
+
 // Controller manages the agent execution lifecycle
 type Controller struct {
 	config        SessionConfig
@@ -144,6 +159,12 @@ type Controller struct {
 	activeTask             string              // Current task ID being focused on
 	activeTaskType         string              // "pr" or "issue"
 	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
+
+	// Shutdown management
+	shutdownHooks          []ShutdownHook
+	shutdownOnce           sync.Once
+	shutdownCh             chan struct{}        // Closed when shutdown is initiated
+	logFlushFn             func() error        // Function to flush pending logs
 }
 
 // New creates a new session controller
@@ -195,6 +216,7 @@ func New(config SessionConfig) (*Controller, error) {
 		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
 		cloudLogger:   cloudLogger,
 		secretManager: secretManager,
+		shutdownCh:    make(chan struct{}),
 	}
 
 	// Initialize task states and build unified task queue (PRs first, then issues)
@@ -245,9 +267,26 @@ func (c *Controller) logError(format string, args ...interface{}) {
 	}
 }
 
+// AddShutdownHook registers a function to be called during graceful shutdown.
+// Hooks are executed in the order they were added.
+func (c *Controller) AddShutdownHook(hook ShutdownHook) {
+	c.shutdownHooks = append(c.shutdownHooks, hook)
+}
+
+// SetLogFlushFunc sets the function used to flush pending log writes.
+// This is called with a timeout during shutdown to ensure logs are persisted.
+func (c *Controller) SetLogFlushFunc(fn func() error) {
+	c.logFlushFn = fn
+}
+
 // Run executes the main control loop
 func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
+
+	// Set up signal handling for graceful shutdown
+	ctx, cancel := c.setupSignalHandler(ctx)
+	defer cancel()
+
 	c.logInfo("Starting session %s", c.config.ID)
 	c.logInfo("Repository: %s", c.config.Repository)
 	if len(c.config.Tasks) > 0 {
@@ -300,7 +339,9 @@ func (c *Controller) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			c.logInfo("Context cancelled, shutting down")
+			c.logInfo("Context cancelled, initiating graceful shutdown")
+			c.emitFinalLogs()
+			c.cleanup()
 			return ctx.Err()
 		default:
 		}
@@ -1234,27 +1275,145 @@ func (c *Controller) emitFinalLogs() {
 }
 
 func (c *Controller) cleanup() {
-	c.logInfo("Cleaning up")
+	c.logInfo("Initiating graceful shutdown")
 
-	// Clear sensitive data
+	// Execute shutdown with timeout
+	c.gracefulShutdown()
+}
+
+// gracefulShutdown performs a controlled shutdown sequence:
+// 1. Flush pending log writes (with timeout)
+// 2. Run registered shutdown hooks
+// 3. Clear sensitive data from memory
+// 4. Close clients
+// 5. Terminate VM
+func (c *Controller) gracefulShutdown() {
+	c.shutdownOnce.Do(func() {
+		close(c.shutdownCh)
+
+		// Create a timeout context for the entire shutdown sequence
+		ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+		defer cancel()
+
+		// Step 1: Flush pending log writes with timeout
+		c.flushLogs(ctx)
+
+		// Step 2: Run registered shutdown hooks
+		c.runShutdownHooks(ctx)
+
+		// Step 3: Clear sensitive data from memory
+		c.clearSensitiveData()
+
+		// Step 4: Close clients
+		if c.cloudLogger != nil {
+			if err := c.cloudLogger.Close(); err != nil {
+				c.logger.Printf("Warning: failed to close cloud logger: %v", err)
+			}
+		}
+		if c.secretManager != nil {
+			if err := c.secretManager.Close(); err != nil {
+				c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
+			}
+		}
+
+		c.logger.Println("Graceful shutdown complete")
+
+		// Step 5: Request VM termination (last action)
+		c.terminateVM()
+	})
+}
+
+// flushLogs ensures all pending log writes are sent before shutdown.
+// It uses a timeout to prevent blocking indefinitely on log flush.
+func (c *Controller) flushLogs(ctx context.Context) {
+	if c.logFlushFn == nil {
+		return
+	}
+
+	c.logger.Println("Flushing pending log writes...")
+
+	// Create a sub-context with log flush timeout
+	flushCtx, cancel := context.WithTimeout(ctx, LogFlushTimeout)
+	defer cancel()
+
+	// Run flush in a goroutine so we can respect the timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- c.logFlushFn()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			c.logger.Printf("Warning: log flush completed with error: %v", err)
+		} else {
+			c.logger.Println("Log flush completed successfully")
+		}
+	case <-flushCtx.Done():
+		c.logger.Println("Warning: log flush timed out, some logs may be lost")
+	}
+}
+
+// runShutdownHooks executes all registered shutdown hooks in order.
+// Each hook receives the shutdown context and should respect cancellation.
+func (c *Controller) runShutdownHooks(ctx context.Context) {
+	if len(c.shutdownHooks) == 0 {
+		return
+	}
+
+	c.logger.Printf("Running %d shutdown hooks", len(c.shutdownHooks))
+
+	for i, hook := range c.shutdownHooks {
+		select {
+		case <-ctx.Done():
+			c.logger.Printf("Warning: shutdown timeout reached, skipping remaining %d hooks", len(c.shutdownHooks)-i)
+			return
+		default:
+		}
+
+		if err := hook(ctx); err != nil {
+			c.logger.Printf("Warning: shutdown hook %d failed: %v", i+1, err)
+		}
+	}
+}
+
+// clearSensitiveData removes sensitive information from memory
+func (c *Controller) clearSensitiveData() {
+	c.logger.Println("Clearing sensitive data from memory")
+
+	// Clear GitHub token
 	c.gitHubToken = ""
 
-	// Close Cloud Logger (flushes remaining logs to ensure they survive VM termination)
-	if c.cloudLogger != nil {
-		if err := c.cloudLogger.Close(); err != nil {
-			c.logger.Printf("Warning: failed to close cloud logger: %v", err)
-		}
-	}
+	// Clear prompt content (may contain sensitive context)
+	c.config.Prompt = ""
 
-	// Close Secret Manager client
-	if c.secretManager != nil {
-		if err := c.secretManager.Close(); err != nil {
-			c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
-		}
-	}
+	// Clear Claude auth data
+	c.config.ClaudeAuth.AuthJSONBase64 = ""
 
-	// Request VM termination
-	c.terminateVM()
+	// Clear GitHub app credentials
+	c.config.GitHub.PrivateKeySecret = ""
+}
+
+// setupSignalHandler sets up OS signal handling for graceful shutdown.
+// It returns a new context that will be cancelled when a shutdown signal is received.
+func (c *Controller) setupSignalHandler(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		select {
+		case sig := <-sigCh:
+			c.logger.Printf("Received signal %v, initiating graceful shutdown", sig)
+			cancel()
+		case <-ctx.Done():
+			// Context was cancelled by other means
+		}
+		signal.Stop(sigCh)
+	}()
+
+	return ctx, cancel
 }
 
 func (c *Controller) terminateVM() {
