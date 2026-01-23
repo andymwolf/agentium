@@ -128,6 +128,7 @@ type Controller struct {
 	dockerAuthed  bool // Tracks if docker login to GHCR was done
 	taskStates    map[string]*TaskState
 	logger        *log.Logger
+	cloudLogger   gcp.CloudLogger
 	secretManager gcp.SecretFetcher
 	systemPrompt  string // Loaded SYSTEM.md content
 	projectPrompt string // Loaded .agentium/AGENT.md content (may be empty)
@@ -154,6 +155,15 @@ func New(config SessionConfig) (*Controller, error) {
 		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
 	}
 
+	// Initialize Cloud Logging client
+	var cloudLogger gcp.CloudLogger
+	cloudLogClient, err := gcp.NewCloudLoggingClient(context.Background(), "", "")
+	if err != nil {
+		log.Printf("[controller] Warning: failed to initialize Cloud Logging client: %v", err)
+	} else {
+		cloudLogger = cloudLogClient
+	}
+
 	workDir := os.Getenv("AGENTIUM_WORKDIR")
 	if workDir == "" {
 		workDir = "/workspace"
@@ -168,6 +178,7 @@ func New(config SessionConfig) (*Controller, error) {
 		completed:     make(map[string]bool),
 		taskStates:    make(map[string]*TaskState),
 		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		cloudLogger:   cloudLogger,
 		secretManager: secretManager,
 	}
 
@@ -190,10 +201,22 @@ func New(config SessionConfig) (*Controller, error) {
 	return c, nil
 }
 
+// cloudLog sends a structured log entry to Cloud Logging if available.
+// It logs to both the local logger and cloud logger for redundancy.
+func (c *Controller) cloudLog(severity gcp.LogSeverity, message string, labels map[string]string) {
+	if c.cloudLogger == nil {
+		return
+	}
+
+	entry := gcp.FormatLogEntry(c.config.ID, c.iteration, severity, message, labels)
+	c.cloudLogger.Log(entry)
+}
+
 // Run executes the main control loop
 func (c *Controller) Run(ctx context.Context) error {
 	c.startTime = time.Now()
 	c.logger.Printf("Starting session %s", c.config.ID)
+	c.cloudLog(gcp.SeverityInfo, fmt.Sprintf("Starting session %s", c.config.ID), nil)
 	c.logger.Printf("Repository: %s", c.config.Repository)
 	if len(c.config.Tasks) > 0 {
 		c.logger.Printf("Tasks: %v", c.config.Tasks)
@@ -267,15 +290,18 @@ func (c *Controller) Run(ctx context.Context) error {
 
 		c.iteration++
 		c.logger.Printf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
+		c.cloudLog(gcp.SeverityInfo, fmt.Sprintf("Starting iteration %d/%d", c.iteration, c.config.MaxIterations), nil)
 
 		// Run agent iteration
 		result, err := c.runIteration(ctx)
 		if err != nil {
 			c.logger.Printf("Iteration %d failed: %v", c.iteration, err)
+			c.cloudLog(gcp.SeverityError, fmt.Sprintf("Iteration %d failed: %v", c.iteration, err), nil)
 			continue
 		}
 
 		c.logger.Printf("Iteration %d completed: %s", c.iteration, result.Summary)
+		c.cloudLog(gcp.SeverityInfo, fmt.Sprintf("Iteration %d completed: %s", c.iteration, result.Summary), nil)
 
 		// Log agent status if present
 		if result.AgentStatus != "" {
@@ -735,6 +761,11 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 
 	state.LastStatus = result.AgentStatus
 	c.logger.Printf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
+	c.cloudLog(gcp.SeverityInfo, fmt.Sprintf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus), map[string]string{
+		"task_id": taskID,
+		"phase":   string(state.Phase),
+		"status":  result.AgentStatus,
+	})
 }
 
 func (c *Controller) shouldTerminate() bool {
@@ -915,6 +946,15 @@ func (c *Controller) emitFinalLogs() {
 	}
 	c.logger.Printf("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
 	c.logger.Println("======================")
+
+	// Send session summary to cloud logging
+	c.cloudLog(gcp.SeverityInfo, "Session complete", map[string]string{
+		"duration":        time.Since(c.startTime).Round(time.Second).String(),
+		"iterations_used": fmt.Sprintf("%d", c.iteration),
+		"iterations_max":  fmt.Sprintf("%d", c.config.MaxIterations),
+		"tasks_completed": fmt.Sprintf("%d", completedCount),
+		"tasks_total":     fmt.Sprintf("%d", len(c.config.Tasks)),
+	})
 }
 
 func (c *Controller) cleanup() {
@@ -922,6 +962,17 @@ func (c *Controller) cleanup() {
 
 	// Clear sensitive data
 	c.gitHubToken = ""
+
+	// Flush and close Cloud Logging client
+	if c.cloudLogger != nil {
+		c.logger.Println("Flushing cloud logs...")
+		if err := c.cloudLogger.Flush(10 * time.Second); err != nil {
+			c.logger.Printf("Warning: failed to flush cloud logs: %v", err)
+		}
+		if err := c.cloudLogger.Close(); err != nil {
+			c.logger.Printf("Warning: failed to close Cloud Logging client: %v", err)
+		}
+	}
 
 	// Close Secret Manager client
 	if c.secretManager != nil {
