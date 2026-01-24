@@ -135,6 +135,16 @@ func (cl *CloudLogger) SetIteration(iteration int) {
 	cl.iteration.Store(int64(iteration))
 }
 
+// Debug logs a message at DEBUG severity
+func (cl *CloudLogger) Debug(msg string) {
+	cl.log(SeverityDebug, msg, nil)
+}
+
+// Debugf logs a formatted message at DEBUG severity
+func (cl *CloudLogger) Debugf(format string, args ...interface{}) {
+	cl.log(SeverityDebug, fmt.Sprintf(format, args...), nil)
+}
+
 // Info logs a message at INFO severity
 func (cl *CloudLogger) Info(msg string) {
 	cl.log(SeverityInfo, msg, nil)

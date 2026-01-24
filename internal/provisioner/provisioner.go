@@ -106,9 +106,11 @@ type SessionStatus struct {
 
 // LogsOptions configures log retrieval
 type LogsOptions struct {
-	Follow bool
-	Tail   int
-	Since  time.Time
+	Follow     bool
+	Tail       int
+	Since      time.Time
+	ShowEvents bool   // Include agent events (tool calls, decisions)
+	MinLevel   string // Minimum log level: debug, info, warning, error
 }
 
 // LogEntry represents a single log entry
@@ -117,6 +119,8 @@ type LogEntry struct {
 	Message   string
 	Level     string
 	Source    string
+	EventType string // From labels.event_type (e.g., "tool_use", "text")
+	ToolName  string // From labels.tool_name (e.g., "Bash", "Read")
 }
 
 // New creates a new provisioner for the specified cloud provider

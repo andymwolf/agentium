@@ -1,11 +1,20 @@
 package claudecode
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/andywolf/agentium/internal/agent"
 )
+
+// wrapInStreamJSON wraps plain text as an assistant text block in NDJSON format
+// for use in ParseOutput tests that previously passed raw text as stdout.
+func wrapInStreamJSON(text string) string {
+	escaped, _ := json.Marshal(text)
+	return fmt.Sprintf(`{"type":"assistant","message":{"content":[{"type":"text","text":%s}]}}`, string(escaped)) + "\n"
+}
 
 func TestAdapter_Name(t *testing.T) {
 	a := New()
@@ -64,16 +73,24 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 	cmd := a.BuildCommand(session, 1)
 
-	if len(cmd) < 3 {
-		t.Fatalf("BuildCommand() returned %d args, want at least 3", len(cmd))
+	if len(cmd) < 5 {
+		t.Fatalf("BuildCommand() returned %d args, want at least 5", len(cmd))
 	}
 
 	if cmd[0] != "--print" {
 		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--print")
 	}
 
-	if cmd[1] != "--dangerously-skip-permissions" {
-		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--dangerously-skip-permissions")
+	if cmd[1] != "--output-format" {
+		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--output-format")
+	}
+
+	if cmd[2] != "stream-json" {
+		t.Errorf("BuildCommand()[2] = %q, want %q", cmd[2], "stream-json")
+	}
+
+	if cmd[3] != "--dangerously-skip-permissions" {
+		t.Errorf("BuildCommand()[3] = %q, want %q", cmd[3], "--dangerously-skip-permissions")
 	}
 }
 
@@ -344,7 +361,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "TESTS_PASSED status",
 			exitCode:          0,
-			stdout:            "Running tests...\nAGENTIUM_STATUS: TESTS_PASSED\nAll tests passed",
+			stdout:            wrapInStreamJSON("Running tests...\nAGENTIUM_STATUS: TESTS_PASSED\nAll tests passed"),
 			stderr:            "",
 			wantAgentStatus:   "TESTS_PASSED",
 			wantStatusMessage: "",
@@ -354,7 +371,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "TESTS_FAILED status with message",
 			exitCode:          1,
-			stdout:            "Running tests...\nAGENTIUM_STATUS: TESTS_FAILED 3 tests failed in auth module",
+			stdout:            wrapInStreamJSON("Running tests...\nAGENTIUM_STATUS: TESTS_FAILED 3 tests failed in auth module"),
 			stderr:            "",
 			wantAgentStatus:   "TESTS_FAILED",
 			wantStatusMessage: "3 tests failed in auth module",
@@ -364,7 +381,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "PR_CREATED status with URL",
 			exitCode:          0,
-			stdout:            "Creating PR...\nAGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/42",
+			stdout:            wrapInStreamJSON("Creating PR...\nAGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/42"),
 			stderr:            "",
 			wantAgentStatus:   "PR_CREATED",
 			wantStatusMessage: "https://github.com/org/repo/pull/42",
@@ -374,7 +391,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "PUSHED status",
 			exitCode:          0,
-			stdout:            "Pushing changes...\nAGENTIUM_STATUS: PUSHED",
+			stdout:            wrapInStreamJSON("Pushing changes...\nAGENTIUM_STATUS: PUSHED"),
 			stderr:            "",
 			wantAgentStatus:   "PUSHED",
 			wantStatusMessage: "",
@@ -384,7 +401,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "COMPLETE status",
 			exitCode:          0,
-			stdout:            "All work done\nAGENTIUM_STATUS: COMPLETE",
+			stdout:            wrapInStreamJSON("All work done\nAGENTIUM_STATUS: COMPLETE"),
 			stderr:            "",
 			wantAgentStatus:   "COMPLETE",
 			wantStatusMessage: "",
@@ -394,7 +411,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "NOTHING_TO_DO status",
 			exitCode:          0,
-			stdout:            "Reviewed feedback, no changes needed\nAGENTIUM_STATUS: NOTHING_TO_DO",
+			stdout:            wrapInStreamJSON("Reviewed feedback, no changes needed\nAGENTIUM_STATUS: NOTHING_TO_DO"),
 			stderr:            "",
 			wantAgentStatus:   "NOTHING_TO_DO",
 			wantStatusMessage: "",
@@ -404,7 +421,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "BLOCKED status with reason",
 			exitCode:          0,
-			stdout:            "AGENTIUM_STATUS: BLOCKED need clarification on requirements",
+			stdout:            wrapInStreamJSON("AGENTIUM_STATUS: BLOCKED need clarification on requirements"),
 			stderr:            "",
 			wantAgentStatus:   "BLOCKED",
 			wantStatusMessage: "need clarification on requirements",
@@ -414,7 +431,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "multiple statuses takes last one",
 			exitCode:          0,
-			stdout:            "AGENTIUM_STATUS: TESTS_RUNNING\nRunning...\nAGENTIUM_STATUS: TESTS_PASSED\nDone",
+			stdout:            wrapInStreamJSON("AGENTIUM_STATUS: TESTS_RUNNING\nRunning...\nAGENTIUM_STATUS: TESTS_PASSED\nDone"),
 			stderr:            "",
 			wantAgentStatus:   "TESTS_PASSED",
 			wantStatusMessage: "",
@@ -434,7 +451,7 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:              "no status signal",
 			exitCode:          0,
-			stdout:            "Just some normal output without status",
+			stdout:            wrapInStreamJSON("Just some normal output without status"),
 			stderr:            "",
 			wantAgentStatus:   "",
 			wantStatusMessage: "",
@@ -485,7 +502,7 @@ func TestAdapter_ParseOutput(t *testing.T) {
 		{
 			name:        "successful run with PR",
 			exitCode:    0,
-			stdout:      "Created PR #42 for the fix\nhttps://github.com/org/repo/pull/42",
+			stdout:      wrapInStreamJSON("Created PR #42 for the fix\nhttps://github.com/org/repo/pull/42"),
 			stderr:      "",
 			wantSuccess: true,
 			wantPRs:     []string{"42"},
@@ -493,7 +510,7 @@ func TestAdapter_ParseOutput(t *testing.T) {
 		{
 			name:        "successful run with multiple PRs",
 			exitCode:    0,
-			stdout:      "Created pull request #10\nOpened PR #20\nhttps://github.com/org/repo/pull/30",
+			stdout:      wrapInStreamJSON("Created pull request #10\nOpened PR #20\nhttps://github.com/org/repo/pull/30"),
 			stderr:      "",
 			wantSuccess: true,
 			wantPRs:     []string{"10", "20", "30"},
@@ -501,7 +518,7 @@ func TestAdapter_ParseOutput(t *testing.T) {
 		{
 			name:        "detects completed tasks",
 			exitCode:    0,
-			stdout:      "Fixes #12\nCloses #17\nresolves #24",
+			stdout:      wrapInStreamJSON("Fixes #12\nCloses #17\nresolves #24"),
 			stderr:      "",
 			wantSuccess: true,
 			wantTasks:   []string{"12", "17", "24"},
@@ -532,7 +549,7 @@ func TestAdapter_ParseOutput(t *testing.T) {
 		{
 			name:        "PR URL without text mention",
 			exitCode:    0,
-			stdout:      "Done! See https://github.com/org/repo/pull/99",
+			stdout:      wrapInStreamJSON("Done! See https://github.com/org/repo/pull/99"),
 			stderr:      "",
 			wantSuccess: true,
 			wantPRs:     []string{"99"},
@@ -589,37 +606,37 @@ func TestAdapter_ParseOutput_PRDetectionRegex(t *testing.T) {
 	}{
 		{
 			name:    "Created pull request detected",
-			stdout:  "Created pull request #110",
+			stdout:  wrapInStreamJSON("Created pull request #110"),
 			wantPRs: []string{"110"},
 		},
 		{
 			name:    "Opened PR detected",
-			stdout:  "Opened PR #42",
+			stdout:  wrapInStreamJSON("Opened PR #42"),
 			wantPRs: []string{"42"},
 		},
 		{
 			name:    "bare PR reference not detected",
-			stdout:  "This PR closes #24",
+			stdout:  wrapInStreamJSON("This PR closes #24"),
 			wantPRs: nil,
 		},
 		{
 			name:    "issue reference after PR keyword not detected",
-			stdout:  "PR fixes #9\nUpdated PR for issue #24",
+			stdout:  wrapInStreamJSON("PR fixes #9\nUpdated PR for issue #24"),
 			wantPRs: nil,
 		},
 		{
 			name:    "PR URL still detected",
-			stdout:  "See https://github.com/org/repo/pull/110",
+			stdout:  wrapInStreamJSON("See https://github.com/org/repo/pull/110"),
 			wantPRs: []string{"110"},
 		},
 		{
 			name:    "duplicate PRs deduplicated",
-			stdout:  "Created PR #110\nCreated pull request #110\nhttps://github.com/org/repo/pull/110",
+			stdout:  wrapInStreamJSON("Created PR #110\nCreated pull request #110\nhttps://github.com/org/repo/pull/110"),
 			wantPRs: []string{"110"},
 		},
 		{
 			name:    "mixed real and issue refs - only real PRs",
-			stdout:  "Created PR #110 that closes #24\nPR references issue #9",
+			stdout:  wrapInStreamJSON("Created PR #110 that closes #24\nPR references issue #9"),
 			wantPRs: []string{"110"},
 		},
 	}

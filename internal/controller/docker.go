@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/internal/agent/claudecode"
+	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
@@ -104,9 +106,15 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
 	}
 
-	// Process memory signals
+	// Log structured events at DEBUG level
+	if c.cloudLogger != nil && len(result.Events) > 0 {
+		c.logAgentEvents(result.Events)
+	}
+
+	// Process memory signals using the adapter's parsed text content
 	if c.memoryStore != nil {
-		signals := memory.ParseSignals(string(stdoutBytes) + string(stderrBytes))
+		signalSource := result.RawTextContent + "\n" + string(stderrBytes)
+		signals := memory.ParseSignals(signalSource)
 		if len(signals) > 0 {
 			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
@@ -122,4 +130,26 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	}
 
 	return result, nil
+}
+
+// logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.
+func (c *Controller) logAgentEvents(events []interface{}) {
+	for _, evt := range events {
+		se, ok := evt.(claudecode.StreamEvent)
+		if !ok {
+			continue
+		}
+		labels := map[string]string{"event_type": string(se.Subtype)}
+		if se.ToolName != "" {
+			labels["tool_name"] = se.ToolName
+		}
+		if se.Subtype == claudecode.BlockThinking {
+			labels["content_type"] = "thinking"
+		}
+		msg := se.Content
+		if len(msg) > 2000 {
+			msg = msg[:2000] + "...(truncated)"
+		}
+		c.cloudLogger.LogWithLabels(gcp.SeverityDebug, msg, labels)
+	}
 }
