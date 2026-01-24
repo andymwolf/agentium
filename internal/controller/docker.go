@@ -165,25 +165,6 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 	return stdoutBytes, stderrBytes, exitCode, nil
 }
 
-// runAgentContainerWithCommand is a test helper that executes an arbitrary command
-// (instead of a Docker container) and runs the same IO handling and parsing logic.
-// This allows testing the concurrent IO handling without Docker.
-func runAgentContainerWithCommand(ctx context.Context, c *Controller, params containerRunParams, name string, args ...string) (*agent.IterationResult, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	stdoutBytes, stderrBytes, exitCode, err := c.executeAndCollect(cmd, params.LogTag)
-	if err != nil {
-		return nil, err
-	}
-
-	result, parseErr := params.Agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
-	if parseErr != nil {
-		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
-	}
-
-	return result, nil
-}
-
 // logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.
 func (c *Controller) logAgentEvents(events []interface{}) {
 	for _, evt := range events {

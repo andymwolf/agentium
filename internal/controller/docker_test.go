@@ -2,13 +2,34 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
 )
+
+// runAgentContainerWithCommand is a test helper that executes an arbitrary command
+// (instead of a Docker container) and runs the same IO handling and parsing logic.
+// This allows testing the concurrent IO handling without Docker.
+func runAgentContainerWithCommand(ctx context.Context, c *Controller, params containerRunParams, name string, args ...string) (*agent.IterationResult, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	stdoutBytes, stderrBytes, exitCode, err := c.executeAndCollect(cmd, params.LogTag)
+	if err != nil {
+		return nil, err
+	}
+
+	result, parseErr := params.Agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
+	if parseErr != nil {
+		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
+	}
+
+	return result, nil
+}
 
 // dockerTestAgent implements agent.Agent for testing runAgentContainer IO handling.
 type dockerTestAgent struct{}
@@ -55,7 +76,10 @@ func TestRunAgentContainer_LargeOutput(t *testing.T) {
 		LogTag:  "Test",
 	}
 
-	// Override the command to use a direct process (not docker) for testing
+	// Override the command to use a direct process (not docker) for testing.
+	// First dd: 2>/dev/null suppresses dd's progress stats on stderr; data goes to stdout.
+	// Second dd: >&2 redirects dd's data output to stderr; 2>/dev/null (evaluated first by
+	// the shell) suppresses dd's progress stats.
 	result, err := runAgentContainerWithCommand(ctx, c, params,
 		"bash", "-c",
 		"dd if=/dev/zero bs=64 count=2048 2>/dev/null && dd if=/dev/zero bs=64 count=2048 >&2 2>/dev/null",
@@ -130,6 +154,8 @@ func TestRunAgentContainer_LargeStderrOnly(t *testing.T) {
 		LogTag:  "Test",
 	}
 
+	// >&2 redirects dd's data output (normally stdout) to stderr, while 2>/dev/null
+	// (evaluated first by the shell) suppresses dd's progress stats.
 	result, err := runAgentContainerWithCommand(ctx, c, params,
 		"bash", "-c",
 		"dd if=/dev/zero bs=64 count=4096 >&2 2>/dev/null",
@@ -187,8 +213,8 @@ func TestRunAgentContainer_ContextTimeout(t *testing.T) {
 		logger:  log.New(io.Discard, "", 0),
 	}
 
-	// Use a very short timeout to test cancellation
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	// Use a short timeout to test cancellation (1s for CI resilience on slow machines)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	params := containerRunParams{
