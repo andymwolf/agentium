@@ -310,20 +310,40 @@ func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*Session
 
 // gcpLogEntry represents a raw log entry from Cloud Logging JSON output.
 type gcpLogEntry struct {
-	Timestamp   string `json:"timestamp"`
-	TextPayload string `json:"textPayload"`
-	Severity    string `json:"severity"`
+	Timestamp   string            `json:"timestamp"`
+	TextPayload string            `json:"textPayload"`
+	Severity    string            `json:"severity"`
+	Labels      map[string]string `json:"labels"`
 	JSONPayload struct {
-		Message  string `json:"message"`
-		Severity string `json:"severity"`
+		Message  string            `json:"message"`
+		Severity string            `json:"severity"`
+		Labels   map[string]string `json:"labels,omitempty"`
 	} `json:"jsonPayload"`
 }
 
 // buildLogsArgs constructs the gcloud logging read arguments.
 func (p *GCPProvisioner) buildLogsArgs(sessionID string, opts LogsOptions) []string {
+	filter := fmt.Sprintf(`logName=~"agentium-session" AND jsonPayload.session_id="%s"`, sessionID)
+
+	// Apply severity filter
+	minLevel := strings.ToUpper(opts.MinLevel)
+	switch minLevel {
+	case "DEBUG":
+		// No severity filter — show everything
+	case "WARNING":
+		filter += ` AND severity >= "WARNING"`
+	case "ERROR":
+		filter += ` AND severity >= "ERROR"`
+	default:
+		// Default: INFO and above (hides DEBUG events unless --events is set)
+		if !opts.ShowEvents {
+			filter += ` AND severity >= "INFO"`
+		}
+	}
+
 	args := []string{
 		"logging", "read",
-		fmt.Sprintf(`logName=~"agentium-session" AND jsonPayload.session_id="%s"`, sessionID),
+		filter,
 		"--format=json",
 	}
 	if p.project != "" {
@@ -361,11 +381,21 @@ func parseLogEntries(data []byte) ([]LogEntry, error) {
 		if msg == "" {
 			continue
 		}
-		result = append(result, LogEntry{
+
+		// Extract event labels (from top-level labels or jsonPayload.labels)
+		labels := entry.Labels
+		if len(labels) == 0 {
+			labels = entry.JSONPayload.Labels
+		}
+
+		logEntry := LogEntry{
 			Timestamp: ts,
 			Message:   msg,
 			Level:     level,
-		})
+			EventType: labels["event_type"],
+			ToolName:  labels["tool_name"],
+		}
+		result = append(result, logEntry)
 	}
 	return result, nil
 }

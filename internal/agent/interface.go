@@ -50,6 +50,8 @@ type IterationResult struct {
 	Error          string
 	Summary        string
 	TokensUsed     int
+	Events         []interface{} `json:"-"` // Structured events (type-assert per adapter)
+	RawTextContent string        `json:"-"` // Aggregated text from structured output
 }
 
 // Agent defines the interface that all agent adapters must implement

@@ -66,6 +66,7 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 
 	args := []string{
 		"--print",
+		"--output-format", "stream-json",
 		"--dangerously-skip-permissions",
 	}
 
@@ -147,12 +148,29 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 		Success:  exitCode == 0,
 	}
 
+	// Parse stream-json from stdout
+	parsed := ParseStreamJSON([]byte(stdout))
+
+	// Populate structured fields
+	result.RawTextContent = parsed.TextContent
+	if parsed.TotalTokens != nil {
+		result.TokensUsed = parsed.TotalTokens.InputTokens + parsed.TotalTokens.OutputTokens
+	}
+
+	// Convert events for controller access
+	events := make([]interface{}, len(parsed.Events))
+	for i, e := range parsed.Events {
+		events[i] = e
+	}
+	result.Events = events
+
+	// Signal detection: use aggregated text + stderr
 	// Parse AGENTIUM_STATUS signals from output
 	// Format: AGENTIUM_STATUS: STATUS_NAME [optional message on same line]
 	// The pattern matches status and optional message up to end of line
 	// Use [ \t] instead of \s to avoid matching newlines
 	statusPattern := regexp.MustCompile(`AGENTIUM_STATUS:[ \t]*(\w+)(?:[ \t]+([^\n]+))?`)
-	combined := stdout + stderr
+	combined := parsed.TextContent + "\n" + stderr
 	if matches := statusPattern.FindAllStringSubmatch(combined, -1); len(matches) > 0 {
 		// Use the last status signal (most recent)
 		last := matches[len(matches)-1]
@@ -173,8 +191,8 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 
 	// Look for created PRs in output (require "Created" or "Opened" verb to avoid matching issue references)
 	prPattern := regexp.MustCompile(`(?:Created|Opened)\s+(?:pull request|PR)[^\d]*#?(\d+)`)
-	matches := prPattern.FindAllStringSubmatch(stdout+stderr, -1)
-	for _, match := range matches {
+	prMatches := prPattern.FindAllStringSubmatch(combined, -1)
+	for _, match := range prMatches {
 		if len(match) > 1 {
 			result.PRsCreated = appendUnique(result.PRsCreated, match[1])
 		}
@@ -182,7 +200,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 
 	// Look for GitHub PR URLs
 	urlPattern := regexp.MustCompile(`https://github\.com/[^/]+/[^/]+/pull/(\d+)`)
-	urlMatches := urlPattern.FindAllStringSubmatch(stdout+stderr, -1)
+	urlMatches := urlPattern.FindAllStringSubmatch(combined, -1)
 	for _, match := range urlMatches {
 		if len(match) > 1 {
 			result.PRsCreated = appendUnique(result.PRsCreated, match[1])
@@ -191,7 +209,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 
 	// Look for completed tasks (issues mentioned in commits/PRs)
 	issuePattern := regexp.MustCompile(`(?:fixes?|closes?|resolves?)[^\d]*#(\d+)`)
-	issueMatches := issuePattern.FindAllStringSubmatch(strings.ToLower(stdout+stderr), -1)
+	issueMatches := issuePattern.FindAllStringSubmatch(strings.ToLower(combined), -1)
 	for _, match := range issueMatches {
 		if len(match) > 1 {
 			result.TasksCompleted = append(result.TasksCompleted, match[1])
@@ -201,7 +219,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	// Detect successful git push (for PR review sessions)
 	// Matches patterns like: "To github.com:owner/repo.git" followed by commit hash range
 	pushPattern := regexp.MustCompile(`To (?:github\.com|git@github\.com)[^\n]*\n.*[a-f0-9]+\.\.[a-f0-9]+`)
-	if pushPattern.MatchString(stdout + stderr) {
+	if pushPattern.MatchString(combined) {
 		result.PushedChanges = true
 	}
 

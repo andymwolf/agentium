@@ -215,7 +215,7 @@ func TestBuildLogsArgs(t *testing.T) {
 			opts:      LogsOptions{},
 			wantArgs: []string{
 				"logging", "read",
-				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123" AND severity >= "INFO"`,
 				"--format=json",
 				"--project=my-project",
 			},
@@ -227,7 +227,7 @@ func TestBuildLogsArgs(t *testing.T) {
 			opts:      LogsOptions{},
 			wantArgs: []string{
 				"logging", "read",
-				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123" AND severity >= "INFO"`,
 				"--format=json",
 			},
 		},
@@ -238,10 +238,46 @@ func TestBuildLogsArgs(t *testing.T) {
 			opts:      LogsOptions{Tail: 50},
 			wantArgs: []string{
 				"logging", "read",
-				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123" AND severity >= "INFO"`,
 				"--format=json",
 				"--project=my-project",
 				"--limit=50",
+			},
+		},
+		{
+			name:      "with show events (no severity filter)",
+			project:   "my-project",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{ShowEvents: true},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				"--format=json",
+				"--project=my-project",
+			},
+		},
+		{
+			name:      "with debug level (no severity filter)",
+			project:   "my-project",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{MinLevel: "debug"},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				"--format=json",
+				"--project=my-project",
+			},
+		},
+		{
+			name:      "with warning level",
+			project:   "my-project",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{MinLevel: "warning"},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123" AND severity >= "WARNING"`,
+				"--format=json",
+				"--project=my-project",
 			},
 		},
 	}
