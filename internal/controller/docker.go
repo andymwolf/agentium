@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/agent/claudecode"
@@ -58,46 +59,9 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 
-	stdout, err := cmd.StdoutPipe()
+	stdoutBytes, stderrBytes, exitCode, err := c.executeAndCollect(cmd, params.LogTag)
 	if err != nil {
-		return nil, fmt.Errorf("%s stdout pipe: %w", params.LogTag, err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("%s stderr pipe: %w", params.LogTag, err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("%s start: %w", params.LogTag, err)
-	}
-
-	stdoutBytes, _ := io.ReadAll(stdout)
-	stderrBytes, _ := io.ReadAll(stderr)
-
-	err = cmd.Wait()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-	}
-
-	if exitCode != 0 {
-		stderrStr := string(stderrBytes)
-		stdoutStr := string(stdoutBytes)
-		if len(stderrStr) > 500 {
-			stderrStr = stderrStr[:500]
-		}
-		if len(stdoutStr) > 500 {
-			stdoutStr = stdoutStr[:500]
-		}
-		c.logger.Printf("%s exited with code %d", params.LogTag, exitCode)
-		if stderrStr != "" {
-			c.logger.Printf("%s stderr: %s", params.LogTag, stderrStr)
-		}
-		if stdoutStr != "" {
-			c.logger.Printf("%s stdout: %s", params.LogTag, stdoutStr)
-		}
+		return nil, err
 	}
 
 	// Parse output
@@ -127,6 +91,94 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
 			}
 		}
+	}
+
+	return result, nil
+}
+
+// executeAndCollect starts the command, reads stdout and stderr concurrently,
+// waits for the process to exit, and returns the collected output along with the exit code.
+// Reading both streams concurrently prevents deadlocks that occur when one pipe's
+// OS buffer fills while the other is being read sequentially.
+func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutBytes, stderrBytes []byte, exitCode int, err error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("%s stdout pipe: %w", logTag, err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("%s stderr pipe: %w", logTag, err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, nil, 0, fmt.Errorf("%s start: %w", logTag, err)
+	}
+
+	// Read stdout and stderr concurrently to avoid deadlock.
+	// If either pipe's OS buffer fills while the other is being read sequentially,
+	// the process will block, causing a hang.
+	var stdoutErr, stderrErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		stdoutBytes, stdoutErr = io.ReadAll(stdout)
+	}()
+	go func() {
+		defer wg.Done()
+		stderrBytes, stderrErr = io.ReadAll(stderr)
+	}()
+	wg.Wait()
+
+	if stdoutErr != nil {
+		c.logger.Printf("%s warning: reading stdout: %v", logTag, stdoutErr)
+	}
+	if stderrErr != nil {
+		c.logger.Printf("%s warning: reading stderr: %v", logTag, stderrErr)
+	}
+
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	if exitCode != 0 {
+		stderrStr := string(stderrBytes)
+		stdoutStr := string(stdoutBytes)
+		if len(stderrStr) > 500 {
+			stderrStr = stderrStr[:500]
+		}
+		if len(stdoutStr) > 500 {
+			stdoutStr = stdoutStr[:500]
+		}
+		c.logger.Printf("%s exited with code %d", logTag, exitCode)
+		if stderrStr != "" {
+			c.logger.Printf("%s stderr: %s", logTag, stderrStr)
+		}
+		if stdoutStr != "" {
+			c.logger.Printf("%s stdout: %s", logTag, stdoutStr)
+		}
+	}
+
+	return stdoutBytes, stderrBytes, exitCode, nil
+}
+
+// runAgentContainerWithCommand is a test helper that executes an arbitrary command
+// (instead of a Docker container) and runs the same IO handling and parsing logic.
+// This allows testing the concurrent IO handling without Docker.
+func runAgentContainerWithCommand(ctx context.Context, c *Controller, params containerRunParams, name string, args ...string) (*agent.IterationResult, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	stdoutBytes, stderrBytes, exitCode, err := c.executeAndCollect(cmd, params.LogTag)
+	if err != nil {
+		return nil, err
+	}
+
+	result, parseErr := params.Agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
+	if parseErr != nil {
+		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
 	}
 
 	return result, nil
