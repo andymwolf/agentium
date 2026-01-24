@@ -135,6 +135,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		// Inner loop: iterate within the current phase
 		advanced := false
+		noSignalCount := 0
 		for iter := 1; iter <= maxIter; iter++ {
 			select {
 			case <-ctx.Done():
@@ -187,11 +188,55 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				return nil
 			}
 
-			// Run evaluator
-			evalResult, err := c.runEvaluator(ctx, currentPhase, phaseOutput)
-			if err != nil {
-				c.logWarning("Evaluator error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
-				evalResult = EvalResult{Verdict: VerdictAdvance}
+			// Run evaluator (reviewer+judge when review_enabled, or legacy single-evaluator)
+			var evalResult EvalResult
+			if c.reviewEnabled() {
+				// Three-agent loop: reviewer then judge
+				reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
+					CompletedPhase: currentPhase,
+					PhaseOutput:    phaseOutput,
+					Iteration:      iter,
+					MaxIterations:  maxIter,
+				})
+				if reviewErr != nil {
+					c.logWarning("Reviewer error for phase %s: %v (falling back to legacy evaluator)", currentPhase, reviewErr)
+					evalResult, err = c.runEvaluator(ctx, currentPhase, phaseOutput)
+					if err != nil {
+						c.logWarning("Evaluator error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
+						evalResult = EvalResult{Verdict: VerdictAdvance}
+					}
+				} else {
+					evalResult, err = c.runJudge(ctx, judgeRunParams{
+						CompletedPhase: currentPhase,
+						PhaseOutput:    phaseOutput,
+						ReviewFeedback: reviewResult.Feedback,
+						Iteration:      iter,
+						MaxIterations:  maxIter,
+					})
+					if err != nil {
+						c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
+						evalResult = EvalResult{Verdict: VerdictAdvance}
+					}
+
+					// Track consecutive no-signal count for fail-closed behavior
+					if !evalResult.SignalFound {
+						noSignalCount++
+						c.logWarning("Judge did not emit signal for phase %s (no-signal count: %d/%d)", currentPhase, noSignalCount, c.evalNoSignalLimit())
+						if noSignalCount >= c.evalNoSignalLimit() {
+							c.logWarning("Phase %s: no-signal limit reached, force-advancing", currentPhase)
+							evalResult = EvalResult{Verdict: VerdictAdvance, SignalFound: false}
+						}
+					} else {
+						noSignalCount = 0
+					}
+				}
+			} else {
+				// Legacy two-agent loop: direct evaluator
+				evalResult, err = c.runEvaluator(ctx, currentPhase, phaseOutput)
+				if err != nil {
+					c.logWarning("Evaluator error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
+					evalResult = EvalResult{Verdict: VerdictAdvance}
+				}
 			}
 
 			state.LastEvalVerdict = string(evalResult.Verdict)
@@ -245,6 +290,24 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		c.logInfo("Phase loop: advancing from %s to %s", currentPhase, nextPhase)
 		state.Phase = nextPhase
 	}
+}
+
+// defaultEvalNoSignalLimit is the default max consecutive no-signal evaluations
+// before force-advancing.
+const defaultEvalNoSignalLimit = 2
+
+// reviewEnabled returns true if the review loop (reviewer+judge) is enabled.
+func (c *Controller) reviewEnabled() bool {
+	return c.config.PhaseLoop != nil && c.config.PhaseLoop.ReviewEnabled
+}
+
+// evalNoSignalLimit returns the configured max consecutive no-signal evaluations,
+// falling back to the default when not specified.
+func (c *Controller) evalNoSignalLimit() int {
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalNoSignalLimit > 0 {
+		return c.config.PhaseLoop.EvalNoSignalLimit
+	}
+	return defaultEvalNoSignalLimit
 }
 
 // truncateForComment truncates text for use in GitHub comments.

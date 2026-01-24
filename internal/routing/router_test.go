@@ -189,6 +189,63 @@ func TestUnknownPhases_NilRouter(t *testing.T) {
 	}
 }
 
+func TestCompoundPhaseKeysAreValid(t *testing.T) {
+	compoundPhases := []string{
+		"PLAN_REVIEW", "IMPLEMENT_REVIEW", "TEST_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW",
+		"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "TEST_JUDGE", "REVIEW_JUDGE", "DOCS_JUDGE",
+	}
+
+	for _, phase := range compoundPhases {
+		if !ValidPhases[phase] {
+			t.Errorf("compound phase %q should be in ValidPhases", phase)
+		}
+	}
+}
+
+func TestCompoundPhaseOverrides(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"PLAN_REVIEW":     {Adapter: "codex", Model: "o3"},
+			"IMPLEMENT_JUDGE": {Adapter: "claude-code", Model: "sonnet"},
+		},
+	})
+
+	// Compound phase should resolve to its specific override
+	cfg := r.ModelForPhase("PLAN_REVIEW")
+	if cfg.Adapter != "codex" || cfg.Model != "o3" {
+		t.Errorf("PLAN_REVIEW should use override, got %+v", cfg)
+	}
+
+	cfg = r.ModelForPhase("IMPLEMENT_JUDGE")
+	if cfg.Adapter != "claude-code" || cfg.Model != "sonnet" {
+		t.Errorf("IMPLEMENT_JUDGE should use override, got %+v", cfg)
+	}
+
+	// Non-overridden compound phase falls back to default
+	cfg = r.ModelForPhase("TEST_REVIEW")
+	if cfg.Adapter != "claude-code" || cfg.Model != "opus" {
+		t.Errorf("TEST_REVIEW should fall back to default, got %+v", cfg)
+	}
+}
+
+func TestCompoundPhasesNotFlaggedAsUnknown(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code"},
+		Overrides: map[string]ModelConfig{
+			"PLAN_REVIEW":      {Adapter: "codex"},
+			"IMPLEMENT_REVIEW": {Adapter: "codex"},
+			"JUDGE":            {Adapter: "claude-code", Model: "sonnet"},
+			"PLAN_JUDGE":       {Model: "sonnet"},
+		},
+	})
+
+	unknowns := r.UnknownPhases()
+	if len(unknowns) != 0 {
+		t.Errorf("compound phases should not be unknown, got %v", unknowns)
+	}
+}
+
 func TestAdaptersSorted(t *testing.T) {
 	r := NewRouter(&PhaseRouting{
 		Default: ModelConfig{Adapter: "zeta", Model: "opus"},

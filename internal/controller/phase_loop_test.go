@@ -141,6 +141,56 @@ func TestIssuePhaseOrder(t *testing.T) {
 	}
 }
 
+func TestReviewEnabled(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *PhaseLoopConfig
+		want   bool
+	}{
+		{"nil config", nil, false},
+		{"enabled but no review", &PhaseLoopConfig{Enabled: true}, false},
+		{"review enabled", &PhaseLoopConfig{Enabled: true, ReviewEnabled: true}, true},
+		{"review enabled but loop disabled", &PhaseLoopConfig{Enabled: false, ReviewEnabled: true}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{config: SessionConfig{PhaseLoop: tt.config}}
+			if got := c.reviewEnabled(); got != tt.want {
+				t.Errorf("reviewEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvalNoSignalLimit_Default(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	if got := c.evalNoSignalLimit(); got != defaultEvalNoSignalLimit {
+		t.Errorf("evalNoSignalLimit() = %d, want %d", got, defaultEvalNoSignalLimit)
+	}
+}
+
+func TestEvalNoSignalLimit_Custom(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				Enabled:           true,
+				EvalNoSignalLimit: 5,
+			},
+		},
+	}
+	if got := c.evalNoSignalLimit(); got != 5 {
+		t.Errorf("evalNoSignalLimit() = %d, want 5", got)
+	}
+}
+
+func TestEvalNoSignalLimit_NilConfig(t *testing.T) {
+	c := &Controller{config: SessionConfig{PhaseLoop: nil}}
+	if got := c.evalNoSignalLimit(); got != defaultEvalNoSignalLimit {
+		t.Errorf("evalNoSignalLimit() with nil config = %d, want %d", got, defaultEvalNoSignalLimit)
+	}
+}
+
 func TestTruncateForComment(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -28,6 +28,65 @@ var sectionHeaders = map[SignalType]string{
 	FileModified: "Files Modified",
 }
 
+// evalSectionOrder defines the priority of sections in the evaluator context output.
+// Only includes eval-relevant types, excluding agent-internal signals.
+var evalSectionOrder = []SignalType{
+	EvalFeedback,
+	PhaseResult,
+}
+
+// BuildEvalContext generates a budget-aware Markdown summary containing only
+// evaluator-relevant entries (EvalFeedback and PhaseResult). This provides the
+// judge with iteration history without agent-internal signals like StepPending
+// or FileModified.
+func (s *Store) BuildEvalContext() string {
+	if len(s.data.Entries) == 0 {
+		return ""
+	}
+
+	// Group only eval-relevant entries by type
+	groups := make(map[SignalType][]string)
+	for _, e := range s.data.Entries {
+		if e.Type == EvalFeedback || e.Type == PhaseResult {
+			groups[e.Type] = append(groups[e.Type], fmt.Sprintf("[iter %d] %s", e.Iteration, e.Content))
+		}
+	}
+
+	if len(groups) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Iteration History\n\n")
+	used := sb.Len()
+
+	for _, st := range evalSectionOrder {
+		items, ok := groups[st]
+		if !ok || len(items) == 0 {
+			continue
+		}
+
+		header := fmt.Sprintf("### %s\n", sectionHeaders[st])
+		section := header
+		for _, item := range items {
+			section += fmt.Sprintf("- %s\n", item)
+		}
+		section += "\n"
+
+		if used+len(section) > s.contextBudget {
+			break
+		}
+		sb.WriteString(section)
+		used += len(section)
+	}
+
+	result := sb.String()
+	if result == "## Iteration History\n\n" {
+		return ""
+	}
+	return result
+}
+
 // BuildContext generates a budget-aware Markdown summary of the memory entries.
 // It groups entries by type and renders sections in priority order, stopping
 // when approaching the context budget limit.

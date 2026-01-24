@@ -13,6 +13,10 @@ package skills
 //go:generate cp ../../prompts/skills/docs.md docs.md
 //go:generate cp ../../prompts/skills/pr_review.md pr_review.md
 //go:generate cp ../../prompts/skills/evaluate.md evaluate.md
+//go:generate cp ../../prompts/skills/evaluate_plan.md evaluate_plan.md
+//go:generate cp ../../prompts/skills/evaluate_implement.md evaluate_implement.md
+//go:generate cp ../../prompts/skills/evaluate_test_phase.md evaluate_test_phase.md
+//go:generate cp ../../prompts/skills/judge.md judge.md
 
 import (
 	_ "embed"
@@ -61,6 +65,18 @@ var embeddedPRReview string
 //go:embed evaluate.md
 var embeddedEvaluate string
 
+//go:embed evaluate_plan.md
+var embeddedEvaluatePlan string
+
+//go:embed evaluate_implement.md
+var embeddedEvaluateImplement string
+
+//go:embed evaluate_test_phase.md
+var embeddedEvaluateTestPhase string
+
+//go:embed judge.md
+var embeddedJudge string
+
 // skillFiles maps filenames to their embedded content.
 var skillFiles = map[string]string{
 	"safety.md":         embeddedSafety,
@@ -74,7 +90,11 @@ var skillFiles = map[string]string{
 	"review.md":         embeddedReview,
 	"docs.md":           embeddedDocs,
 	"pr_review.md":      embeddedPRReview,
-	"evaluate.md":       embeddedEvaluate,
+	"evaluate.md":            embeddedEvaluate,
+	"evaluate_plan.md":       embeddedEvaluatePlan,
+	"evaluate_implement.md":  embeddedEvaluateImplement,
+	"evaluate_test_phase.md": embeddedEvaluateTestPhase,
+	"judge.md":               embeddedJudge,
 }
 
 // LoadManifest parses the embedded manifest YAML.
