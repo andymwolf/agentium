@@ -240,3 +240,71 @@ func TestSelector_EmptySkills(t *testing.T) {
 		t.Errorf("SkillsForPhase with empty skills should return nil, got %v", names)
 	}
 }
+
+func TestSelector_SelectByNames(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectByNames([]string{"safety", "implement", "test"})
+
+	expected := []string{"SAFETY CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT"}
+	for _, exp := range expected {
+		if !strings.Contains(result, exp) {
+			t.Errorf("SelectByNames missing %q", exp)
+		}
+	}
+
+	excluded := []string{"ENVIRONMENT CONTENT", "PLANNING CONTENT", "PR CREATION CONTENT"}
+	for _, exc := range excluded {
+		if strings.Contains(result, exc) {
+			t.Errorf("SelectByNames should not contain %q", exc)
+		}
+	}
+}
+
+func TestSelector_SelectByNames_PriorityOrder(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectByNames([]string{"test", "safety", "implement"})
+
+	// Results should be in priority order (safety=10, implement=50, test=60)
+	safetyIdx := strings.Index(result, "SAFETY CONTENT")
+	implementIdx := strings.Index(result, "IMPLEMENT CONTENT")
+	testIdx := strings.Index(result, "TEST CONTENT")
+
+	if safetyIdx > implementIdx {
+		t.Error("safety (priority 10) should come before implement (priority 50)")
+	}
+	if implementIdx > testIdx {
+		t.Error("implement (priority 50) should come before test (priority 60)")
+	}
+}
+
+func TestSelector_SelectByNames_Unknown(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectByNames([]string{"safety", "nonexistent", "also_missing"})
+
+	if !strings.Contains(result, "SAFETY CONTENT") {
+		t.Error("SelectByNames should include known skill 'safety'")
+	}
+	// Unknown names are silently skipped — result should only contain safety
+	parts := strings.Split(result, "\n\n")
+	if len(parts) != 1 {
+		t.Errorf("Expected 1 part (only safety), got %d parts", len(parts))
+	}
+}
+
+func TestSelector_SelectByNames_Empty(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectByNames([]string{})
+
+	if result != "" {
+		t.Errorf("SelectByNames with empty names should return empty string, got %q", result)
+	}
+}
+
+func TestSelector_SelectByNames_Nil(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectByNames(nil)
+
+	if result != "" {
+		t.Errorf("SelectByNames with nil names should return empty string, got %q", result)
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -92,7 +91,8 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Routing *routing.PhaseRouting `json:"routing,omitempty"`
+	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
+	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -175,6 +175,7 @@ type Controller struct {
 	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
 	modelRouter            *routing.Router     // Phase-to-model routing (nil = no routing)
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
+	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater // Instance metadata updater (nil if unavailable)
 
 	// Shutdown management
@@ -282,6 +283,26 @@ func New(config SessionConfig) (*Controller, error) {
 					return nil, fmt.Errorf("failed to initialize routed adapter %q: %w", name, err)
 				}
 				c.adapters[name] = a
+			}
+		}
+	}
+
+	// Initialize delegation orchestrator
+	if config.Delegation != nil && config.Delegation.Enabled {
+		if config.Delegation.Strategy != "" && config.Delegation.Strategy != "sequential" {
+			c.logWarning("delegation strategy %q not supported, falling back to sequential", config.Delegation.Strategy)
+		}
+		c.orchestrator = NewSubTaskOrchestrator(*config.Delegation, c)
+		// Pre-initialize adapters referenced in delegation config
+		for _, subCfg := range config.Delegation.SubAgents {
+			if subCfg.Agent != "" {
+				if _, exists := c.adapters[subCfg.Agent]; !exists {
+					a, err := agent.Get(subCfg.Agent)
+					if err != nil {
+						return nil, fmt.Errorf("failed to initialize delegated adapter %q: %w", subCfg.Agent, err)
+					}
+					c.adapters[subCfg.Agent] = a
+				}
 			}
 		}
 	}
@@ -1270,6 +1291,15 @@ func (c *Controller) determineActivePhase() string {
 }
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
+	// Check delegation before standard iteration
+	if c.orchestrator != nil {
+		phase := TaskPhase(c.determineActivePhase())
+		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
+			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
+			return c.runDelegatedIteration(ctx, phase, subCfg)
+		}
+	}
+
 	session := &agent.Session{
 		ID:             c.config.ID,
 		Repository:     c.config.Repository,
@@ -1335,110 +1365,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
 
-	// Authenticate with GHCR if needed (once per session)
-	if !c.dockerAuthed && strings.Contains(activeAgent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
-		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
-			"-u", "x-access-token", "--password-stdin")
-		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
-		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logger.Printf("Warning: docker login to ghcr.io failed: %v (%s)", err, string(out))
-		} else {
-			c.dockerAuthed = true
-		}
-	}
-
-	// Run agent container
-	args := []string{
-		"run", "--rm",
-		"-v", fmt.Sprintf("%s:/workspace", c.workDir),
-		"-w", "/workspace",
-	}
-
-	// Add environment variables
-	for k, v := range env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
-	}
-
-	// Mount Claude credentials for OAuth mode
-	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
-	}
-
-	// Add image and command
-	args = append(args, activeAgent.ContainerImage())
-	args = append(args, command...)
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-
-	// Capture output
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	// Read output
-	stdoutBytes, _ := io.ReadAll(stdout)
-	stderrBytes, _ := io.ReadAll(stderr)
-
-	err = cmd.Wait()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-	}
-
-	// Log agent output for debugging
-	if exitCode != 0 {
-		stderrStr := string(stderrBytes)
-		stdoutStr := string(stdoutBytes)
-		if len(stderrStr) > 500 {
-			stderrStr = stderrStr[:500]
-		}
-		if len(stdoutStr) > 500 {
-			stdoutStr = stdoutStr[:500]
-		}
-		c.logger.Printf("Agent exited with code %d", exitCode)
-		if stderrStr != "" {
-			c.logger.Printf("Agent stderr: %s", stderrStr)
-		}
-		if stdoutStr != "" {
-			c.logger.Printf("Agent stdout: %s", stdoutStr)
-		}
-	}
-
-	// Parse output
-	result, parseErr := activeAgent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
-	if parseErr != nil {
-		return nil, parseErr
-	}
-
-	// Parse memory signals and persist
-	if c.memoryStore != nil {
-		signals := memory.ParseSignals(string(stdoutBytes) + string(stderrBytes))
-		if len(signals) > 0 {
-			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
-			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
-			if pruned > 0 {
-				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)
-			}
-			if err := c.memoryStore.Save(); err != nil {
-				c.logWarning("failed to save memory store: %v", err)
-			} else {
-				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
-			}
-		}
-	}
-
-	return result, nil
+	return c.runAgentContainer(ctx, containerRunParams{
+		Agent:   activeAgent,
+		Session: session,
+		Env:     env,
+		Command: command,
+		LogTag:  "Agent",
+	})
 }
 
 func (c *Controller) emitFinalLogs() {

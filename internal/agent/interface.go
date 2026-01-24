@@ -14,6 +14,8 @@ type IterationContext struct {
 	SkillsPrompt  string // Composed from phase-relevant skills
 	MemoryContext string // Summarized memory from previous iterations
 	ModelOverride string // Model ID to pass as --model flag to the agent CLI
+	Iteration     int    // Current iteration number
+	SubTaskID     string // Unique ID for delegation tracking
 }
 
 // Session represents an agent session with all necessary context

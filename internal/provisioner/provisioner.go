@@ -55,7 +55,22 @@ type SessionConfig struct {
 	Prompt        string                `json:"prompt"`
 	GitHub        GitHubConfig          `json:"github"`
 	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
-	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
+	Routing    *routing.PhaseRouting    `json:"routing,omitempty"`
+	Delegation *ProvDelegationConfig   `json:"delegation,omitempty"`
+}
+
+// SubAgentConfig specifies agent overrides for a delegated sub-task type.
+type SubAgentConfig struct {
+	Agent  string              `json:"agent,omitempty"`
+	Model  *routing.ModelConfig `json:"model,omitempty"`
+	Skills []string            `json:"skills,omitempty"`
+}
+
+// ProvDelegationConfig controls sub-agent delegation for provisioned sessions.
+type ProvDelegationConfig struct {
+	Enabled   bool                       `json:"enabled"`
+	Strategy  string                     `json:"strategy"`
+	SubAgents map[string]SubAgentConfig  `json:"sub_agents,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration
