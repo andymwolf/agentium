@@ -77,16 +77,22 @@ func getLogs(cmd *cobra.Command, args []string) error {
 
 	logCh, errCh := prov.Logs(ctx, sessionID, logsOpts)
 
-	for entry := range logCh {
-		if entry.Timestamp.IsZero() {
-			fmt.Println(entry.Message)
-		} else {
-			fmt.Printf("[%s] %s\n", entry.Timestamp.Format("15:04:05"), entry.Message)
+	for {
+		select {
+		case entry, ok := <-logCh:
+			if !ok {
+				if err := <-errCh; err != nil {
+					return fmt.Errorf("error reading logs: %w", err)
+				}
+				return nil
+			}
+			if entry.Timestamp.IsZero() {
+				fmt.Println(entry.Message)
+			} else {
+				fmt.Printf("[%s] %s\n", entry.Timestamp.Format("15:04:05"), entry.Message)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
-
-	if err := <-errCh; err != nil {
-		return fmt.Errorf("error reading logs: %w", err)
-	}
-	return nil
 }

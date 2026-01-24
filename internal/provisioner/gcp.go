@@ -308,6 +308,68 @@ func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*Session
 	return status, nil
 }
 
+// gcpLogEntry represents a raw log entry from Cloud Logging JSON output.
+type gcpLogEntry struct {
+	Timestamp   string `json:"timestamp"`
+	TextPayload string `json:"textPayload"`
+	Severity    string `json:"severity"`
+	JSONPayload struct {
+		Message  string `json:"message"`
+		Severity string `json:"severity"`
+	} `json:"jsonPayload"`
+}
+
+// buildLogsArgs constructs the gcloud logging read arguments.
+func (p *GCPProvisioner) buildLogsArgs(sessionID string, opts LogsOptions) []string {
+	args := []string{
+		"logging", "read",
+		fmt.Sprintf(`logName=~"agentium-session" AND jsonPayload.session_id="%s"`, sessionID),
+		"--format=json",
+	}
+	if p.project != "" {
+		args = append(args, fmt.Sprintf("--project=%s", p.project))
+	}
+	if opts.Tail > 0 {
+		args = append(args, fmt.Sprintf("--limit=%d", opts.Tail))
+	}
+	if !opts.Since.IsZero() {
+		args = append(args, fmt.Sprintf(`--freshness=%s`, time.Since(opts.Since).Round(time.Second)))
+	}
+	return args
+}
+
+// parseLogEntries parses raw gcloud JSON output into LogEntry slices in chronological order.
+func parseLogEntries(data []byte) ([]LogEntry, error) {
+	var entries []gcpLogEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("failed to parse logs: %w", err)
+	}
+
+	var result []LogEntry
+	// Cloud Logging returns entries in reverse chronological order
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		ts, _ := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		msg := entry.TextPayload
+		level := entry.Severity
+		if entry.JSONPayload.Message != "" {
+			msg = entry.JSONPayload.Message
+			if entry.JSONPayload.Severity != "" {
+				level = entry.JSONPayload.Severity
+			}
+		}
+		if msg == "" {
+			continue
+		}
+		result = append(result, LogEntry{
+			Timestamp: ts,
+			Message:   msg,
+			Level:     level,
+		})
+	}
+	return result, nil
+}
+
 // Logs retrieves logs from a GCP session
 func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOptions) (<-chan LogEntry, <-chan error) {
 	logCh := make(chan LogEntry, 100)
@@ -317,23 +379,7 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 		defer close(logCh)
 		defer close(errCh)
 
-		// Build gcloud logging read command
-		args := []string{
-			"logging", "read",
-			fmt.Sprintf(`logName=~"agentium-session" AND jsonPayload.session_id="%s"`, sessionID),
-			"--format=json",
-		}
-		if p.project != "" {
-			args = append(args, fmt.Sprintf("--project=%s", p.project))
-		}
-
-		if opts.Tail > 0 {
-			args = append(args, fmt.Sprintf("--limit=%d", opts.Tail))
-		}
-
-		if !opts.Since.IsZero() {
-			args = append(args, fmt.Sprintf(`--freshness=%s`, time.Since(opts.Since).Round(time.Second)))
-		}
+		args := p.buildLogsArgs(sessionID, opts)
 
 		for {
 			cmd := exec.CommandContext(ctx, "gcloud", args...)
@@ -343,40 +389,14 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 				return
 			}
 
-			var entries []struct {
-				Timestamp   string `json:"timestamp"`
-				TextPayload string `json:"textPayload"`
-				Severity    string `json:"severity"`
-				JSONPayload struct {
-					Message  string `json:"message"`
-					Severity string `json:"severity"`
-				} `json:"jsonPayload"`
-			}
-
-			if err := json.Unmarshal(output, &entries); err != nil {
-				errCh <- fmt.Errorf("failed to parse logs: %w", err)
+			parsed, err := parseLogEntries(output)
+			if err != nil {
+				errCh <- err
 				return
 			}
 
-			for i := len(entries) - 1; i >= 0; i-- {
-				entry := entries[i]
-				ts, _ := time.Parse(time.RFC3339Nano, entry.Timestamp)
-				msg := entry.TextPayload
-				level := entry.Severity
-				if entry.JSONPayload.Message != "" {
-					msg = entry.JSONPayload.Message
-					if entry.JSONPayload.Severity != "" {
-						level = entry.JSONPayload.Severity
-					}
-				}
-				if msg == "" {
-					continue
-				}
-				logCh <- LogEntry{
-					Timestamp: ts,
-					Message:   msg,
-					Level:     level,
-				}
+			for _, entry := range parsed {
+				logCh <- entry
 			}
 
 			if !opts.Follow {
