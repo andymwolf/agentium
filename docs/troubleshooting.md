@@ -7,9 +7,6 @@ This guide covers common issues you may encounter when using Agentium and how to
 Before troubleshooting, gather information with these commands:
 
 ```bash
-# Check Agentium configuration
-agentium init --force  # Preview config (cancel before overwriting)
-
 # Check session status
 agentium status
 
@@ -20,27 +17,19 @@ agentium logs SESSION_ID --tail 200
 agentium logs SESSION_ID --follow
 
 # Verbose output for any command
-agentium run --issues 42 --verbose
+agentium run --repo github.com/org/repo --issues 42 --verbose
 
-# Dry run to test configuration
-agentium run --issues 42 --dry-run
+# Dry run to test configuration (validates config without provisioning)
+agentium run --repo github.com/org/repo --issues 42 --dry-run
 ```
 
 ## Configuration Issues
 
 ### "Repository is required"
 
-**Cause:** No repository specified in config or command line.
+**Cause:** The `--repo` flag was not provided. This flag is always required for the `run` command.
 
-**Fix:** Set the repository in `.agentium.yaml` or pass `--repo`:
-
-```yaml
-# .agentium.yaml
-project:
-  repository: "github.com/org/repo"
-```
-
-Or:
+**Fix:** Always pass `--repo` on the command line:
 
 ```bash
 agentium run --repo github.com/org/repo --issues 42
@@ -238,7 +227,7 @@ gcloud secrets versions access latest --secret="github-app-key" | head -1
 **Fix:** Increase the duration limit:
 
 ```bash
-agentium run --issues 42 --max-duration 4h
+agentium run --repo github.com/org/repo --issues 42 --max-duration 4h
 ```
 
 Or reduce scope by working on fewer issues at once.
@@ -251,10 +240,10 @@ Or reduce scope by working on fewer issues at once.
 
 ```bash
 # Increase iteration limit
-agentium run --issues 42 --max-iterations 50
+agentium run --repo github.com/org/repo --issues 42 --max-iterations 50
 
 # Or break complex issues into smaller ones
-agentium run --issues 42   # Just one issue
+agentium run --repo github.com/org/repo --issues 42   # Just one issue
 ```
 
 ### Agent creates wrong/incomplete PR
@@ -266,7 +255,7 @@ agentium run --issues 42   # Just one issue
 2. Create a `.agentium/AGENT.md` with project-specific instructions
 3. Use `--prompt` for additional guidance:
    ```bash
-   agentium run --issues 42 --prompt "Focus on error handling, add unit tests"
+   agentium run --repo github.com/org/repo --issues 42 --prompt "Focus on error handling, add unit tests"
    ```
 
 ### Session stuck / not progressing
@@ -408,7 +397,7 @@ Look for:
 **Fix:**
 1. Re-run the session:
    ```bash
-   agentium run --issues 42
+   agentium run --repo github.com/org/repo --issues 42
    ```
 
 2. Or disable spot instances for critical sessions:
@@ -501,7 +490,7 @@ If you're still stuck:
 
 | Error Message | Likely Cause | Quick Fix |
 |--------------|-------------|-----------|
-| "repository is required" | Missing repo in config | Add `project.repository` or use `--repo` |
+| "repository is required (use --repo or set in config)" | Missing `--repo` flag | Always provide `--repo` on the command line |
 | "cloud provider not configured" | Missing provider | Set `cloud.provider` in config |
 | "AWS provisioner not yet implemented" | Using unsupported provider | Switch to `gcp` |
 | "Azure provisioner not yet implemented" | Using unsupported provider | Switch to `gcp` |

@@ -69,7 +69,7 @@ prompts:
 routing:
   default:                          # Default model for all phases
     adapter: "claude-code"
-    model: "claude-3-5-sonnet-20241022"
+    model: "claude-opus-4-20250514"
   overrides:                        # Per-phase overrides
     IMPLEMENT:
       adapter: "claude-code"
@@ -81,9 +81,9 @@ routing:
 # Sub-agent delegation (experimental)
 delegation:
   enabled: false                    # Enable sub-agent delegation
-  strategy: "round-robin"           # Delegation strategy
-  sub_agents:                       # Sub-agent definitions
-    code_review:
+  strategy: "sequential"            # Delegation strategy (only "sequential" supported)
+  sub_agents:                       # Sub-agent definitions by task type
+    review:
       agent: "claude-code"
       model:
         adapter: "claude-code"
@@ -118,7 +118,7 @@ delegation:
 | `region` | string | Yes | - | Cloud region (e.g., `us-central1`, `us-east-1`) |
 | `project` | string | For GCP | - | GCP project ID |
 | `machine_type` | string | No | `e2-medium` | VM instance type (see below) |
-| `use_spot` | bool | No | `false` | Use spot/preemptible instances for cost savings |
+| `use_spot` | bool | No | `false` | Use spot/preemptible instances for cost savings (note: the Terraform module defaults to `true`) |
 | `disk_size_gb` | int | No | `50` | Root disk size in GB |
 
 **Machine type defaults by provider:**
@@ -168,8 +168,8 @@ Model routing enables per-phase model selection for optimizing cost and performa
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `default.adapter` | string | No | `claude-code` | Default agent adapter |
-| `default.model` | string | No | `claude-3-5-sonnet-20241022` | Default model |
+| `default.adapter` | string | No | - | Default agent adapter (e.g., `claude-code`, `aider`) |
+| `default.model` | string | No | - | Default model ID |
 | `overrides.<PHASE>.adapter` | string | No | - | Agent adapter for specific phase |
 | `overrides.<PHASE>.model` | string | No | - | Model for specific phase |
 
@@ -182,6 +182,10 @@ Model routing enables per-phase model selection for optimizing cost and performa
 | `PR_CREATION` | Creating pull requests |
 | `REVIEW` | Reviewing own changes |
 | `ANALYZE` | Analysis phase |
+| `COMPLETE` | Session completion |
+| `BLOCKED` | Agent blocked, needs human intervention |
+| `NOTHING_TO_DO` | No changes required |
+| `PUSH` | Pushing changes to remote |
 
 ### delegation
 
@@ -190,7 +194,7 @@ Sub-agent delegation (experimental feature).
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `enabled` | bool | No | `false` | Enable sub-agent delegation |
-| `strategy` | string | No | `round-robin` | Delegation strategy |
+| `strategy` | string | No | `sequential` | Delegation strategy (only `sequential` is currently supported) |
 | `sub_agents` | map | No | - | Named sub-agent configurations |
 
 ## Environment Variables
@@ -296,7 +300,7 @@ claude:
 routing:
   default:
     adapter: "claude-code"
-    model: "claude-3-5-sonnet-20241022"
+    model: "claude-opus-4-20250514"
   overrides:
     IMPLEMENT:
       adapter: "claude-code"

@@ -94,7 +94,7 @@ See the [Configuration Reference](configuration.md) for all available options.
 ### 4. Run Your First Session
 
 ```bash
-agentium run --issues 42
+agentium run --repo github.com/your-org/your-repo --issues 42
 ```
 
 This will:
@@ -153,7 +153,7 @@ agentium run --repo github.com/org/repo --issues 42 --agent aider
 
 ```bash
 agentium run --repo github.com/org/repo --issues 42 \
-  --model claude:claude-opus-4-20250514
+  --model claude-code:claude-opus-4-20250514
 ```
 
 ### Dry Run (Preview Without Provisioning)
