@@ -38,10 +38,13 @@ const (
 	// VMTerminationTimeout is the maximum time to wait for the VM deletion command
 	VMTerminationTimeout = 30 * time.Second
 
-	// AgentiumUID is the user ID for the agentium user in agent containers
+	// AgentiumUID is the user ID for the agentium user in agent containers.
+	// This must match the UID in docker/claudecode/Dockerfile, docker/aider/Dockerfile,
+	// and docker/codex/Dockerfile where the agentium user is created with useradd -u 1000.
 	AgentiumUID = 1000
 
-	// AgentiumGID is the group ID for the agentium group in agent containers
+	// AgentiumGID is the group ID for the agentium group in agent containers.
+	// This must match the GID in the agent Dockerfiles (defaults to same as UID).
 	AgentiumGID = 1000
 )
 
@@ -570,13 +573,18 @@ func (c *Controller) initializeWorkspace(ctx context.Context) error {
 		return err
 	}
 
-	// Set ownership to agentium user so agent containers can access
-	if err := os.Chown(c.workDir, AgentiumUID, AgentiumGID); err != nil {
-		c.logWarning("failed to set workspace ownership: %v", err)
-	}
+	// Only set ownership and configure git safe.directory when running as root.
+	// When running as non-root (e.g., local development), the workspace will
+	// already be owned by the current user.
+	if os.Getuid() == 0 {
+		// Set ownership to agentium user so agent containers can access
+		if err := os.Chown(c.workDir, AgentiumUID, AgentiumGID); err != nil {
+			c.logWarning("failed to set workspace ownership: %v", err)
+		}
 
-	// Configure git safe.directory as a fallback
-	_ = c.configureGitSafeDirectory(ctx)
+		// Configure git safe.directory as a fallback
+		_ = c.configureGitSafeDirectory(ctx)
+	}
 
 	return nil
 }
@@ -751,18 +759,22 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 		// Check if directory already exists with content
 		if entries, _ := os.ReadDir(c.workDir); len(entries) > 0 {
 			c.logInfo("Workspace already contains files, skipping clone")
-			// Fix ownership for existing workspaces
-			if err := c.ensureWorkspaceOwnership(); err != nil {
-				c.logWarning("failed to set workspace ownership: %v", err)
+			// Fix ownership for existing workspaces (only when running as root)
+			if os.Getuid() == 0 {
+				if err := c.ensureWorkspaceOwnership(); err != nil {
+					c.logWarning("failed to set workspace ownership: %v", err)
+				}
 			}
 			return nil
 		}
 		return err
 	}
 
-	// Fix ownership after clone so agent containers can access
-	if err := c.ensureWorkspaceOwnership(); err != nil {
-		c.logWarning("failed to set workspace ownership after clone: %v", err)
+	// Fix ownership after clone so agent containers can access (only when running as root)
+	if os.Getuid() == 0 {
+		if err := c.ensureWorkspaceOwnership(); err != nil {
+			c.logWarning("failed to set workspace ownership after clone: %v", err)
+		}
 	}
 
 	return nil
