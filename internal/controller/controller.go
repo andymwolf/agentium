@@ -44,8 +44,9 @@ const (
 	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
 	PhaseTest        TaskPhase = "TEST"
-	PhasePRCreation  TaskPhase = "PR_CREATION"
 	PhaseReview      TaskPhase = "REVIEW"
+	PhaseDocs        TaskPhase = "DOCS"
+	PhasePRCreation  TaskPhase = "PR_CREATION"
 	PhaseComplete    TaskPhase = "COMPLETE"
 	PhaseBlocked     TaskPhase = "BLOCKED"
 	PhaseNothingToDo TaskPhase = "NOTHING_TO_DO"
@@ -75,6 +76,7 @@ type PhaseLoopConfig struct {
 	ImplementMaxIterations  int  `json:"implement_max_iterations,omitempty"`
 	TestMaxIterations       int  `json:"test_max_iterations,omitempty"`
 	ReviewMaxIterations     int  `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations       int  `json:"docs_max_iterations,omitempty"`
 	EvalContextBudget       int  `json:"eval_context_budget,omitempty"`
 }
 

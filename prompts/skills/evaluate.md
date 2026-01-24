@@ -31,6 +31,11 @@ For each phase, evaluate:
 - Were all review issues addressed?
 - Does the final state look clean and consistent?
 
+**DOCS phase:**
+- Were relevant documentation files updated?
+- Are docs accurate and consistent with the implementation?
+- If no docs needed updating, was a reasonable justification given?
+
 ### Verdict
 
 You MUST emit exactly one verdict line in this format:

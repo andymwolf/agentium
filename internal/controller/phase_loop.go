@@ -13,6 +13,7 @@ var issuePhaseOrder = []TaskPhase{
 	PhaseImplement,
 	PhaseTest,
 	PhaseReview,
+	PhaseDocs,
 	PhasePRCreation,
 }
 
@@ -22,6 +23,7 @@ const (
 	defaultImplementMaxIter = 5
 	defaultTestMaxIter      = 5
 	defaultReviewMaxIter    = 3
+	defaultDocsMaxIter      = 2
 	defaultPRMaxIter        = 1
 )
 
@@ -52,6 +54,10 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase) int {
 		if cfg.ReviewMaxIterations > 0 {
 			return cfg.ReviewMaxIterations
 		}
+	case PhaseDocs:
+		if cfg.DocsMaxIterations > 0 {
+			return cfg.DocsMaxIterations
+		}
 	}
 	return defaultMaxIter(phase)
 }
@@ -66,6 +72,8 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultTestMaxIter
 	case PhaseReview:
 		return defaultReviewMaxIter
+	case PhaseDocs:
+		return defaultDocsMaxIter
 	case PhasePRCreation:
 		return defaultPRMaxIter
 	default:

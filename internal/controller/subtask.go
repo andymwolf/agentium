@@ -10,6 +10,7 @@ const (
 	SubTaskImplement SubTaskType = "implement"
 	SubTaskTest      SubTaskType = "test"
 	SubTaskReview    SubTaskType = "review"
+	SubTaskDocs      SubTaskType = "docs"
 	SubTaskPush      SubTaskType = "push"
 	SubTaskEvaluate  SubTaskType = "evaluate"
 )
@@ -20,6 +21,7 @@ var phaseToSubTask = map[TaskPhase]SubTaskType{
 	PhaseImplement:  SubTaskImplement,
 	PhaseTest:       SubTaskTest,
 	PhaseReview:     SubTaskReview,
+	PhaseDocs:       SubTaskDocs,
 	PhasePRCreation: SubTaskReview,
 	PhaseAnalyze:    SubTaskPlan,
 	PhasePush:       SubTaskPush,
