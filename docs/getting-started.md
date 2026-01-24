@@ -14,9 +14,10 @@ Agentium is an open-source platform for running ephemeral, containerized AI codi
 
 Before using Agentium, ensure you have the following installed:
 
-- **Go 1.19+** - Required to build the CLI
+- **Go 1.19+** - Required to build the CLI from source
 - **Terraform 1.0+** - Used for cloud VM provisioning
 - **gcloud CLI** - Required for GCP provider (authenticated with `gcloud auth login`)
+- **GitHub CLI** (`gh`) - Recommended for GitHub App setup verification
 - **Docker** (optional) - For building custom agent container images
 - **A GitHub App** - For repository access (see [GitHub App Setup](github-app-setup.md))
 
@@ -42,6 +43,8 @@ mv agentium /usr/local/bin/
 agentium --help
 ```
 
+You should see usage information for the CLI with available commands (`init`, `run`, `status`, `logs`, `destroy`).
+
 ## Quick Start
 
 ### 1. Create a GitHub App
@@ -62,12 +65,14 @@ gcloud secrets create github-app-key \
 gcloud secrets versions add github-app-key \
   --data-file=/path/to/your-app-private-key.pem
 
-# Optionally store Anthropic API key (for Claude Code)
+# Optionally store Anthropic API key (for Claude Code with API auth mode)
 gcloud secrets create anthropic-api-key \
   --replication-policy="automatic"
 echo -n "sk-ant-your-api-key" | \
   gcloud secrets versions add anthropic-api-key --data-file=-
 ```
+
+> **Security Note:** Never commit API keys or private keys to your repository. Always use cloud secret managers for credential storage.
 
 ### 3. Initialize Your Project
 

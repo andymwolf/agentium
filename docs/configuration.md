@@ -147,7 +147,9 @@ delegation:
 **Authentication modes:**
 
 - **`api`** - Uses the `ANTHROPIC_API_KEY` environment variable. Simple setup, requires a long-lived API key.
-- **`oauth`** - Uses Claude Code OAuth credentials from an `auth.json` file. More secure for local usage.
+- **`oauth`** - Uses Claude Code OAuth credentials from an `auth.json` file. More secure for local usage. On macOS, Agentium will also check the macOS Keychain for Claude Code credentials if the file is not found.
+
+> **Note:** OAuth auth mode is only supported with the `claude-code` agent. To set up OAuth credentials, install Claude Code (`npm install -g @anthropic-ai/claude-code`) and run `claude login`.
 
 ### controller
 
@@ -197,6 +199,14 @@ Sub-agent delegation (experimental feature).
 | `strategy` | string | No | `sequential` | Delegation strategy (only `sequential` is currently supported) |
 | `sub_agents` | map | No | - | Named sub-agent configurations |
 
+## Session Configuration
+
+Session-level settings (repository, issues, agent, etc.) are derived at runtime from CLI flags and config file defaults. They are **not** intended to be set directly in the config file. Instead:
+
+- `--repo`, `--issues`, `--prs`, `--agent`, `--max-iterations`, `--max-duration` are passed as CLI flags to `agentium run`
+- If not provided, `agent`, `max_iterations`, and `max_duration` fall back to values in the `defaults` section
+- The `repository` field falls back to `project.repository` if `--repo` is not provided (though `--repo` is always required for `run`)
+
 ## Environment Variables
 
 All configuration values can be set via environment variables with the `AGENTIUM_` prefix. Nested fields use underscores:
@@ -213,6 +223,10 @@ All configuration values can be set via environment variables with the `AGENTIUM
 | `AGENTIUM_DEFAULTS_AGENT` | `defaults.agent` |
 | `AGENTIUM_DEFAULTS_MAX_ITERATIONS` | `defaults.max_iterations` |
 | `AGENTIUM_DEFAULTS_MAX_DURATION` | `defaults.max_duration` |
+| `AGENTIUM_CLAUDE_AUTH_MODE` | `claude.auth_mode` |
+| `AGENTIUM_CONTROLLER_IMAGE` | `controller.image` |
+
+> **Note:** Agentium uses Viper's automatic environment variable binding. Any config field can be overridden by setting `AGENTIUM_` followed by the uppercase path with underscores replacing dots. For example, `cloud.disk_size_gb` becomes `AGENTIUM_CLOUD_DISK_SIZE_GB`.
 
 ## Project-Specific Agent Instructions
 

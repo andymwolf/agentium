@@ -491,7 +491,14 @@ If you're still stuck:
 | Error Message | Likely Cause | Quick Fix |
 |--------------|-------------|-----------|
 | "repository is required (use --repo or set in config)" | Missing `--repo` flag | Always provide `--repo` on the command line |
-| "cloud provider not configured" | Missing provider | Set `cloud.provider` in config |
+| "at least one issue or PR is required (use --issues or --prs)" | Missing task specification | Provide `--issues` or `--prs` flag |
+| "cloud provider is required (use --provider or set in config)" | Missing provider | Set `cloud.provider` in config or pass `--provider` |
+| "invalid cloud provider: X (must be gcp, aws, or azure)" | Typo in provider name | Use one of: `gcp`, `aws`, `azure` |
+| "invalid agent: X (must be claude-code or aider)" | Invalid agent name | Use `claude-code` or `aider` |
+| "GitHub App ID is required" | Missing `github.app_id` in config | Set `github.app_id` in `.agentium.yaml` |
+| "GitHub App Installation ID is required" | Missing `github.installation_id` | Set `github.installation_id` in config |
+| "GitHub App private key secret path is required" | Missing `github.private_key_secret` | Set `github.private_key_secret` in config |
+| "oauth auth_mode is only supported with the claude-code agent" | Using OAuth with Aider | Switch to `--agent claude-code` or use `api` auth mode |
 | "AWS provisioner not yet implemented" | Using unsupported provider | Switch to `gcp` |
 | "Azure provisioner not yet implemented" | Using unsupported provider | Switch to `gcp` |
 | "bad credentials" | Invalid GitHub App auth | Verify App ID and private key |
