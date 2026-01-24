@@ -51,3 +51,46 @@ echo "AGENTIUM_STATUS: NOTHING_TO_DO feedback was addressed in previous iteratio
 # When blocked on external factor
 echo "AGENTIUM_STATUS: BLOCKED need API credentials for integration test"
 ```
+
+## MEMORY SIGNALING
+
+Emit memory signals to persist context across iterations. The controller captures these
+and injects a summarized context into your prompt on subsequent iterations.
+
+Format: `AGENTIUM_MEMORY: TYPE content`
+
+### Signal Types
+
+- `AGENTIUM_MEMORY: KEY_FACT <fact>` - Important discovery or context (e.g., "API requires auth header")
+- `AGENTIUM_MEMORY: DECISION <decision>` - Architecture or approach decision made (e.g., "Using JWT for auth")
+- `AGENTIUM_MEMORY: STEP_DONE <description>` - Completed implementation step
+- `AGENTIUM_MEMORY: STEP_PENDING <description>` - Step still to be done in a future iteration
+- `AGENTIUM_MEMORY: FILE_MODIFIED <path>` - File that was created or modified
+- `AGENTIUM_MEMORY: ERROR <description>` - Error encountered that may need addressing
+
+### Examples
+
+```
+# Record a key discovery
+echo "AGENTIUM_MEMORY: KEY_FACT The database schema uses UUID primary keys"
+
+# Record a decision
+echo "AGENTIUM_MEMORY: DECISION Using middleware pattern for auth instead of decorators"
+
+# Track progress
+echo "AGENTIUM_MEMORY: STEP_DONE Implemented user registration endpoint"
+echo "AGENTIUM_MEMORY: STEP_PENDING Add rate limiting to registration endpoint"
+
+# Track files
+echo "AGENTIUM_MEMORY: FILE_MODIFIED internal/auth/handler.go"
+
+# Record errors for future reference
+echo "AGENTIUM_MEMORY: ERROR Integration tests require REDIS_URL env var"
+```
+
+### Tips
+
+1. **Be concise** - Memory entries have a budget; keep content short and actionable
+2. **Signal pending steps** - Helps the next iteration know where to continue
+3. **Record decisions** - Avoids re-evaluating the same choices across iterations
+4. **Note key facts** - Especially about the codebase structure or API contracts

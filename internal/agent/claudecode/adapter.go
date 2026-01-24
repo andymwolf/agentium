@@ -93,7 +93,11 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	// use it directly — it already contains repository context, issue details,
 	// existing work detection, and appropriate instructions.
 	if session.ActiveTask != "" && session.Prompt != "" {
-		return session.Prompt
+		prompt := session.Prompt
+		if session.IterationContext != nil && session.IterationContext.MemoryContext != "" {
+			prompt += "\n\n" + session.IterationContext.MemoryContext
+		}
+		return prompt
 	}
 
 	// Legacy fallback: build a generic multi-issue prompt

@@ -10,8 +10,9 @@ type ExistingWork struct {
 // IterationContext provides phase-aware context for a single iteration.
 // When non-nil, SkillsPrompt should be preferred over Session.SystemPrompt.
 type IterationContext struct {
-	Phase        string // e.g., "IMPLEMENT", "TEST"
-	SkillsPrompt string // Composed from phase-relevant skills
+	Phase         string // e.g., "IMPLEMENT", "TEST"
+	SkillsPrompt  string // Composed from phase-relevant skills
+	MemoryContext string // Summarized memory from previous iterations
 }
 
 // Session represents an agent session with all necessary context

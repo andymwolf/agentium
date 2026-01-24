@@ -21,6 +21,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
+	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/skills"
 )
@@ -85,6 +86,11 @@ type SessionConfig struct {
 	Skills struct {
 		Enabled bool `json:"enabled,omitempty"`
 	} `json:"skills,omitempty"`
+	Memory struct {
+		Enabled       bool `json:"enabled,omitempty"`
+		MaxEntries    int  `json:"max_entries,omitempty"`
+		ContextBudget int  `json:"context_budget,omitempty"`
+	} `json:"memory,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -164,6 +170,7 @@ type Controller struct {
 	activeTaskType         string              // "pr" or "issue"
 	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
 	skillSelector          *skills.Selector    // Phase-aware skill selector (nil = legacy mode)
+	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
 
 	// Shutdown management
 	shutdownHooks          []ShutdownHook
@@ -572,6 +579,20 @@ func (c *Controller) loadPrompts() error {
 				}
 				c.logInfo("Skills loaded: %v", names)
 			}
+		}
+	}
+
+	// Initialize persistent memory store if enabled
+	if c.config.Memory.Enabled {
+		c.memoryStore = memory.NewStore(c.workDir, memory.Config{
+			Enabled:       true,
+			MaxEntries:    c.config.Memory.MaxEntries,
+			ContextBudget: c.config.Memory.ContextBudget,
+		})
+		if err := c.memoryStore.Load(); err != nil {
+			c.logWarning("failed to load memory store: %v", err)
+		} else {
+			c.logInfo("Memory store initialized (%d entries)", len(c.memoryStore.Entries()))
 		}
 	}
 
@@ -1207,6 +1228,17 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phase))
 	}
 
+	// Inject memory context if store is available
+	if c.memoryStore != nil {
+		memCtx := c.memoryStore.BuildContext()
+		if memCtx != "" {
+			if session.IterationContext == nil {
+				session.IterationContext = &agent.IterationContext{}
+			}
+			session.IterationContext.MemoryContext = memCtx
+		}
+	}
+
 	// Build environment and command
 	env := c.agent.BuildEnv(session, c.iteration)
 	command := c.agent.BuildCommand(session, c.iteration)
@@ -1297,6 +1329,23 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	result, parseErr := c.agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
 	if parseErr != nil {
 		return nil, parseErr
+	}
+
+	// Parse memory signals and persist
+	if c.memoryStore != nil {
+		signals := memory.ParseSignals(string(stdoutBytes) + string(stderrBytes))
+		if len(signals) > 0 {
+			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
+			if pruned > 0 {
+				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)
+			}
+			if err := c.memoryStore.Save(); err != nil {
+				c.logWarning("failed to save memory store: %v", err)
+			} else {
+				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
+			}
+		}
 	}
 
 	return result, nil
