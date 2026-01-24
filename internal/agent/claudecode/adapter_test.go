@@ -267,6 +267,67 @@ func TestAdapter_BuildCommand_IterationContext(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuildCommand_ModelOverride(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name      string
+		session   *agent.Session
+		wantModel string
+	}{
+		{
+			name: "no override - no --model flag",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+			},
+			wantModel: "",
+		},
+		{
+			name: "with model override",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+				IterationContext: &agent.IterationContext{
+					Phase:         "IMPLEMENT",
+					ModelOverride: "claude-opus-4-20250514",
+				},
+			},
+			wantModel: "claude-opus-4-20250514",
+		},
+		{
+			name: "empty model override - no --model flag",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+				IterationContext: &agent.IterationContext{
+					Phase:         "TEST",
+					ModelOverride: "",
+				},
+			},
+			wantModel: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := a.BuildCommand(tt.session, 1)
+
+			var modelValue string
+			for i, arg := range cmd {
+				if arg == "--model" && i+1 < len(cmd) {
+					modelValue = cmd[i+1]
+					break
+				}
+			}
+
+			if modelValue != tt.wantModel {
+				t.Errorf("--model = %q, want %q (cmd: %v)", modelValue, tt.wantModel, cmd)
+			}
+		})
+	}
+}
+
 func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 	a := New()
 

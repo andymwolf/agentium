@@ -83,6 +83,11 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = append(args, "--append-system-prompt", session.ProjectPrompt)
 	}
 
+	// Pass model override from routing config
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		args = append(args, "--model", session.IterationContext.ModelOverride)
+	}
+
 	args = append(args, prompt)
 	return args
 }

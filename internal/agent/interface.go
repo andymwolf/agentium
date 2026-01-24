@@ -13,6 +13,7 @@ type IterationContext struct {
 	Phase         string // e.g., "IMPLEMENT", "TEST"
 	SkillsPrompt  string // Composed from phase-relevant skills
 	MemoryContext string // Summarized memory from previous iterations
+	ModelOverride string // Model to pass as --model flag (set by routing)
 }
 
 // Session represents an agent session with all necessary context

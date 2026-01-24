@@ -109,6 +109,67 @@ func TestAdapter_BuildCommand(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuildCommand_ModelOverride(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name      string
+		session   *agent.Session
+		wantModel string
+	}{
+		{
+			name: "no override uses default model",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+			},
+			wantModel: "claude-3-5-sonnet-20241022",
+		},
+		{
+			name: "with model override",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+				IterationContext: &agent.IterationContext{
+					Phase:         "IMPLEMENT",
+					ModelOverride: "gpt-4-turbo",
+				},
+			},
+			wantModel: "gpt-4-turbo",
+		},
+		{
+			name: "empty model override uses default",
+			session: &agent.Session{
+				Repository: "github.com/org/repo",
+				Tasks:      []string{"1"},
+				IterationContext: &agent.IterationContext{
+					Phase:         "TEST",
+					ModelOverride: "",
+				},
+			},
+			wantModel: "claude-3-5-sonnet-20241022",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := a.BuildCommand(tt.session, 1)
+
+			var modelValue string
+			for i, arg := range cmd {
+				if arg == "--model" && i+1 < len(cmd) {
+					modelValue = cmd[i+1]
+					break
+				}
+			}
+
+			if modelValue != tt.wantModel {
+				t.Errorf("--model = %q, want %q", modelValue, tt.wantModel)
+			}
+		})
+	}
+}
+
 func TestAdapter_BuildPrompt(t *testing.T) {
 	a := New()
 

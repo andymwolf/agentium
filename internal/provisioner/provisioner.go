@@ -41,18 +41,31 @@ type ClaudeAuthConfig struct {
 	AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 }
 
+// RoutingConfig maps phases to adapter+model pairs for the session
+type RoutingConfig struct {
+	Default   ModelSpec            `json:"default"`
+	Overrides map[string]ModelSpec `json:"overrides,omitempty"`
+}
+
+// ModelSpec identifies an adapter and model combination
+type ModelSpec struct {
+	Adapter string `json:"adapter"`
+	Model   string `json:"model"`
+}
+
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string         `json:"id"`
-	Repository    string         `json:"repository"`
-	Tasks         []string       `json:"tasks"`
-	PRs           []string       `json:"prs,omitempty"`
-	Agent         string         `json:"agent"`
-	MaxIterations int            `json:"max_iterations"`
-	MaxDuration   string         `json:"max_duration"`
-	Prompt        string         `json:"prompt"`
-	GitHub        GitHubConfig   `json:"github"`
+	ID            string          `json:"id"`
+	Repository    string          `json:"repository"`
+	Tasks         []string        `json:"tasks"`
+	PRs           []string        `json:"prs,omitempty"`
+	Agent         string          `json:"agent"`
+	MaxIterations int             `json:"max_iterations"`
+	MaxDuration   string          `json:"max_duration"`
+	Prompt        string          `json:"prompt"`
+	GitHub        GitHubConfig    `json:"github"`
 	ClaudeAuth    ClaudeAuthConfig `json:"claude_auth"`
+	Routing       *RoutingConfig  `json:"routing,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration
