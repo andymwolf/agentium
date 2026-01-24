@@ -10,6 +10,7 @@ package skills
 //go:generate cp ../../prompts/skills/test.md test.md
 //go:generate cp ../../prompts/skills/pr_creation.md pr_creation.md
 //go:generate cp ../../prompts/skills/review.md review.md
+//go:generate cp ../../prompts/skills/docs.md docs.md
 //go:generate cp ../../prompts/skills/pr_review.md pr_review.md
 //go:generate cp ../../prompts/skills/evaluate.md evaluate.md
 
@@ -51,6 +52,9 @@ var embeddedPRCreation string
 //go:embed review.md
 var embeddedReview string
 
+//go:embed docs.md
+var embeddedDocs string
+
 //go:embed pr_review.md
 var embeddedPRReview string
 
@@ -68,6 +72,7 @@ var skillFiles = map[string]string{
 	"test.md":           embeddedTest,
 	"pr_creation.md":    embeddedPRCreation,
 	"review.md":         embeddedReview,
+	"docs.md":           embeddedDocs,
 	"pr_review.md":      embeddedPRReview,
 	"evaluate.md":       embeddedEvaluate,
 }

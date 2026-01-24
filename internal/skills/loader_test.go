@@ -19,7 +19,7 @@ func TestLoadManifest(t *testing.T) {
 	expectedNames := []string{
 		"safety", "environment", "status_signals",
 		"planning", "plan", "implement", "test",
-		"pr_creation", "review", "pr_review", "evaluate",
+		"pr_creation", "review", "docs", "pr_review", "evaluate",
 	}
 
 	names := make(map[string]bool)
@@ -53,6 +53,7 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"test", []string{"TEST", "IMPLEMENT"}},
 		{"pr_creation", []string{"PR_CREATION"}},
 		{"review", []string{"REVIEW"}},
+		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"evaluate", []string{"EVALUATE"}},
 	}
@@ -153,6 +154,7 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"test":           "Development Loop",
 		"pr_creation":    "Push and Create PR",
 		"review":         "REVIEW PHASE",
+		"docs":           "DOCS PHASE",
 		"pr_review":      "PR REVIEW SESSIONS",
 		"evaluate":       "EVALUATE PHASE",
 	}

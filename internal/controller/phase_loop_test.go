@@ -11,7 +11,8 @@ func TestAdvancePhase(t *testing.T) {
 		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
 		{"IMPLEMENT advances to TEST", PhaseImplement, PhaseTest},
 		{"TEST advances to REVIEW", PhaseTest, PhaseReview},
-		{"REVIEW advances to PR_CREATION", PhaseReview, PhasePRCreation},
+		{"REVIEW advances to DOCS", PhaseReview, PhaseDocs},
+		{"DOCS advances to PR_CREATION", PhaseDocs, PhasePRCreation},
 		{"PR_CREATION advances to COMPLETE", PhasePRCreation, PhaseComplete},
 		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
 		{"COMPLETE stays COMPLETE", PhaseComplete, PhaseComplete},
@@ -42,6 +43,7 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 		{PhaseImplement, defaultImplementMaxIter},
 		{PhaseTest, defaultTestMaxIter},
 		{PhaseReview, defaultReviewMaxIter},
+		{PhaseDocs, defaultDocsMaxIter},
 		{PhasePRCreation, defaultPRMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
@@ -65,6 +67,7 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 				ImplementMaxIterations: 10,
 				TestMaxIterations:      8,
 				ReviewMaxIterations:    4,
+				DocsMaxIterations:      4,
 			},
 		},
 	}
@@ -77,6 +80,7 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 		{PhaseImplement, 10},
 		{PhaseTest, 8},
 		{PhaseReview, 4},
+		{PhaseDocs, 4},
 		{PhasePRCreation, defaultPRMaxIter}, // No custom config for PR_CREATION
 	}
 
@@ -126,7 +130,7 @@ func TestIsPhaseLoopEnabled(t *testing.T) {
 
 func TestIssuePhaseOrder(t *testing.T) {
 	// Verify the expected phase order
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseTest, PhaseReview, PhasePRCreation}
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseTest, PhaseReview, PhaseDocs, PhasePRCreation}
 	if len(issuePhaseOrder) != len(expected) {
 		t.Fatalf("issuePhaseOrder length = %d, want %d", len(issuePhaseOrder), len(expected))
 	}

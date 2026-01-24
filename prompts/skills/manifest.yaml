@@ -52,6 +52,12 @@ skills:
     phases:
       - REVIEW
 
+  - name: docs
+    file: docs.md
+    priority: 77
+    phases:
+      - DOCS
+
   - name: pr_review
     file: pr_review.md
     priority: 80

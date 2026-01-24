@@ -24,6 +24,7 @@ var ValidPhases = map[string]bool{
 	"TEST":         true,
 	"PR_CREATION":  true,
 	"REVIEW":       true,
+	"DOCS":         true,
 	"EVALUATE":     true,
 	"COMPLETE":     true,
 	"BLOCKED":      true,
