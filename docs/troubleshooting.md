@@ -305,6 +305,31 @@ Common blockers:
      --command="cat /var/log/cloud-init-output.log"
    ```
 
+3. If using a custom controller image, verify the full path is correct in your config:
+   ```yaml
+   controller:
+     image: "your-registry.example.com/agentium-controller:v1.0"
+   ```
+
+### Building custom container images
+
+If you need a custom controller image (e.g., with additional tools pre-installed), build from the Dockerfiles in the `docker/` directory:
+
+```bash
+# Build controller image
+docker build -t your-registry/agentium-controller:custom -f docker/Dockerfile.controller .
+
+# Push to your registry
+docker push your-registry/agentium-controller:custom
+```
+
+Then update your `.agentium.yaml`:
+
+```yaml
+controller:
+  image: "your-registry/agentium-controller:custom"
+```
+
 ### Agent container fails
 
 **Cause:** Missing environment variables or container issues.
@@ -317,7 +342,7 @@ agentium logs SESSION_ID --tail 200
 
 Look for:
 - Missing `GITHUB_TOKEN` - GitHub authentication failed
-- Missing `ANTHROPIC_API_KEY` - Claude API key not provided
+- Missing `ANTHROPIC_API_KEY` - Claude API key not provided (when using `api` auth mode)
 - Container exit codes (non-zero indicates failure)
 
 ### "Image not found" errors
@@ -327,7 +352,7 @@ Look for:
 **Fix:**
 1. Verify the image exists:
    ```bash
-   docker pull ghcr.io/andymwolf/agentium-claudecode:latest
+   docker pull ghcr.io/andymwolf/agentium-controller:latest
    ```
 
 2. Check if using a custom controller image in config:
@@ -335,6 +360,8 @@ Look for:
    controller:
      image: "ghcr.io/andymwolf/agentium-controller:latest"
    ```
+
+3. For private registries, ensure the VM has credentials to pull images
 
 ## Network Issues
 
@@ -411,13 +438,13 @@ Look for:
 ### 1. Enable verbose output
 
 ```bash
-agentium run --issues 42 --verbose
+agentium run --repo github.com/org/repo --issues 42 --verbose
 ```
 
 ### 2. Use dry-run mode
 
 ```bash
-agentium run --issues 42 --dry-run
+agentium run --repo github.com/org/repo --issues 42 --dry-run
 ```
 
 This validates configuration and shows what would be provisioned without creating resources.

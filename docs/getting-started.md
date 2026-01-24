@@ -187,6 +187,18 @@ You can also manually terminate a session:
 agentium destroy agentium-abc12345
 ```
 
+## Project-Specific Agent Instructions
+
+You can provide custom instructions to the AI agent by creating a `.agentium/AGENT.md` file in your repository root. This file is automatically included in the agent's system prompt when a session runs.
+
+Common things to include:
+- Build and test commands for your project
+- Coding conventions and style preferences
+- Architecture notes and important patterns
+- Off-limits areas (files the agent should not modify)
+
+See the [Configuration Reference](configuration.md#project-specific-agent-instructions) for a detailed example.
+
 ## What's Next?
 
 - [Configuration Reference](configuration.md) - All configuration options

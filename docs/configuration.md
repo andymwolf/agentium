@@ -118,7 +118,7 @@ delegation:
 | `region` | string | Yes | - | Cloud region (e.g., `us-central1`, `us-east-1`) |
 | `project` | string | For GCP | - | GCP project ID |
 | `machine_type` | string | No | `e2-medium` | VM instance type (see below) |
-| `use_spot` | bool | No | `false` | Use spot/preemptible instances for cost savings (note: the Terraform module defaults to `true`) |
+| `use_spot` | bool | No | `false` | Use spot/preemptible instances for cost savings (recommended: set to `true` explicitly) |
 | `disk_size_gb` | int | No | `50` | Root disk size in GB |
 
 **Machine type defaults by provider:**

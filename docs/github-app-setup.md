@@ -149,7 +149,7 @@ github:
 Test that authentication works:
 
 ```bash
-agentium run --issues 1 --dry-run
+agentium run --repo github.com/your-org/your-repo --issues 1 --dry-run
 ```
 
 A successful dry run confirms that Agentium can:
