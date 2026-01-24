@@ -175,6 +175,7 @@ type Controller struct {
 	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
 	modelRouter            *routing.Router     // Phase-to-model routing (nil = no routing)
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
+	metadataUpdater        gcp.MetadataUpdater // Instance metadata updater (nil if unavailable)
 
 	// Shutdown management
 	shutdownHooks          []ShutdownHook
@@ -221,18 +222,28 @@ func New(config SessionConfig) (*Controller, error) {
 		cloudLogger = cloudLoggerInstance
 	}
 
+	// Initialize metadata updater (non-fatal if unavailable)
+	var metadataUpdater gcp.MetadataUpdater
+	metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
+	if err != nil {
+		log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
+	} else {
+		metadataUpdater = metadataUpdaterInstance
+	}
+
 	c := &Controller{
-		config:        config,
-		agent:         agentAdapter,
-		workDir:       workDir,
-		iteration:     0,
-		maxDuration:   maxDuration,
-		completed:     make(map[string]bool),
-		taskStates:    make(map[string]*TaskState),
-		logger:        log.New(os.Stdout, "[controller] ", log.LstdFlags),
-		cloudLogger:   cloudLogger,
-		secretManager: secretManager,
-		shutdownCh:    make(chan struct{}),
+		config:          config,
+		agent:           agentAdapter,
+		workDir:         workDir,
+		iteration:       0,
+		maxDuration:     maxDuration,
+		completed:       make(map[string]bool),
+		taskStates:      make(map[string]*TaskState),
+		logger:          log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		cloudLogger:     cloudLogger,
+		secretManager:   secretManager,
+		metadataUpdater: metadataUpdater,
+		shutdownCh:      make(chan struct{}),
 	}
 
 	// Initialize task states and build unified task queue (PRs first, then issues)
@@ -440,6 +451,9 @@ func (c *Controller) Run(ctx context.Context) error {
 		// Update task phase for the active task
 		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 		c.updateTaskPhase(taskID, result)
+
+		// Update instance metadata with current session status
+		c.updateInstanceMetadata(ctx)
 
 		// Update completion state (legacy)
 		for _, task := range result.TasksCompleted {
@@ -1156,6 +1170,35 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 	c.logger.Printf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
 }
 
+// updateInstanceMetadata writes the current session status to GCP instance metadata.
+// This is best-effort: errors are logged but never cause the controller to crash.
+func (c *Controller) updateInstanceMetadata(ctx context.Context) {
+	if c.metadataUpdater == nil {
+		return
+	}
+
+	var completed, pending []string
+	for taskID, state := range c.taskStates {
+		switch state.Phase {
+		case PhaseComplete, PhaseNothingToDo:
+			completed = append(completed, taskID)
+		default:
+			pending = append(pending, taskID)
+		}
+	}
+
+	status := gcp.SessionStatusMetadata{
+		Iteration:      c.iteration,
+		MaxIterations:  c.config.MaxIterations,
+		CompletedTasks: completed,
+		PendingTasks:   pending,
+	}
+
+	if err := c.metadataUpdater.UpdateStatus(ctx, status); err != nil {
+		c.logWarning("failed to update instance metadata: %v", err)
+	}
+}
+
 func (c *Controller) shouldTerminate() bool {
 	// Check iteration limit
 	if c.iteration >= c.config.MaxIterations {
@@ -1397,6 +1440,9 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 }
 
 func (c *Controller) emitFinalLogs() {
+	// Final metadata update so the provisioner sees the terminal state
+	c.updateInstanceMetadata(context.Background())
+
 	c.logInfo("=== Session Summary ===")
 	c.logInfo("Session ID: %s", c.config.ID)
 	c.logInfo("Duration: %s", time.Since(c.startTime).Round(time.Second))
@@ -1449,6 +1495,11 @@ func (c *Controller) gracefulShutdown() {
 		c.clearSensitiveData()
 
 		// Step 4: Close clients
+		if c.metadataUpdater != nil {
+			if err := c.metadataUpdater.Close(); err != nil {
+				c.logger.Printf("Warning: failed to close metadata updater: %v", err)
+			}
+		}
 		if c.cloudLogger != nil {
 			if err := c.cloudLogger.Close(); err != nil {
 				c.logger.Printf("Warning: failed to close cloud logger: %v", err)
