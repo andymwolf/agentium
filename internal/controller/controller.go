@@ -92,7 +92,8 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Routing *routing.PhaseRouting `json:"routing,omitempty"`
+	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
+	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -175,6 +176,7 @@ type Controller struct {
 	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
 	modelRouter            *routing.Router     // Phase-to-model routing (nil = no routing)
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
+	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater // Instance metadata updater (nil if unavailable)
 
 	// Shutdown management
@@ -282,6 +284,26 @@ func New(config SessionConfig) (*Controller, error) {
 					return nil, fmt.Errorf("failed to initialize routed adapter %q: %w", name, err)
 				}
 				c.adapters[name] = a
+			}
+		}
+	}
+
+	// Initialize delegation orchestrator
+	if config.Delegation != nil && config.Delegation.Enabled {
+		if config.Delegation.Strategy != "" && config.Delegation.Strategy != "sequential" {
+			c.logWarning("delegation strategy %q not supported, falling back to sequential", config.Delegation.Strategy)
+		}
+		c.orchestrator = NewSubTaskOrchestrator(*config.Delegation, c)
+		// Pre-initialize adapters referenced in delegation config
+		for _, subCfg := range config.Delegation.SubAgents {
+			if subCfg.Agent != "" {
+				if _, exists := c.adapters[subCfg.Agent]; !exists {
+					a, err := agent.Get(subCfg.Agent)
+					if err != nil {
+						return nil, fmt.Errorf("failed to initialize delegated adapter %q: %w", subCfg.Agent, err)
+					}
+					c.adapters[subCfg.Agent] = a
+				}
 			}
 		}
 	}
@@ -1270,6 +1292,15 @@ func (c *Controller) determineActivePhase() string {
 }
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
+	// Check delegation before standard iteration
+	if c.orchestrator != nil {
+		phase := TaskPhase(c.determineActivePhase())
+		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
+			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
+			return c.runDelegatedIteration(ctx, phase, subCfg)
+		}
+	}
+
 	session := &agent.Session{
 		ID:             c.config.ID,
 		Repository:     c.config.Repository,

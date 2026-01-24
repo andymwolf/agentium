@@ -229,6 +229,23 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Propagate delegation config from config file
+	if cfg.Delegation.Enabled {
+		subAgents := make(map[string]provisioner.SubAgentConfig, len(cfg.Delegation.SubAgents))
+		for name, sa := range cfg.Delegation.SubAgents {
+			subAgents[name] = provisioner.SubAgentConfig{
+				Agent:  sa.Agent,
+				Model:  sa.Model,
+				Skills: sa.Skills,
+			}
+		}
+		sessionConfig.Delegation = &provisioner.ProvDelegationConfig{
+			Enabled:   true,
+			Strategy:  cfg.Delegation.Strategy,
+			SubAgents: subAgents,
+		}
+	}
+
 	// Build VM config
 	vmConfig := provisioner.VMConfig{
 		Project:         cfg.Cloud.Project,

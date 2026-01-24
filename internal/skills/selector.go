@@ -36,6 +36,23 @@ func (s *Selector) SkillsForPhase(phase string) []string {
 	return names
 }
 
+// SelectByNames composes skills matching the given names into a single prompt string.
+// Names that don't match any loaded skill are silently skipped.
+// Results are ordered by priority with "\n\n" separators.
+func (s *Selector) SelectByNames(names []string) string {
+	nameSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		nameSet[n] = true
+	}
+	var parts []string
+	for _, skill := range s.skills {
+		if nameSet[skill.Entry.Name] {
+			parts = append(parts, skill.Content)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // matchesPhase returns true if the skill applies to the given phase.
 // Skills with empty Phases are universal and always match.
 func (s *Selector) matchesPhase(skill Skill, phase string) bool {

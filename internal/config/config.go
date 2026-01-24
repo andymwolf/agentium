@@ -8,17 +8,32 @@ import (
 	"github.com/spf13/viper"
 )
 
+// SubAgentConfigYAML specifies agent overrides for a delegated sub-task type in YAML config.
+type SubAgentConfigYAML struct {
+	Agent  string              `mapstructure:"agent"`
+	Model  *routing.ModelConfig `mapstructure:"model"`
+	Skills []string            `mapstructure:"skills"`
+}
+
+// DelegationConfigYAML controls sub-agent delegation in YAML config.
+type DelegationConfigYAML struct {
+	Enabled   bool                          `mapstructure:"enabled"`
+	Strategy  string                        `mapstructure:"strategy"`
+	SubAgents map[string]SubAgentConfigYAML `mapstructure:"sub_agents"`
+}
+
 // Config represents the full Agentium configuration
 type Config struct {
-	Project    ProjectConfig    `mapstructure:"project"`
-	GitHub     GitHubConfig     `mapstructure:"github"`
-	Cloud      CloudConfig      `mapstructure:"cloud"`
-	Defaults   DefaultsConfig   `mapstructure:"defaults"`
-	Session    SessionConfig    `mapstructure:"session"`
-	Controller ControllerConfig `mapstructure:"controller"`
-	Claude     ClaudeConfig     `mapstructure:"claude"`
-	Prompts    PromptsConfig    `mapstructure:"prompts"`
+	Project    ProjectConfig        `mapstructure:"project"`
+	GitHub     GitHubConfig         `mapstructure:"github"`
+	Cloud      CloudConfig          `mapstructure:"cloud"`
+	Defaults   DefaultsConfig       `mapstructure:"defaults"`
+	Session    SessionConfig        `mapstructure:"session"`
+	Controller ControllerConfig     `mapstructure:"controller"`
+	Claude     ClaudeConfig         `mapstructure:"claude"`
+	Prompts    PromptsConfig        `mapstructure:"prompts"`
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
+	Delegation DelegationConfigYAML `mapstructure:"delegation"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings
