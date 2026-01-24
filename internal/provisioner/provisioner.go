@@ -43,6 +43,11 @@ type ClaudeAuthConfig struct {
 	AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 }
 
+// CodexAuthConfig contains Codex authentication configuration for the VM
+type CodexAuthConfig struct {
+	AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+}
+
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
 	ID            string                `json:"id"`
@@ -55,8 +60,9 @@ type SessionConfig struct {
 	Prompt        string                `json:"prompt"`
 	GitHub        GitHubConfig          `json:"github"`
 	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
-	Routing    *routing.PhaseRouting    `json:"routing,omitempty"`
-	Delegation *ProvDelegationConfig   `json:"delegation,omitempty"`
+	CodexAuth     CodexAuthConfig       `json:"codex_auth,omitempty"`
+	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
+	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 }
 
 // SubAgentConfig specifies agent overrides for a delegated sub-task type.

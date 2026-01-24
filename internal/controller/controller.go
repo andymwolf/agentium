@@ -108,6 +108,9 @@ type SessionConfig struct {
 		AuthMode       string `json:"auth_mode"`
 		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 	} `json:"claude_auth"`
+	CodexAuth struct {
+		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+	} `json:"codex_auth"`
 	Prompts struct {
 		SystemMDURL  string `json:"system_md_url,omitempty"`
 		FetchTimeout string `json:"fetch_timeout,omitempty"` // Duration string (e.g. "5s", "10s")
@@ -1582,6 +1585,9 @@ func (c *Controller) clearSensitiveData() {
 
 	// Clear Claude auth data
 	c.config.ClaudeAuth.AuthJSONBase64 = ""
+
+	// Clear Codex auth data
+	c.config.CodexAuth.AuthJSONBase64 = ""
 
 	// Clear GitHub app credentials
 	c.config.GitHub.PrivateKeySecret = ""

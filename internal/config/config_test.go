@@ -117,6 +117,19 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid codex agent",
+			config: Config{
+				Cloud: CloudConfig{
+					Provider: "gcp",
+					Region:   "us-central1",
+				},
+				Session: SessionConfig{
+					Agent: "codex",
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "valid duration format",
 			config: Config{
 				Cloud: CloudConfig{

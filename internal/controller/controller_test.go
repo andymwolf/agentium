@@ -856,6 +856,52 @@ func containsString(s, substr string) bool {
 	return false
 }
 
+func TestCodexAuthConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		envValue   string
+		wantBase64 string
+	}{
+		{
+			name: "codex auth parsed from config",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo",
+				"codex_auth": {"auth_json_base64": "eyJhY2Nlc3NfdG9rZW4iOiAidGVzdCJ9"}
+			}`,
+			wantBase64: "eyJhY2Nlc3NfdG9rZW4iOiAidGVzdCJ9",
+		},
+		{
+			name: "empty when not provided",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo"
+			}`,
+			wantBase64: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == "AGENTIUM_SESSION_CONFIG" {
+					return tt.envValue
+				}
+				return ""
+			}
+			readFile := func(path string) ([]byte, error) {
+				return nil, fmt.Errorf("should not be called")
+			}
+
+			config, err := LoadConfigFromEnv(getenv, readFile)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if config.CodexAuth.AuthJSONBase64 != tt.wantBase64 {
+				t.Errorf("CodexAuth.AuthJSONBase64 = %q, want %q", config.CodexAuth.AuthJSONBase64, tt.wantBase64)
+			}
+		})
+	}
+}
+
 func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 	tests := []struct {
 		name        string

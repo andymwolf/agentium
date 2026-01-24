@@ -45,9 +45,13 @@ cloud:
 
 # Default session settings
 defaults:
-  agent: "claude-code"              # Default agent: claude-code, aider
+  agent: "claude-code"              # Default agent: claude-code, aider, codex
   max_iterations: 30                # Maximum agent iterations per session
   max_duration: "2h"                # Maximum session duration (Go duration format)
+
+# Codex agent authentication
+codex:
+  auth_json_path: "~/.codex/auth.json"  # Path to Codex OAuth credentials
 
 # Claude AI authentication
 claude:
@@ -141,9 +145,24 @@ delegation:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `agent` | string | No | `claude-code` | Default agent adapter |
+| `agent` | string | No | `claude-code` | Default agent adapter (`claude-code`, `aider`, `codex`) |
 | `max_iterations` | int | No | `30` | Max iterations before session termination |
 | `max_duration` | string | No | `2h` | Max session duration (Go duration: `30m`, `2h`, `4h`) |
+
+### codex
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `auth_json_path` | string | No | `~/.codex/auth.json` | Path to Codex OAuth credentials file. On macOS, Agentium also checks the Keychain. |
+
+Example:
+
+```yaml
+codex:
+  auth_json_path: "~/.codex/auth.json"
+```
+
+> **Note:** To set up Codex credentials, install Codex (`npm install -g @openai/codex`) and run `codex --login`. Agentium reads the cached credentials and transfers them to the VM automatically.
 
 ### claude
 
