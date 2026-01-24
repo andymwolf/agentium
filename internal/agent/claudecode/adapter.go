@@ -171,12 +171,12 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 		}
 	}
 
-	// Look for created PRs in output
-	prPattern := regexp.MustCompile(`(?:Created|Opened|PR|pull request)[^\d]*#?(\d+)`)
+	// Look for created PRs in output (require "Created" or "Opened" verb to avoid matching issue references)
+	prPattern := regexp.MustCompile(`(?:Created|Opened)\s+(?:pull request|PR)[^\d]*#?(\d+)`)
 	matches := prPattern.FindAllStringSubmatch(stdout+stderr, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
-			result.PRsCreated = append(result.PRsCreated, match[1])
+			result.PRsCreated = appendUnique(result.PRsCreated, match[1])
 		}
 	}
 
@@ -185,17 +185,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	urlMatches := urlPattern.FindAllStringSubmatch(stdout+stderr, -1)
 	for _, match := range urlMatches {
 		if len(match) > 1 {
-			// Avoid duplicates
-			found := false
-			for _, pr := range result.PRsCreated {
-				if pr == match[1] {
-					found = true
-					break
-				}
-			}
-			if !found {
-				result.PRsCreated = append(result.PRsCreated, match[1])
-			}
+			result.PRsCreated = appendUnique(result.PRsCreated, match[1])
 		}
 	}
 
@@ -255,6 +245,16 @@ func (a *Adapter) Validate() error {
 		return fmt.Errorf("container image is required")
 	}
 	return nil
+}
+
+// appendUnique appends value to slice only if not already present.
+func appendUnique(slice []string, value string) []string {
+	for _, v := range slice {
+		if v == value {
+			return slice
+		}
+	}
+	return append(slice, value)
 }
 
 func init() {

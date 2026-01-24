@@ -579,6 +579,77 @@ func TestAdapter_ParseOutput(t *testing.T) {
 	}
 }
 
+func TestAdapter_ParseOutput_PRDetectionRegex(t *testing.T) {
+	a := New()
+
+	tests := []struct {
+		name    string
+		stdout  string
+		wantPRs []string
+	}{
+		{
+			name:    "Created pull request detected",
+			stdout:  "Created pull request #110",
+			wantPRs: []string{"110"},
+		},
+		{
+			name:    "Opened PR detected",
+			stdout:  "Opened PR #42",
+			wantPRs: []string{"42"},
+		},
+		{
+			name:    "bare PR reference not detected",
+			stdout:  "This PR closes #24",
+			wantPRs: nil,
+		},
+		{
+			name:    "issue reference after PR keyword not detected",
+			stdout:  "PR fixes #9\nUpdated PR for issue #24",
+			wantPRs: nil,
+		},
+		{
+			name:    "PR URL still detected",
+			stdout:  "See https://github.com/org/repo/pull/110",
+			wantPRs: []string{"110"},
+		},
+		{
+			name:    "duplicate PRs deduplicated",
+			stdout:  "Created PR #110\nCreated pull request #110\nhttps://github.com/org/repo/pull/110",
+			wantPRs: []string{"110"},
+		},
+		{
+			name:    "mixed real and issue refs - only real PRs",
+			stdout:  "Created PR #110 that closes #24\nPR references issue #9",
+			wantPRs: []string{"110"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := a.ParseOutput(0, tt.stdout, "")
+			if err != nil {
+				t.Fatalf("ParseOutput() returned error: %v", err)
+			}
+
+			if len(tt.wantPRs) == 0 {
+				if len(result.PRsCreated) != 0 {
+					t.Errorf("PRsCreated = %v, want empty", result.PRsCreated)
+				}
+			} else {
+				if len(result.PRsCreated) != len(tt.wantPRs) {
+					t.Errorf("PRsCreated = %v, want %v", result.PRsCreated, tt.wantPRs)
+				} else {
+					for i, pr := range tt.wantPRs {
+						if result.PRsCreated[i] != pr {
+							t.Errorf("PRsCreated[%d] = %q, want %q", i, result.PRsCreated[i], pr)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestAdapter_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
