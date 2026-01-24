@@ -5,10 +5,13 @@ package skills
 //go:generate cp ../../prompts/skills/environment.md environment.md
 //go:generate cp ../../prompts/skills/status_signals.md status_signals.md
 //go:generate cp ../../prompts/skills/planning.md planning.md
+//go:generate cp ../../prompts/skills/plan.md plan.md
 //go:generate cp ../../prompts/skills/implement.md implement.md
 //go:generate cp ../../prompts/skills/test.md test.md
 //go:generate cp ../../prompts/skills/pr_creation.md pr_creation.md
+//go:generate cp ../../prompts/skills/review.md review.md
 //go:generate cp ../../prompts/skills/pr_review.md pr_review.md
+//go:generate cp ../../prompts/skills/evaluate.md evaluate.md
 
 import (
 	_ "embed"
@@ -33,6 +36,9 @@ var embeddedStatusSignals string
 //go:embed planning.md
 var embeddedPlanning string
 
+//go:embed plan.md
+var embeddedPlan string
+
 //go:embed implement.md
 var embeddedImplement string
 
@@ -42,8 +48,14 @@ var embeddedTest string
 //go:embed pr_creation.md
 var embeddedPRCreation string
 
+//go:embed review.md
+var embeddedReview string
+
 //go:embed pr_review.md
 var embeddedPRReview string
+
+//go:embed evaluate.md
+var embeddedEvaluate string
 
 // skillFiles maps filenames to their embedded content.
 var skillFiles = map[string]string{
@@ -51,10 +63,13 @@ var skillFiles = map[string]string{
 	"environment.md":    embeddedEnvironment,
 	"status_signals.md": embeddedStatusSignals,
 	"planning.md":       embeddedPlanning,
+	"plan.md":           embeddedPlan,
 	"implement.md":      embeddedImplement,
 	"test.md":           embeddedTest,
 	"pr_creation.md":    embeddedPRCreation,
+	"review.md":         embeddedReview,
 	"pr_review.md":      embeddedPRReview,
+	"evaluate.md":       embeddedEvaluate,
 }
 
 // LoadManifest parses the embedded manifest YAML.

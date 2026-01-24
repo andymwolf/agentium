@@ -21,6 +21,12 @@ skills:
       - IMPLEMENT
       - ANALYZE
 
+  - name: plan
+    file: plan.md
+    priority: 45
+    phases:
+      - PLAN
+
   - name: implement
     file: implement.md
     priority: 50
@@ -40,9 +46,21 @@ skills:
     phases:
       - PR_CREATION
 
+  - name: review
+    file: review.md
+    priority: 75
+    phases:
+      - REVIEW
+
   - name: pr_review
     file: pr_review.md
     priority: 80
     phases:
       - ANALYZE
       - PUSH
+
+  - name: evaluate
+    file: evaluate.md
+    priority: 90
+    phases:
+      - EVALUATE

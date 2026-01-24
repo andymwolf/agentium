@@ -94,3 +94,28 @@ echo "AGENTIUM_MEMORY: ERROR Integration tests require REDIS_URL env var"
 2. **Signal pending steps** - Helps the next iteration know where to continue
 3. **Record decisions** - Avoids re-evaluating the same choices across iterations
 4. **Note key facts** - Especially about the codebase structure or API contracts
+
+## EVALUATOR SIGNALING
+
+When acting as a phase evaluator, emit a verdict signal to indicate whether the phase should advance, iterate, or is blocked.
+
+Format: `AGENTIUM_EVAL: VERDICT [optional feedback]`
+
+### Verdicts
+
+- `AGENTIUM_EVAL: ADVANCE` - Phase output is acceptable, move to next phase
+- `AGENTIUM_EVAL: ITERATE <feedback>` - Phase needs another iteration with the given feedback
+- `AGENTIUM_EVAL: BLOCKED <reason>` - Cannot proceed without human intervention
+
+### Examples
+
+```
+# Phase completed successfully
+AGENTIUM_EVAL: ADVANCE
+
+# Tests failed, need fixes
+AGENTIUM_EVAL: ITERATE Tests failed in auth/handler_test.go - fix the nil pointer in TestLogin
+
+# Cannot proceed
+AGENTIUM_EVAL: BLOCKED Issue requirements are ambiguous - need clarification on auth method
+```

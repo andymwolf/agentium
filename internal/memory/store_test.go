@@ -185,6 +185,62 @@ func TestResolvePending_SameBatchResolution(t *testing.T) {
 	}
 }
 
+func TestClearByType(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{
+		{Type: KeyFact, Content: "fact1"},
+		{Type: EvalFeedback, Content: "fix the nil pointer"},
+		{Type: KeyFact, Content: "fact2"},
+		{Type: EvalFeedback, Content: "add error handling"},
+		{Type: Decision, Content: "use JWT"},
+	}, 1, "issue:42")
+
+	if len(s.Entries()) != 5 {
+		t.Fatalf("expected 5 entries, got %d", len(s.Entries()))
+	}
+
+	s.ClearByType(EvalFeedback)
+
+	entries := s.Entries()
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries after ClearByType, got %d", len(entries))
+	}
+
+	for _, e := range entries {
+		if e.Type == EvalFeedback {
+			t.Error("found EvalFeedback entry after ClearByType")
+		}
+	}
+}
+
+func TestClearByType_NoMatch(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{
+		{Type: KeyFact, Content: "fact1"},
+		{Type: Decision, Content: "decision1"},
+	}, 1, "issue:1")
+
+	s.ClearByType(EvalFeedback) // No EvalFeedback entries exist
+
+	if len(s.Entries()) != 2 {
+		t.Errorf("expected 2 entries (unchanged), got %d", len(s.Entries()))
+	}
+}
+
+func TestClearByType_AllMatch(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{
+		{Type: EvalFeedback, Content: "feedback1"},
+		{Type: EvalFeedback, Content: "feedback2"},
+	}, 1, "issue:1")
+
+	s.ClearByType(EvalFeedback)
+
+	if len(s.Entries()) != 0 {
+		t.Errorf("expected 0 entries after clearing all, got %d", len(s.Entries()))
+	}
+}
+
 func TestLoad_ExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	agentiumDir := filepath.Join(dir, ".agentium")

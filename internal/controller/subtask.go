@@ -11,10 +11,12 @@ const (
 	SubTaskTest      SubTaskType = "test"
 	SubTaskReview    SubTaskType = "review"
 	SubTaskPush      SubTaskType = "push"
+	SubTaskEvaluate  SubTaskType = "evaluate"
 )
 
 // phaseToSubTask maps controller task phases to sub-task types.
 var phaseToSubTask = map[TaskPhase]SubTaskType{
+	PhasePlan:       SubTaskPlan,
 	PhaseImplement:  SubTaskImplement,
 	PhaseTest:       SubTaskTest,
 	PhasePRCreation: SubTaskReview,

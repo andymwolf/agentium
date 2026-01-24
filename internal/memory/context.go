@@ -7,6 +7,8 @@ import (
 
 // sectionOrder defines the priority of sections in the context output.
 var sectionOrder = []SignalType{
+	EvalFeedback,
+	PhaseResult,
 	StepPending,
 	KeyFact,
 	Decision,
@@ -16,6 +18,8 @@ var sectionOrder = []SignalType{
 }
 
 var sectionHeaders = map[SignalType]string{
+	EvalFeedback: "Evaluator Feedback",
+	PhaseResult:  "Phase Results",
 	StepPending:  "Pending Steps",
 	KeyFact:      "Key Facts",
 	Decision:     "Decisions",

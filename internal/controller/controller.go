@@ -38,6 +38,7 @@ const (
 type TaskPhase string
 
 const (
+	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
 	PhaseTest        TaskPhase = "TEST"
 	PhasePRCreation  TaskPhase = "PR_CREATION"
@@ -52,12 +53,25 @@ const (
 
 // TaskState tracks the current state of a task being worked on
 type TaskState struct {
-	ID           string
-	Type         string // "issue" or "pr"
-	Phase        TaskPhase
-	TestRetries  int
-	LastStatus   string
-	PRNumber     string // Linked PR number (for issues that create PRs)
+	ID               string
+	Type             string // "issue" or "pr"
+	Phase            TaskPhase
+	TestRetries      int
+	LastStatus       string
+	PRNumber         string // Linked PR number (for issues that create PRs)
+	PhaseIteration   int    // Current iteration within the active phase (phase loop)
+	MaxPhaseIter     int    // Max iterations for current phase (phase loop)
+	LastEvalVerdict  string // Last evaluator verdict (ADVANCE, ITERATE, BLOCKED)
+	LastEvalFeedback string // Last evaluator feedback text
+}
+
+// PhaseLoopConfig controls the controller-as-judge phase loop behavior.
+type PhaseLoopConfig struct {
+	Enabled             bool `json:"enabled"`
+	PlanMaxIterations   int  `json:"plan_max_iterations,omitempty"`
+	BuildMaxIterations  int  `json:"build_max_iterations,omitempty"`
+	TestMaxIterations   int  `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations int  `json:"review_max_iterations,omitempty"`
 }
 
 // SessionConfig is the configuration passed to the controller
@@ -93,6 +107,7 @@ type SessionConfig struct {
 	} `json:"memory,omitempty"`
 	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
+	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -258,11 +273,15 @@ func New(config SessionConfig) (*Controller, error) {
 		}
 		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "pr", ID: pr})
 	}
+	initialIssuePhase := PhaseImplement
+	if c.isPhaseLoopEnabled() {
+		initialIssuePhase = PhasePlan
+	}
 	for _, task := range config.Tasks {
 		c.taskStates[fmt.Sprintf("issue:%s", task)] = &TaskState{
 			ID:    task,
 			Type:  "issue",
-			Phase: PhaseImplement,
+			Phase: initialIssuePhase,
 		}
 		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "issue", ID: task})
 	}
@@ -274,7 +293,7 @@ func New(config SessionConfig) (*Controller, error) {
 	}
 	if c.modelRouter.IsConfigured() {
 		if unknowns := c.modelRouter.UnknownPhases(); len(unknowns) > 0 {
-			c.logWarning("routing config references unknown phases: %v (valid: IMPLEMENT, TEST, PR_CREATION, REVIEW, ANALYZE, PUSH)", unknowns)
+			c.logWarning("routing config references unknown phases: %v (valid: PLAN, IMPLEMENT, TEST, PR_CREATION, REVIEW, EVALUATE, ANALYZE, PUSH)", unknowns)
 		}
 		for _, name := range c.modelRouter.Adapters() {
 			if _, exists := c.adapters[name]; !exists {
@@ -449,6 +468,14 @@ func (c *Controller) Run(ctx context.Context) error {
 			existingWork := c.detectExistingWork(ctx, nextTask.ID)
 			c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork)
 			c.activeTaskExistingWork = existingWork
+
+			// Use phase loop if enabled for issue tasks
+			if c.isPhaseLoopEnabled() {
+				if err := c.runPhaseLoop(ctx); err != nil {
+					c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
+				}
+				continue
+			}
 		}
 
 		c.iteration++
@@ -1282,6 +1309,11 @@ func (c *Controller) shouldTerminate() bool {
 	}
 
 	return false
+}
+
+// isPhaseLoopEnabled returns true if the phase loop is configured and enabled.
+func (c *Controller) isPhaseLoopEnabled() bool {
+	return c.config.PhaseLoop != nil && c.config.PhaseLoop.Enabled
 }
 
 // determineActivePhase returns the current phase for the active task.

@@ -76,3 +76,27 @@ func TestParseSignals_EmptyOutput(t *testing.T) {
 		t.Fatalf("expected 0 signals for empty output, got %d", len(signals))
 	}
 }
+
+func TestParseSignals_NewSignalTypes(t *testing.T) {
+	output := `AGENTIUM_MEMORY: EVAL_FEEDBACK fix the nil pointer in TestLogin
+AGENTIUM_MEMORY: PHASE_RESULT IMPLEMENT completed (iteration 2)`
+
+	signals := ParseSignals(output)
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals, got %d", len(signals))
+	}
+
+	if signals[0].Type != EvalFeedback {
+		t.Errorf("signal[0].Type = %q, want %q", signals[0].Type, EvalFeedback)
+	}
+	if signals[0].Content != "fix the nil pointer in TestLogin" {
+		t.Errorf("signal[0].Content = %q, want %q", signals[0].Content, "fix the nil pointer in TestLogin")
+	}
+
+	if signals[1].Type != PhaseResult {
+		t.Errorf("signal[1].Type = %q, want %q", signals[1].Type, PhaseResult)
+	}
+	if signals[1].Content != "IMPLEMENT completed (iteration 2)" {
+		t.Errorf("signal[1].Content = %q, want %q", signals[1].Content, "IMPLEMENT completed (iteration 2)")
+	}
+}
