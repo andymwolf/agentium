@@ -129,13 +129,23 @@ claude_auth_mode   = "%s"
 	}, nil
 }
 
+// buildListArgs constructs the gcloud arguments for listing instances.
+func (p *GCPProvisioner) buildListArgs() []string {
+	args := []string{"compute", "instances", "list",
+		"--filter=labels.agentium=true",
+		"--format=json",
+	}
+	if p.project != "" {
+		args = append(args, fmt.Sprintf("--project=%s", p.project))
+	}
+	return args
+}
+
 // List returns all active Agentium sessions on GCP
 func (p *GCPProvisioner) List(ctx context.Context) ([]SessionStatus, error) {
 	// List all instances with the agentium label
-	cmd := exec.CommandContext(ctx, "gcloud", "compute", "instances", "list",
-		"--filter=labels.agentium=true",
-		"--format=json",
-	)
+	args := p.buildListArgs()
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -218,13 +228,23 @@ func (p *GCPProvisioner) List(ctx context.Context) ([]SessionStatus, error) {
 	return sessions, nil
 }
 
+// buildStatusArgs constructs the gcloud arguments for describing an instance.
+func (p *GCPProvisioner) buildStatusArgs(sessionID string) []string {
+	args := []string{"compute", "instances", "describe",
+		sessionID,
+		"--format=json",
+	}
+	if p.project != "" {
+		args = append(args, fmt.Sprintf("--project=%s", p.project))
+	}
+	return args
+}
+
 // Status gets the current status of a GCP session
 func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*SessionStatus, error) {
 	// Get instance status via gcloud
-	cmd := exec.CommandContext(ctx, "gcloud", "compute", "instances", "describe",
-		sessionID,
-		"--format=json",
-	)
+	args := p.buildStatusArgs(sessionID)
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -445,6 +465,18 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 	return logCh, errCh
 }
 
+// buildDestroyArgs constructs the gcloud arguments for deleting an instance.
+func (p *GCPProvisioner) buildDestroyArgs(sessionID string) []string {
+	args := []string{"compute", "instances", "delete",
+		sessionID,
+		"--quiet",
+	}
+	if p.project != "" {
+		args = append(args, fmt.Sprintf("--project=%s", p.project))
+	}
+	return args
+}
+
 // Destroy terminates a GCP session
 func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 	workDir := filepath.Join(os.TempDir(), "agentium", sessionID)
@@ -465,10 +497,8 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 	}
 
 	// Use gcloud to delete the instance
-	cmd := exec.CommandContext(ctx, "gcloud", "compute", "instances", "delete",
-		sessionID,
-		"--quiet",
-	)
+	args := p.buildDestroyArgs(sessionID)
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 
 	if p.verbose {
 		cmd.Stdout = os.Stdout

@@ -200,6 +200,141 @@ func TestProvisionResult(t *testing.T) {
 	}
 }
 
+func TestBuildListArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		project  string
+		wantArgs []string
+	}{
+		{
+			name:    "includes project flag when set",
+			project: "my-gcp-project",
+			wantArgs: []string{
+				"compute", "instances", "list",
+				"--filter=labels.agentium=true",
+				"--format=json",
+				"--project=my-gcp-project",
+			},
+		},
+		{
+			name:    "no project flag when empty",
+			project: "",
+			wantArgs: []string{
+				"compute", "instances", "list",
+				"--filter=labels.agentium=true",
+				"--format=json",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &GCPProvisioner{project: tt.project}
+			got := p.buildListArgs()
+			if len(got) != len(tt.wantArgs) {
+				t.Fatalf("buildListArgs() returned %d args, want %d\ngot:  %v\nwant: %v", len(got), len(tt.wantArgs), got, tt.wantArgs)
+			}
+			for i := range got {
+				if got[i] != tt.wantArgs[i] {
+					t.Errorf("arg[%d] = %q, want %q", i, got[i], tt.wantArgs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBuildStatusArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		project   string
+		sessionID string
+		wantArgs  []string
+	}{
+		{
+			name:      "includes project flag when set",
+			project:   "my-gcp-project",
+			sessionID: "agentium-session-123",
+			wantArgs: []string{
+				"compute", "instances", "describe",
+				"agentium-session-123",
+				"--format=json",
+				"--project=my-gcp-project",
+			},
+		},
+		{
+			name:      "no project flag when empty",
+			project:   "",
+			sessionID: "agentium-session-123",
+			wantArgs: []string{
+				"compute", "instances", "describe",
+				"agentium-session-123",
+				"--format=json",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &GCPProvisioner{project: tt.project}
+			got := p.buildStatusArgs(tt.sessionID)
+			if len(got) != len(tt.wantArgs) {
+				t.Fatalf("buildStatusArgs() returned %d args, want %d\ngot:  %v\nwant: %v", len(got), len(tt.wantArgs), got, tt.wantArgs)
+			}
+			for i := range got {
+				if got[i] != tt.wantArgs[i] {
+					t.Errorf("arg[%d] = %q, want %q", i, got[i], tt.wantArgs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBuildDestroyArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		project   string
+		sessionID string
+		wantArgs  []string
+	}{
+		{
+			name:      "includes project flag when set",
+			project:   "my-gcp-project",
+			sessionID: "agentium-session-456",
+			wantArgs: []string{
+				"compute", "instances", "delete",
+				"agentium-session-456",
+				"--quiet",
+				"--project=my-gcp-project",
+			},
+		},
+		{
+			name:      "no project flag when empty",
+			project:   "",
+			sessionID: "agentium-session-456",
+			wantArgs: []string{
+				"compute", "instances", "delete",
+				"agentium-session-456",
+				"--quiet",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &GCPProvisioner{project: tt.project}
+			got := p.buildDestroyArgs(tt.sessionID)
+			if len(got) != len(tt.wantArgs) {
+				t.Fatalf("buildDestroyArgs() returned %d args, want %d\ngot:  %v\nwant: %v", len(got), len(tt.wantArgs), got, tt.wantArgs)
+			}
+			for i := range got {
+				if got[i] != tt.wantArgs[i] {
+					t.Errorf("arg[%d] = %q, want %q", i, got[i], tt.wantArgs[i])
+				}
+			}
+		})
+	}
+}
+
 func TestBuildLogsArgs(t *testing.T) {
 	tests := []struct {
 		name      string
