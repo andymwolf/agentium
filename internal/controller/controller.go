@@ -1189,6 +1189,15 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 		state.Phase = PhaseAnalyze
 	}
 
+	// Fallback: if no explicit status signal but PRs were detected for an issue task,
+	// treat the task as complete. This handles agents that create PRs without emitting
+	// the AGENTIUM_STATUS: PR_CREATED signal.
+	if result.AgentStatus == "" && state.Type == "issue" && len(result.PRsCreated) > 0 {
+		state.Phase = PhaseComplete
+		state.PRNumber = result.PRsCreated[0]
+		c.logger.Printf("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
+	}
+
 	state.LastStatus = result.AgentStatus
 	c.logger.Printf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
 }
