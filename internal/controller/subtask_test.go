@@ -13,7 +13,7 @@ func TestPhaseToSubTask_AllConfiguredPhases(t *testing.T) {
 		PhaseTest:       SubTaskTest,
 		PhasePRCreation: SubTaskReview,
 		PhaseAnalyze:    SubTaskPlan,
-		PhasePush:       SubTaskReview,
+		PhasePush:       SubTaskPush,
 	}
 
 	for phase, want := range expected {

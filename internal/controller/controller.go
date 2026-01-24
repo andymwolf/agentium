@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -1366,110 +1365,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
 
-	// Authenticate with GHCR if needed (once per session)
-	if !c.dockerAuthed && strings.Contains(activeAgent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
-		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
-			"-u", "x-access-token", "--password-stdin")
-		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
-		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logger.Printf("Warning: docker login to ghcr.io failed: %v (%s)", err, string(out))
-		} else {
-			c.dockerAuthed = true
-		}
-	}
-
-	// Run agent container
-	args := []string{
-		"run", "--rm",
-		"-v", fmt.Sprintf("%s:/workspace", c.workDir),
-		"-w", "/workspace",
-	}
-
-	// Add environment variables
-	for k, v := range env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
-	}
-
-	// Mount Claude credentials for OAuth mode
-	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
-	}
-
-	// Add image and command
-	args = append(args, activeAgent.ContainerImage())
-	args = append(args, command...)
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-
-	// Capture output
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	// Read output
-	stdoutBytes, _ := io.ReadAll(stdout)
-	stderrBytes, _ := io.ReadAll(stderr)
-
-	err = cmd.Wait()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-	}
-
-	// Log agent output for debugging
-	if exitCode != 0 {
-		stderrStr := string(stderrBytes)
-		stdoutStr := string(stdoutBytes)
-		if len(stderrStr) > 500 {
-			stderrStr = stderrStr[:500]
-		}
-		if len(stdoutStr) > 500 {
-			stdoutStr = stdoutStr[:500]
-		}
-		c.logger.Printf("Agent exited with code %d", exitCode)
-		if stderrStr != "" {
-			c.logger.Printf("Agent stderr: %s", stderrStr)
-		}
-		if stdoutStr != "" {
-			c.logger.Printf("Agent stdout: %s", stdoutStr)
-		}
-	}
-
-	// Parse output
-	result, parseErr := activeAgent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
-	if parseErr != nil {
-		return nil, parseErr
-	}
-
-	// Parse memory signals and persist
-	if c.memoryStore != nil {
-		signals := memory.ParseSignals(string(stdoutBytes) + string(stderrBytes))
-		if len(signals) > 0 {
-			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
-			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
-			if pruned > 0 {
-				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)
-			}
-			if err := c.memoryStore.Save(); err != nil {
-				c.logWarning("failed to save memory store: %v", err)
-			} else {
-				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
-			}
-		}
-	}
-
-	return result, nil
+	return c.runAgentContainer(ctx, containerRunParams{
+		Agent:   activeAgent,
+		Session: session,
+		Env:     env,
+		Command: command,
+		LogTag:  "Agent",
+	})
 }
 
 func (c *Controller) emitFinalLogs() {

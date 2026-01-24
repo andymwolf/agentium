@@ -46,6 +46,7 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 				SubTaskTest:      {Agent: "aider", Model: testModel},
 				SubTaskReview:    {Agent: "claude-code", Skills: []string{"pr_review"}},
 				SubTaskPlan:      {Agent: "claude-code", Skills: []string{"planning"}},
+				SubTaskPush:      {Agent: "claude-code", Skills: []string{"push"}},
 			},
 		},
 	}
@@ -59,7 +60,7 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 		{PhaseTest, "aider", "claude-sonnet-4-20250514"},
 		{PhasePRCreation, "claude-code", ""},  // review type
 		{PhaseAnalyze, "claude-code", ""},      // plan type
-		{PhasePush, "claude-code", ""},          // review type
+		{PhasePush, "claude-code", ""},          // push type
 	}
 
 	for _, tt := range tests {
@@ -107,5 +108,8 @@ func TestConfigForPhase_PartialDelegation(t *testing.T) {
 	}
 	if cfg := orch.ConfigForPhase(PhaseAnalyze); cfg != nil {
 		t.Errorf("ConfigForPhase(ANALYZE) = %+v, want nil (plan not configured)", cfg)
+	}
+	if cfg := orch.ConfigForPhase(PhasePush); cfg != nil {
+		t.Errorf("ConfigForPhase(PUSH) = %+v, want nil (push not configured)", cfg)
 	}
 }
