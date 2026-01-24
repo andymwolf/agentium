@@ -67,11 +67,12 @@ type TaskState struct {
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	Enabled             bool `json:"enabled"`
-	PlanMaxIterations   int  `json:"plan_max_iterations,omitempty"`
-	BuildMaxIterations  int  `json:"build_max_iterations,omitempty"`
-	TestMaxIterations   int  `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations int  `json:"review_max_iterations,omitempty"`
+	Enabled                 bool `json:"enabled"`
+	PlanMaxIterations       int  `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations  int  `json:"implement_max_iterations,omitempty"`
+	TestMaxIterations       int  `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations     int  `json:"review_max_iterations,omitempty"`
+	EvalContextBudget       int  `json:"eval_context_budget,omitempty"`
 }
 
 // SessionConfig is the configuration passed to the controller

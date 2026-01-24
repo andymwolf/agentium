@@ -120,6 +120,15 @@ func (c *Controller) runEvaluator(ctx context.Context, completedPhase TaskPhase,
 	return evalResult, nil
 }
 
+// evalContextBudget returns the configured max characters for evaluator context,
+// falling back to the default when not specified.
+func (c *Controller) evalContextBudget() int {
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalContextBudget > 0 {
+		return c.config.PhaseLoop.EvalContextBudget
+	}
+	return defaultEvalContextBudget
+}
+
 // buildEvalPrompt composes the evaluator prompt with phase context.
 func (c *Controller) buildEvalPrompt(phase TaskPhase, phaseOutput string) string {
 	var sb strings.Builder
@@ -130,9 +139,10 @@ func (c *Controller) buildEvalPrompt(phase TaskPhase, phaseOutput string) string
 
 	sb.WriteString("## Phase Output\n\n")
 	// Truncate very long outputs to avoid exceeding context
+	budget := c.evalContextBudget()
 	output := phaseOutput
-	if len(output) > 8000 {
-		output = output[:8000] + "\n\n... (output truncated)"
+	if len(output) > budget {
+		output = output[:budget] + "\n\n... (output truncated)"
 	}
 	sb.WriteString("```\n")
 	sb.WriteString(output)

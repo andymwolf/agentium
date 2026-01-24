@@ -1,6 +1,9 @@
 package controller
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestPostPhaseComment_OnlyForIssues(t *testing.T) {
 	// postPhaseComment should be a no-op for PR tasks
@@ -10,7 +13,7 @@ func TestPostPhaseComment_OnlyForIssues(t *testing.T) {
 	}
 
 	// Should not panic or crash - just return silently
-	c.postPhaseComment(nil, PhaseImplement, 1, "test summary")
+	c.postPhaseComment(context.Background(), PhaseImplement, 1, "test summary")
 }
 
 func TestPostEvalComment_OnlyForIssues(t *testing.T) {
@@ -21,7 +24,7 @@ func TestPostEvalComment_OnlyForIssues(t *testing.T) {
 	}
 
 	// Should not panic or crash - just return silently
-	c.postEvalComment(nil, PhaseTest, EvalResult{Verdict: VerdictAdvance})
+	c.postEvalComment(context.Background(), PhaseTest, EvalResult{Verdict: VerdictAdvance})
 }
 
 func TestEvalResultFormatting(t *testing.T) {

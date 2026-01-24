@@ -111,7 +111,7 @@ func (s *Store) Entries() []Entry {
 
 // ClearByType removes all entries matching the given signal type.
 func (s *Store) ClearByType(signalType SignalType) {
-	filtered := s.data.Entries[:0]
+	filtered := make([]Entry, 0, len(s.data.Entries))
 	for _, e := range s.data.Entries {
 		if e.Type != signalType {
 			filtered = append(filtered, e)

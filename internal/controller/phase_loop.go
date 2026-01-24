@@ -18,12 +18,15 @@ var issuePhaseOrder = []TaskPhase{
 
 // Default max iterations per phase when not configured.
 const (
-	defaultPlanMaxIter   = 3
-	defaultBuildMaxIter  = 5
-	defaultTestMaxIter   = 5
-	defaultReviewMaxIter = 3
-	defaultPRMaxIter     = 1
+	defaultPlanMaxIter      = 3
+	defaultImplementMaxIter = 5
+	defaultTestMaxIter      = 5
+	defaultReviewMaxIter    = 3
+	defaultPRMaxIter        = 1
 )
+
+// defaultEvalContextBudget is the default max characters of phase output sent to the evaluator.
+const defaultEvalContextBudget = 8000
 
 // phaseMaxIterations returns the configured max iterations for a phase,
 // falling back to defaults when not specified.
@@ -38,8 +41,8 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase) int {
 			return cfg.PlanMaxIterations
 		}
 	case PhaseImplement:
-		if cfg.BuildMaxIterations > 0 {
-			return cfg.BuildMaxIterations
+		if cfg.ImplementMaxIterations > 0 {
+			return cfg.ImplementMaxIterations
 		}
 	case PhaseTest:
 		if cfg.TestMaxIterations > 0 {
@@ -58,7 +61,7 @@ func defaultMaxIter(phase TaskPhase) int {
 	case PhasePlan:
 		return defaultPlanMaxIter
 	case PhaseImplement:
-		return defaultBuildMaxIter
+		return defaultImplementMaxIter
 	case PhaseTest:
 		return defaultTestMaxIter
 	case PhaseReview:
@@ -222,6 +225,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		if !advanced {
 			// Exhausted max iterations without ADVANCE — force advance
 			c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance", currentPhase, maxIter)
+			c.postPhaseComment(ctx, currentPhase, maxIter,
+				fmt.Sprintf("Forced advance: exhausted %d iterations without evaluator ADVANCE", maxIter))
 			if c.memoryStore != nil {
 				c.memoryStore.ClearByType(memory.EvalFeedback)
 			}
@@ -235,10 +240,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 }
 
 // truncateForComment truncates text for use in GitHub comments.
+// It operates on runes to avoid splitting multi-byte UTF-8 characters.
 func truncateForComment(s string) string {
-	const maxLen = 500
-	if len(s) <= maxLen {
+	const maxRunes = 500
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(runes[:maxRunes]) + "..."
 }

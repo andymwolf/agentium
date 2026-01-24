@@ -118,7 +118,7 @@ func TestBuildEvalPrompt_TruncatesLongOutput(t *testing.T) {
 		activeTask: "1",
 	}
 
-	// Create output longer than 8000 chars
+	// Create output longer than default 8000 chars
 	longOutput := ""
 	for i := 0; i < 1000; i++ {
 		longOutput += "0123456789"
@@ -127,5 +127,47 @@ func TestBuildEvalPrompt_TruncatesLongOutput(t *testing.T) {
 	prompt := c.buildEvalPrompt(PhaseTest, longOutput)
 	if !containsString(prompt, "output truncated") {
 		t.Error("expected truncation marker in prompt for long output")
+	}
+}
+
+func TestEvalContextBudget_Default(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	if got := c.evalContextBudget(); got != defaultEvalContextBudget {
+		t.Errorf("evalContextBudget() = %d, want %d", got, defaultEvalContextBudget)
+	}
+}
+
+func TestEvalContextBudget_Custom(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				Enabled:           true,
+				EvalContextBudget: 20000,
+			},
+		},
+	}
+	if got := c.evalContextBudget(); got != 20000 {
+		t.Errorf("evalContextBudget() = %d, want 20000", got)
+	}
+}
+
+func TestBuildEvalPrompt_CustomBudget(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "github.com/org/repo",
+			PhaseLoop:  &PhaseLoopConfig{Enabled: true, EvalContextBudget: 100},
+		},
+		activeTask: "1",
+	}
+
+	// Create output longer than custom 100 chars
+	longOutput := ""
+	for i := 0; i < 20; i++ {
+		longOutput += "0123456789"
+	}
+
+	prompt := c.buildEvalPrompt(PhaseImplement, longOutput)
+	if !containsString(prompt, "output truncated") {
+		t.Error("expected truncation marker with custom budget")
 	}
 }

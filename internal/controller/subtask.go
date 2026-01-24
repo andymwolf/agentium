@@ -19,6 +19,7 @@ var phaseToSubTask = map[TaskPhase]SubTaskType{
 	PhasePlan:       SubTaskPlan,
 	PhaseImplement:  SubTaskImplement,
 	PhaseTest:       SubTaskTest,
+	PhaseReview:     SubTaskReview,
 	PhasePRCreation: SubTaskReview,
 	PhaseAnalyze:    SubTaskPlan,
 	PhasePush:       SubTaskPush,

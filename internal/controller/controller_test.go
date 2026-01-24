@@ -286,23 +286,23 @@ func TestLoadConfigFromEnv_FullConfig(t *testing.T) {
 
 func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 	tests := []struct {
-		name      string
-		envValue  string
-		wantNil   bool
-		wantEnabled bool
-		wantPlan  int
-		wantBuild int
+		name          string
+		envValue      string
+		wantNil       bool
+		wantEnabled   bool
+		wantPlan      int
+		wantImplement int
 	}{
 		{
 			name: "phase_loop present and enabled",
 			envValue: `{
 				"id": "test", "repository": "github.com/org/repo",
-				"phase_loop": {"enabled": true, "plan_max_iterations": 2, "build_max_iterations": 8}
+				"phase_loop": {"enabled": true, "plan_max_iterations": 2, "implement_max_iterations": 8}
 			}`,
-			wantNil:     false,
-			wantEnabled: true,
-			wantPlan:    2,
-			wantBuild:   8,
+			wantNil:       false,
+			wantEnabled:   true,
+			wantPlan:      2,
+			wantImplement: 8,
 		},
 		{
 			name: "phase_loop absent",
@@ -355,8 +355,8 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 			if tt.wantPlan > 0 && config.PhaseLoop.PlanMaxIterations != tt.wantPlan {
 				t.Errorf("PlanMaxIterations = %d, want %d", config.PhaseLoop.PlanMaxIterations, tt.wantPlan)
 			}
-			if tt.wantBuild > 0 && config.PhaseLoop.BuildMaxIterations != tt.wantBuild {
-				t.Errorf("BuildMaxIterations = %d, want %d", config.PhaseLoop.BuildMaxIterations, tt.wantBuild)
+			if tt.wantImplement > 0 && config.PhaseLoop.ImplementMaxIterations != tt.wantImplement {
+				t.Errorf("ImplementMaxIterations = %d, want %d", config.PhaseLoop.ImplementMaxIterations, tt.wantImplement)
 			}
 		})
 	}

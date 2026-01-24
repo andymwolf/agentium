@@ -39,7 +39,7 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 		want  int
 	}{
 		{PhasePlan, defaultPlanMaxIter},
-		{PhaseImplement, defaultBuildMaxIter},
+		{PhaseImplement, defaultImplementMaxIter},
 		{PhaseTest, defaultTestMaxIter},
 		{PhaseReview, defaultReviewMaxIter},
 		{PhasePRCreation, defaultPRMaxIter},
@@ -60,11 +60,11 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:             true,
-				PlanMaxIterations:   2,
-				BuildMaxIterations:  10,
-				TestMaxIterations:   8,
-				ReviewMaxIterations: 4,
+				Enabled:                true,
+				PlanMaxIterations:      2,
+				ImplementMaxIterations: 10,
+				TestMaxIterations:      8,
+				ReviewMaxIterations:    4,
 			},
 		},
 	}
@@ -139,21 +139,49 @@ func TestIssuePhaseOrder(t *testing.T) {
 
 func TestTruncateForComment(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  int // expected length (0 means check equality)
+		name      string
+		input     string
+		wantRunes int // expected rune count of result
 	}{
 		{"short string", "hello", 5},
-		{"exactly 500", string(make([]byte, 500)), 500},
-		{"over 500", string(make([]byte, 600)), 503}, // 500 + "..."
+		{"exactly 500 runes", string(make([]byte, 500)), 500},
+		{"over 500 runes", string(make([]byte, 600)), 503}, // 500 + "..."
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := truncateForComment(tt.input)
-			if len(result) != tt.want {
-				t.Errorf("truncateForComment() length = %d, want %d", len(result), tt.want)
+			if len([]rune(result)) != tt.wantRunes {
+				t.Errorf("truncateForComment() rune count = %d, want %d", len([]rune(result)), tt.wantRunes)
 			}
 		})
+	}
+}
+
+func TestTruncateForComment_UTF8Safety(t *testing.T) {
+	// Build a string of 600 multi-byte runes (each is 3 bytes in UTF-8)
+	runes := make([]rune, 600)
+	for i := range runes {
+		runes[i] = '\u4e16' // 世 (3 bytes per rune)
+	}
+	input := string(runes)
+
+	result := truncateForComment(input)
+
+	// Should have 500 runes + "..." (503 runes total), not split mid-character
+	resultRunes := []rune(result)
+	if len(resultRunes) != 503 {
+		t.Errorf("rune count = %d, want 503", len(resultRunes))
+	}
+	// First 500 runes should all be 世
+	for i := 0; i < 500; i++ {
+		if resultRunes[i] != '\u4e16' {
+			t.Errorf("rune[%d] = %U, want U+4E16", i, resultRunes[i])
+			break
+		}
+	}
+	// Verify valid UTF-8 (Go strings are always valid, but check no replacement chars)
+	if resultRunes[500] != '.' {
+		t.Errorf("expected '.' at position 500, got %U", resultRunes[500])
 	}
 }
