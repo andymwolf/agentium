@@ -34,6 +34,9 @@ const (
 	LogFlushTimeout = 10 * time.Second
 )
 
+// Version is the controller version, set at build time via ldflags.
+var Version = "dev"
+
 // TaskPhase represents the current phase of a task in its lifecycle
 type TaskPhase string
 
@@ -377,6 +380,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	ctx, cancel := c.setupSignalHandler(ctx)
 	defer cancel()
 
+	c.logInfo("Controller started (version %s)", Version)
 	c.logInfo("Starting session %s", c.config.ID)
 	c.logInfo("Repository: %s", c.config.Repository)
 	if len(c.config.Tasks) > 0 {
@@ -424,6 +428,8 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 		c.issueDetails = issues
 	}
+
+	c.logInfo("Task queue: %d issues (%s), %d PRs", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
 
 	// Main execution loop - processes tasks sequentially (PRs first, then issues)
 	for {
@@ -533,7 +539,7 @@ func (c *Controller) Run(ctx context.Context) error {
 }
 
 func (c *Controller) initializeWorkspace(ctx context.Context) error {
-	c.logger.Println("Initializing workspace")
+	c.logInfo("Initializing workspace")
 
 	if err := os.MkdirAll(c.workDir, 0755); err != nil {
 		return err
@@ -543,7 +549,7 @@ func (c *Controller) initializeWorkspace(ctx context.Context) error {
 }
 
 func (c *Controller) fetchGitHubToken(ctx context.Context) error {
-	c.logger.Println("Fetching GitHub token")
+	c.logInfo("Fetching GitHub token")
 
 	// Try to get token from environment first (for local testing)
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
@@ -640,7 +646,7 @@ func (c *Controller) loadPrompts() error {
 		return fmt.Errorf("failed to load system prompt: %w", err)
 	}
 	c.systemPrompt = systemPrompt
-	c.logger.Println("System prompt loaded successfully")
+	c.logInfo("System prompt loaded successfully")
 
 	// Load project prompt from workspace (.agentium/AGENT.md)
 	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
@@ -648,7 +654,7 @@ func (c *Controller) loadPrompts() error {
 		c.logger.Printf("Warning: failed to load project prompt: %v", err)
 	} else if projectPrompt != "" {
 		c.projectPrompt = projectPrompt
-		c.logger.Println("Project prompt loaded from .agentium/AGENT.md")
+		c.logInfo("Project prompt loaded from .agentium/AGENT.md")
 	}
 
 	// Initialize phase-aware skills if enabled
@@ -689,7 +695,7 @@ func (c *Controller) loadPrompts() error {
 }
 
 func (c *Controller) cloneRepository(ctx context.Context) error {
-	c.logger.Printf("Cloning repository: %s", c.config.Repository)
+	c.logInfo("Cloning repository: %s", c.config.Repository)
 
 	// Parse repository URL
 	repo := c.config.Repository
@@ -711,7 +717,7 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 	if err := cmd.Run(); err != nil {
 		// Check if directory already exists with content
 		if entries, _ := os.ReadDir(c.workDir); len(entries) > 0 {
-			c.logger.Println("Workspace already contains files, skipping clone")
+			c.logInfo("Workspace already contains files, skipping clone")
 			return nil
 		}
 		return err
@@ -746,7 +752,7 @@ type prComment struct {
 }
 
 func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, error) {
-	c.logger.Println("Fetching issue details")
+	c.logInfo("Fetching issue details")
 
 	issues := make([]issueDetail, 0, len(c.config.Tasks))
 
@@ -783,7 +789,7 @@ type prWithReviews struct {
 }
 
 func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error) {
-	c.logger.Println("Fetching PR details")
+	c.logInfo("Fetching PR details")
 
 	prs := make([]prWithReviews, 0, len(c.config.PRs))
 
