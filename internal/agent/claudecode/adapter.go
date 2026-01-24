@@ -66,6 +66,7 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 
 	args := []string{
 		"--print",
+		"--verbose",
 		"--output-format", "stream-json",
 		"--dangerously-skip-permissions",
 	}

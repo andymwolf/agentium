@@ -73,24 +73,28 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 	cmd := a.BuildCommand(session, 1)
 
-	if len(cmd) < 5 {
-		t.Fatalf("BuildCommand() returned %d args, want at least 5", len(cmd))
+	if len(cmd) < 6 {
+		t.Fatalf("BuildCommand() returned %d args, want at least 6", len(cmd))
 	}
 
 	if cmd[0] != "--print" {
 		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--print")
 	}
 
-	if cmd[1] != "--output-format" {
-		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--output-format")
+	if cmd[1] != "--verbose" {
+		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--verbose")
 	}
 
-	if cmd[2] != "stream-json" {
-		t.Errorf("BuildCommand()[2] = %q, want %q", cmd[2], "stream-json")
+	if cmd[2] != "--output-format" {
+		t.Errorf("BuildCommand()[2] = %q, want %q", cmd[2], "--output-format")
 	}
 
-	if cmd[3] != "--dangerously-skip-permissions" {
-		t.Errorf("BuildCommand()[3] = %q, want %q", cmd[3], "--dangerously-skip-permissions")
+	if cmd[3] != "stream-json" {
+		t.Errorf("BuildCommand()[3] = %q, want %q", cmd[3], "stream-json")
+	}
+
+	if cmd[4] != "--dangerously-skip-permissions" {
+		t.Errorf("BuildCommand()[4] = %q, want %q", cmd[4], "--dangerously-skip-permissions")
 	}
 }
 
