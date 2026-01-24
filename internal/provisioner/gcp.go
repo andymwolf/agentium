@@ -496,23 +496,178 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 		}
 	}
 
-	// Use gcloud to delete the instance
-	args := p.buildDestroyArgs(sessionID)
-	cmd := exec.CommandContext(ctx, "gcloud", args...)
-
-	if p.verbose {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to delete instance: %w", err)
+	// Fallback: use gcloud to delete all associated resources
+	if err := p.destroyFallback(ctx, sessionID); err != nil {
+		return err
 	}
 
 	// Clean up work directory
 	os.RemoveAll(workDir)
 
 	return nil
+}
+
+// destroyFallback deletes all GCP resources associated with a session using
+// gcloud commands directly. This covers the case where Terraform state is
+// missing or Terraform destroy failed. Resources are deleted in dependency
+// order: instance, firewall rule, IAM bindings, service account.
+func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) error {
+	prefix := sessionIDPrefix(sessionID)
+	saEmail := fmt.Sprintf("agentium-%s@%s.iam.gserviceaccount.com", prefix, p.project)
+
+	var errors []string
+
+	// 1. Delete the compute instance
+	if err := p.deleteInstance(ctx, sessionID); err != nil {
+		errors = append(errors, fmt.Sprintf("instance: %v", err))
+	}
+
+	// 2. Delete the firewall rule
+	firewallName := fmt.Sprintf("agentium-allow-egress-%s", prefix)
+	if err := p.deleteFirewallRule(ctx, firewallName); err != nil {
+		errors = append(errors, fmt.Sprintf("firewall: %v", err))
+	}
+
+	// 3. Remove IAM bindings for the service account
+	iamRoles := []string{
+		"roles/secretmanager.secretAccessor",
+		"roles/logging.logWriter",
+		"roles/compute.instanceAdmin.v1",
+	}
+	for _, role := range iamRoles {
+		if err := p.removeIAMBinding(ctx, saEmail, role); err != nil {
+			errors = append(errors, fmt.Sprintf("iam(%s): %v", role, err))
+		}
+	}
+
+	// 4. Delete the service account
+	if err := p.deleteServiceAccount(ctx, saEmail); err != nil {
+		errors = append(errors, fmt.Sprintf("service-account: %v", err))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("fallback cleanup encountered errors: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+// sessionIDPrefix returns the first 20 characters of a session ID, matching
+// the Terraform naming convention: substr(var.session_id, 0, 20).
+func sessionIDPrefix(sessionID string) string {
+	if len(sessionID) > 20 {
+		return sessionID[:20]
+	}
+	return sessionID
+}
+
+// deleteInstance deletes a GCP compute instance by name.
+func (p *GCPProvisioner) deleteInstance(ctx context.Context, instanceName string) error {
+	args := p.buildDestroyArgs(instanceName)
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if p.verbose && len(output) > 0 {
+		fmt.Fprintf(os.Stderr, "%s", output)
+	}
+	if err != nil {
+		// Treat "not found" as success (resource already deleted)
+		if isNotFoundError(string(output)) {
+			if p.verbose {
+				fmt.Fprintf(os.Stderr, "instance %s already deleted\n", instanceName)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to delete instance %s: %w", instanceName, err)
+	}
+	return nil
+}
+
+// deleteFirewallRule deletes a GCP firewall rule by name.
+func (p *GCPProvisioner) deleteFirewallRule(ctx context.Context, ruleName string) error {
+	args := []string{"compute", "firewall-rules", "delete", ruleName, "--quiet"}
+	if p.project != "" {
+		args = append(args, "--project="+p.project)
+	}
+
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if p.verbose && len(output) > 0 {
+		fmt.Fprintf(os.Stderr, "%s", output)
+	}
+	if err != nil {
+		if isNotFoundError(string(output)) {
+			if p.verbose {
+				fmt.Fprintf(os.Stderr, "firewall rule %s already deleted\n", ruleName)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to delete firewall rule %s: %w", ruleName, err)
+	}
+	return nil
+}
+
+// removeIAMBinding removes an IAM policy binding for a service account.
+func (p *GCPProvisioner) removeIAMBinding(ctx context.Context, saEmail, role string) error {
+	if p.project == "" {
+		return fmt.Errorf("project is required to remove IAM bindings")
+	}
+	member := "serviceAccount:" + saEmail
+	args := []string{
+		"projects", "remove-iam-policy-binding", p.project,
+		"--member=" + member,
+		"--role=" + role,
+		"--quiet",
+	}
+
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if p.verbose && len(output) > 0 {
+		fmt.Fprintf(os.Stderr, "%s", output)
+	}
+	if err != nil {
+		// Treat "not found" or "not bound" as success
+		if isNotFoundError(string(output)) {
+			if p.verbose {
+				fmt.Fprintf(os.Stderr, "IAM binding %s for %s already removed\n", role, saEmail)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to remove IAM binding %s for %s: %w", role, saEmail, err)
+	}
+	return nil
+}
+
+// deleteServiceAccount deletes a GCP service account by email.
+func (p *GCPProvisioner) deleteServiceAccount(ctx context.Context, saEmail string) error {
+	args := []string{"iam", "service-accounts", "delete", saEmail, "--quiet"}
+	if p.project != "" {
+		args = append(args, "--project="+p.project)
+	}
+
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if p.verbose && len(output) > 0 {
+		fmt.Fprintf(os.Stderr, "%s", output)
+	}
+	if err != nil {
+		if isNotFoundError(string(output)) {
+			if p.verbose {
+				fmt.Fprintf(os.Stderr, "service account %s already deleted\n", saEmail)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to delete service account %s: %w", saEmail, err)
+	}
+	return nil
+}
+
+// isNotFoundError checks if gcloud command output indicates a resource was not found.
+func isNotFoundError(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "not found") ||
+		strings.Contains(lower, "was not found") ||
+		strings.Contains(lower, "could not be found") ||
+		strings.Contains(lower, "does not exist")
 }
 
 func (p *GCPProvisioner) copyTerraformFiles(destDir string) error {
