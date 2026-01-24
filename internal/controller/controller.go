@@ -18,6 +18,7 @@ import (
 	"github.com/andywolf/agentium/internal/agent"
 	_ "github.com/andywolf/agentium/internal/agent/aider"
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
+	_ "github.com/andywolf/agentium/internal/agent/codex"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/memory"
