@@ -114,6 +114,77 @@ func TestPrune(t *testing.T) {
 	}
 }
 
+func TestResolvePending_MatchingStepDone(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{{Type: StepPending, Content: "write tests"}}, 1, "issue:1")
+	s.Update([]Signal{{Type: StepPending, Content: "add logging"}}, 1, "issue:1")
+
+	if len(s.Entries()) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(s.Entries()))
+	}
+
+	// Complete one of the pending steps
+	s.Update([]Signal{{Type: StepDone, Content: "write tests"}}, 2, "issue:1")
+
+	entries := s.Entries()
+	// Should have: "add logging" (STEP_PENDING) + "write tests" (STEP_DONE)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries after resolve, got %d", len(entries))
+	}
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "write tests" {
+			t.Error("STEP_PENDING 'write tests' should have been resolved")
+		}
+	}
+}
+
+func TestResolvePending_NoMatchLeavesPending(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{{Type: StepPending, Content: "write tests"}}, 1, "issue:1")
+
+	// STEP_DONE with different content should not resolve the pending
+	s.Update([]Signal{{Type: StepDone, Content: "something else"}}, 2, "issue:1")
+
+	entries := s.Entries()
+	hasPending := false
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "write tests" {
+			hasPending = true
+		}
+	}
+	if !hasPending {
+		t.Error("STEP_PENDING 'write tests' should still exist")
+	}
+}
+
+func TestResolvePending_SameBatchResolution(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.Update([]Signal{{Type: StepPending, Content: "deploy"}}, 1, "issue:1")
+
+	// Both a new pending and its done in the same signal batch
+	s.Update([]Signal{
+		{Type: StepPending, Content: "run migrations"},
+		{Type: StepDone, Content: "deploy"},
+	}, 2, "issue:1")
+
+	entries := s.Entries()
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "deploy" {
+			t.Error("STEP_PENDING 'deploy' should have been resolved")
+		}
+	}
+	// "run migrations" pending should remain (no matching STEP_DONE)
+	hasMigrations := false
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "run migrations" {
+			hasMigrations = true
+		}
+	}
+	if !hasMigrations {
+		t.Error("STEP_PENDING 'run migrations' should still exist")
+	}
+}
+
 func TestLoad_ExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	agentiumDir := filepath.Join(dir, ".agentium")

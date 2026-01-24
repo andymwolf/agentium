@@ -1336,11 +1336,14 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		signals := memory.ParseSignals(string(stdoutBytes) + string(stderrBytes))
 		if len(signals) > 0 {
 			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
-			c.memoryStore.Update(signals, c.iteration, taskID)
+			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
+			if pruned > 0 {
+				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)
+			}
 			if err := c.memoryStore.Save(); err != nil {
 				c.logWarning("failed to save memory store: %v", err)
 			} else {
-				c.logInfo("Memory updated: %d new signals", len(signals))
+				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
 			}
 		}
 	}
