@@ -169,6 +169,17 @@ agentium logs agentium-abc12345 --follow     # Stream logs
 agentium destroy agentium-abc12345           # Terminate a session
 ```
 
+## Documentation
+
+For comprehensive documentation, see the [`docs/`](docs/) directory:
+
+- **[Getting Started](docs/getting-started.md)** - Installation, prerequisites, and quickstart
+- **[Configuration Reference](docs/configuration.md)** - Full `.agentium.yaml` reference
+- **[CLI Reference](docs/cli-reference.md)** - All commands with flags and examples
+- **[Cloud Setup Guides](docs/cloud-setup/)** - Provider-specific setup (GCP, AWS, Azure)
+- **[GitHub App Setup](docs/github-app-setup.md)** - Creating and configuring your GitHub App
+- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
+
 ## Configuration
 
 ### `.agentium.yaml`
