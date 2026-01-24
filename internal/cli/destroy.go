@@ -60,7 +60,7 @@ func destroySession(cmd *cobra.Command, args []string) error {
 	}
 
 	verbose := viper.GetBool("verbose")
-	prov, err := provisioner.New(provider, verbose)
+	prov, err := provisioner.New(provider, verbose, cfg.Cloud.Project)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}

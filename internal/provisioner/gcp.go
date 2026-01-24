@@ -13,12 +13,13 @@ import (
 
 // GCPProvisioner implements Provisioner for Google Cloud Platform
 type GCPProvisioner struct {
-	verbose     bool
+	verbose      bool
+	project      string
 	terraformDir string
 }
 
 // NewGCPProvisioner creates a new GCP provisioner
-func NewGCPProvisioner(verbose bool) (*GCPProvisioner, error) {
+func NewGCPProvisioner(verbose bool, project string) (*GCPProvisioner, error) {
 	// Find terraform modules directory
 	execPath, err := os.Executable()
 	if err != nil {
@@ -46,7 +47,8 @@ func NewGCPProvisioner(verbose bool) (*GCPProvisioner, error) {
 	}
 
 	return &GCPProvisioner{
-		verbose:     verbose,
+		verbose:      verbose,
+		project:      project,
 		terraformDir: terraformDir,
 	}, nil
 }
@@ -318,8 +320,11 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 		// Build gcloud logging read command
 		args := []string{
 			"logging", "read",
-			fmt.Sprintf(`resource.type="gce_instance" AND resource.labels.instance_id="%s"`, sessionID),
+			fmt.Sprintf(`logName=~"agentium-session" AND jsonPayload.session_id="%s"`, sessionID),
 			"--format=json",
+		}
+		if p.project != "" {
+			args = append(args, fmt.Sprintf("--project=%s", p.project))
 		}
 
 		if opts.Tail > 0 {
@@ -342,6 +347,10 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 				Timestamp   string `json:"timestamp"`
 				TextPayload string `json:"textPayload"`
 				Severity    string `json:"severity"`
+				JSONPayload struct {
+					Message  string `json:"message"`
+					Severity string `json:"severity"`
+				} `json:"jsonPayload"`
 			}
 
 			if err := json.Unmarshal(output, &entries); err != nil {
@@ -352,10 +361,21 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 			for i := len(entries) - 1; i >= 0; i-- {
 				entry := entries[i]
 				ts, _ := time.Parse(time.RFC3339Nano, entry.Timestamp)
+				msg := entry.TextPayload
+				level := entry.Severity
+				if entry.JSONPayload.Message != "" {
+					msg = entry.JSONPayload.Message
+					if entry.JSONPayload.Severity != "" {
+						level = entry.JSONPayload.Severity
+					}
+				}
+				if msg == "" {
+					continue
+				}
 				logCh <- LogEntry{
 					Timestamp: ts,
-					Message:   entry.TextPayload,
-					Level:     entry.Severity,
+					Message:   msg,
+					Level:     level,
 				}
 			}
 

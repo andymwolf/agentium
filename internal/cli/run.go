@@ -163,7 +163,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create provisioner
-	prov, err := provisioner.New(cfg.Cloud.Provider, verbose)
+	prov, err := provisioner.New(cfg.Cloud.Provider, verbose, cfg.Cloud.Project)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
