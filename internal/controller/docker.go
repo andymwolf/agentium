@@ -54,6 +54,10 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
 	}
 
+	if c.config.CodexAuth.AuthJSONBase64 != "" {
+		args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
+	}
+
 	args = append(args, params.Agent.ContainerImage())
 	args = append(args, params.Command...)
 

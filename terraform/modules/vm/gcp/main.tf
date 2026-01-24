@@ -74,6 +74,13 @@ variable "claude_auth_json" {
   sensitive   = true
 }
 
+variable "codex_auth_json" {
+  description = "Base64-encoded Codex auth.json content (for codex agent)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "network" {
   description = "VPC network name"
   type        = string
@@ -121,6 +128,7 @@ resource "google_project_iam_member" "compute_admin" {
 # Cloud-init script
 locals {
   claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro" : ""
+  codex_auth_volume  = var.codex_auth_json != "" ? "-v /etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro" : ""
 
   cloud_init = <<-EOF
 #cloud-config
@@ -135,6 +143,12 @@ write_files:
     encoding: b64
     content: ${var.claude_auth_json}
 %{ endif ~}
+%{ if var.codex_auth_json != "" ~}
+  - path: /etc/agentium/codex-auth.json
+    permissions: '0600'
+    encoding: b64
+    content: ${var.codex_auth_json}
+%{ endif ~}
 
 runcmd:
   - |
@@ -146,6 +160,7 @@ runcmd:
       -v /etc/agentium:/etc/agentium:ro \
       -v /home/workspace:/home/workspace \
       ${local.claude_auth_volume} \
+      ${local.codex_auth_volume} \
       -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
       -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
       -e AGENTIUM_WORKDIR=/home/workspace \

@@ -95,6 +95,11 @@ claude_auth_mode   = "%s"
 		tfvars += fmt.Sprintf("claude_auth_json   = \"%s\"\n", config.Session.ClaudeAuth.AuthJSONBase64)
 	}
 
+	// Add Codex auth JSON when present
+	if config.Session.CodexAuth.AuthJSONBase64 != "" {
+		tfvars += fmt.Sprintf("codex_auth_json    = \"%s\"\n", config.Session.CodexAuth.AuthJSONBase64)
+	}
+
 	tfvarsPath := filepath.Join(workDir, "terraform.tfvars")
 	if err := os.WriteFile(tfvarsPath, []byte(tfvars), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tfvars: %w", err)
