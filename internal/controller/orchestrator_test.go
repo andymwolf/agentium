@@ -42,11 +42,12 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 			Enabled:  true,
 			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
-				SubTaskImplement: {Agent: "claude-code", Model: implModel, Skills: []string{"implement"}},
-				SubTaskTest:      {Agent: "aider", Model: testModel},
-				SubTaskReview:    {Agent: "claude-code", Skills: []string{"pr_review"}},
-				SubTaskPlan:      {Agent: "claude-code", Skills: []string{"planning"}},
-				SubTaskPush:      {Agent: "claude-code", Skills: []string{"push"}},
+				SubTaskImplement:  {Agent: "claude-code", Model: implModel, Skills: []string{"implement"}},
+				SubTaskTest:       {Agent: "aider", Model: testModel},
+				SubTaskReview:     {Agent: "claude-code", Skills: []string{"pr_review"}},
+				SubTaskPRCreation: {Agent: "claude-code", Skills: []string{"pr_create"}},
+				SubTaskPlan:       {Agent: "claude-code", Skills: []string{"planning"}},
+				SubTaskPush:       {Agent: "claude-code", Skills: []string{"push"}},
 			},
 		},
 	}
@@ -58,9 +59,10 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 	}{
 		{PhaseImplement, "claude-code", "claude-opus-4-20250514"},
 		{PhaseTest, "aider", "claude-sonnet-4-20250514"},
-		{PhasePRCreation, "claude-code", ""},  // review type
+		{PhaseReview, "claude-code", ""},       // review type
+		{PhasePRCreation, "claude-code", ""},   // pr_creation type
 		{PhaseAnalyze, "claude-code", ""},      // plan type
-		{PhasePush, "claude-code", ""},          // push type
+		{PhasePush, "claude-code", ""},         // push type
 	}
 
 	for _, tt := range tests {
@@ -104,7 +106,7 @@ func TestConfigForPhase_PartialDelegation(t *testing.T) {
 
 	// Unconfigured phases should return nil
 	if cfg := orch.ConfigForPhase(PhasePRCreation); cfg != nil {
-		t.Errorf("ConfigForPhase(PR_CREATION) = %+v, want nil (review not configured)", cfg)
+		t.Errorf("ConfigForPhase(PR_CREATION) = %+v, want nil (pr_creation not configured)", cfg)
 	}
 	if cfg := orch.ConfigForPhase(PhaseAnalyze); cfg != nil {
 		t.Errorf("ConfigForPhase(ANALYZE) = %+v, want nil (plan not configured)", cfg)
