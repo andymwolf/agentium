@@ -31,6 +31,19 @@ var ValidPhases = map[string]bool{
 	"NOTHING_TO_DO": true,
 	"ANALYZE":      true,
 	"PUSH":         true,
+	// Compound phase keys for reviewer
+	"PLAN_REVIEW":      true,
+	"IMPLEMENT_REVIEW": true,
+	"TEST_REVIEW":      true,
+	"REVIEW_REVIEW":    true,
+	"DOCS_REVIEW":      true,
+	// Compound phase keys for judge
+	"JUDGE":            true,
+	"PLAN_JUDGE":       true,
+	"IMPLEMENT_JUDGE":  true,
+	"TEST_JUDGE":       true,
+	"REVIEW_JUDGE":     true,
+	"DOCS_JUDGE":       true,
 }
 
 // ValidPhaseNames returns the sorted list of recognized phase names.

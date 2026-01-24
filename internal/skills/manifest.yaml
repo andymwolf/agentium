@@ -70,3 +70,32 @@ skills:
     priority: 90
     phases:
       - EVALUATE
+
+  - name: evaluate_plan
+    file: evaluate_plan.md
+    priority: 91
+    phases:
+      - PLAN_REVIEW
+
+  - name: evaluate_implement
+    file: evaluate_implement.md
+    priority: 92
+    phases:
+      - IMPLEMENT_REVIEW
+
+  - name: evaluate_test_phase
+    file: evaluate_test_phase.md
+    priority: 93
+    phases:
+      - TEST_REVIEW
+
+  - name: judge
+    file: judge.md
+    priority: 95
+    phases:
+      - JUDGE
+      - PLAN_JUDGE
+      - IMPLEMENT_JUDGE
+      - TEST_JUDGE
+      - REVIEW_JUDGE
+      - DOCS_JUDGE

@@ -84,6 +84,104 @@ func TestBuildContext_RespectsBudget(t *testing.T) {
 	}
 }
 
+func TestBuildEvalContext_Empty(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	ctx := s.BuildEvalContext()
+	if ctx != "" {
+		t.Errorf("expected empty eval context for empty store, got %q", ctx)
+	}
+}
+
+func TestBuildEvalContext_FiltersToEvalRelevant(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "fix tests", Iteration: 1, Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "PLAN completed (iteration 1)", Iteration: 1, Timestamp: time.Now()},
+		{Type: StepPending, Content: "write tests", Iteration: 1, Timestamp: time.Now()},
+		{Type: KeyFact, Content: "important fact", Iteration: 2, Timestamp: time.Now()},
+		{Type: FileModified, Content: "auth.go", Iteration: 2, Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "add error handling", Iteration: 2, Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildEvalContext()
+
+	// Should contain eval-relevant entries
+	if !strings.Contains(ctx, "## Iteration History") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(ctx, "### Evaluator Feedback") {
+		t.Error("missing Evaluator Feedback section")
+	}
+	if !strings.Contains(ctx, "### Phase Results") {
+		t.Error("missing Phase Results section")
+	}
+	if !strings.Contains(ctx, "fix tests") {
+		t.Error("missing eval feedback content")
+	}
+	if !strings.Contains(ctx, "PLAN completed") {
+		t.Error("missing phase result content")
+	}
+
+	// Should NOT contain agent-internal signals
+	if strings.Contains(ctx, "write tests") {
+		t.Error("should not contain StepPending entries")
+	}
+	if strings.Contains(ctx, "important fact") {
+		t.Error("should not contain KeyFact entries")
+	}
+	if strings.Contains(ctx, "auth.go") {
+		t.Error("should not contain FileModified entries")
+	}
+}
+
+func TestBuildEvalContext_IncludesIterationNumbers(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "first feedback", Iteration: 3, Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "phase done", Iteration: 5, Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildEvalContext()
+
+	if !strings.Contains(ctx, "[iter 3]") {
+		t.Error("should include iteration number for feedback entry")
+	}
+	if !strings.Contains(ctx, "[iter 5]") {
+		t.Error("should include iteration number for phase result entry")
+	}
+}
+
+func TestBuildEvalContext_NoEvalEntries(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: StepPending, Content: "write tests", Iteration: 1, Timestamp: time.Now()},
+		{Type: KeyFact, Content: "important", Iteration: 1, Timestamp: time.Now()},
+		{Type: FileModified, Content: "main.go", Iteration: 2, Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildEvalContext()
+	if ctx != "" {
+		t.Errorf("expected empty eval context when no eval-relevant entries, got %q", ctx)
+	}
+}
+
+func TestBuildEvalContext_RespectsBudget(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 100})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "short feedback", Iteration: 1, Timestamp: time.Now()},
+		{Type: PhaseResult, Content: strings.Repeat("x", 200), Iteration: 2, Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildEvalContext()
+
+	if !strings.Contains(ctx, "### Evaluator Feedback") {
+		t.Error("first section should fit within budget")
+	}
+	if strings.Contains(ctx, "### Phase Results") {
+		t.Error("second section should be cut by budget")
+	}
+}
+
 func TestBuildContext_AllEntriesExceedBudget(t *testing.T) {
 	s := NewStore(t.TempDir(), Config{ContextBudget: 50})
 	s.data.Entries = []Entry{

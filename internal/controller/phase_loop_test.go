@@ -141,6 +141,150 @@ func TestIssuePhaseOrder(t *testing.T) {
 	}
 }
 
+func TestEffectiveReviewMode(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *PhaseLoopConfig
+		want   string
+	}{
+		{"nil config", nil, ""},
+		{"empty config", &PhaseLoopConfig{Enabled: true}, ""},
+		{"review_mode always", &PhaseLoopConfig{Enabled: true, ReviewMode: "always"}, "always"},
+		{"review_mode auto", &PhaseLoopConfig{Enabled: true, ReviewMode: "auto"}, "auto"},
+		{"review_mode never", &PhaseLoopConfig{Enabled: true, ReviewMode: "never"}, "never"},
+		{"backward compat: review_enabled true", &PhaseLoopConfig{Enabled: true, ReviewEnabled: true}, "always"},
+		{"backward compat: review_enabled false", &PhaseLoopConfig{Enabled: true, ReviewEnabled: false}, ""},
+		{"review_mode takes precedence over review_enabled", &PhaseLoopConfig{Enabled: true, ReviewMode: "auto", ReviewEnabled: true}, "auto"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{config: SessionConfig{PhaseLoop: tt.config}}
+			if got := c.effectiveReviewMode(); got != tt.want {
+				t.Errorf("effectiveReviewMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldReview(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *PhaseLoopConfig
+		state  *TaskState
+		phase  TaskPhase
+		want   bool
+	}{
+		{
+			name:   "always mode - any phase",
+			config: &PhaseLoopConfig{ReviewMode: "always"},
+			state:  &TaskState{},
+			phase:  PhaseImplement,
+			want:   true,
+		},
+		{
+			name:   "never mode",
+			config: &PhaseLoopConfig{ReviewMode: "never"},
+			state:  &TaskState{},
+			phase:  PhaseImplement,
+			want:   false,
+		},
+		{
+			name:   "empty mode",
+			config: &PhaseLoopConfig{},
+			state:  &TaskState{},
+			phase:  PhaseImplement,
+			want:   false,
+		},
+		{
+			name:   "auto mode - PLAN phase always reviews",
+			config: &PhaseLoopConfig{ReviewMode: "auto"},
+			state:  &TaskState{},
+			phase:  PhasePlan,
+			want:   true,
+		},
+		{
+			name:   "auto mode - not yet decided defaults to review",
+			config: &PhaseLoopConfig{ReviewMode: "auto"},
+			state:  &TaskState{ReviewDecided: false},
+			phase:  PhaseImplement,
+			want:   true,
+		},
+		{
+			name:   "auto mode - decided FULL",
+			config: &PhaseLoopConfig{ReviewMode: "auto"},
+			state:  &TaskState{ReviewDecided: true, ReviewActive: true},
+			phase:  PhaseImplement,
+			want:   true,
+		},
+		{
+			name:   "auto mode - decided SIMPLE",
+			config: &PhaseLoopConfig{ReviewMode: "auto"},
+			state:  &TaskState{ReviewDecided: true, ReviewActive: false},
+			phase:  PhaseImplement,
+			want:   false,
+		},
+		{
+			name:   "auto mode - decided SIMPLE but PLAN phase still reviews",
+			config: &PhaseLoopConfig{ReviewMode: "auto"},
+			state:  &TaskState{ReviewDecided: true, ReviewActive: false},
+			phase:  PhasePlan,
+			want:   true,
+		},
+		{
+			name:   "backward compat: review_enabled true",
+			config: &PhaseLoopConfig{ReviewEnabled: true},
+			state:  &TaskState{},
+			phase:  PhaseTest,
+			want:   true,
+		},
+		{
+			name:   "nil config",
+			config: nil,
+			state:  &TaskState{},
+			phase:  PhaseImplement,
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{config: SessionConfig{PhaseLoop: tt.config}}
+			if got := c.shouldReview(tt.state, tt.phase); got != tt.want {
+				t.Errorf("shouldReview() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvalNoSignalLimit_Default(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	if got := c.evalNoSignalLimit(); got != defaultEvalNoSignalLimit {
+		t.Errorf("evalNoSignalLimit() = %d, want %d", got, defaultEvalNoSignalLimit)
+	}
+}
+
+func TestEvalNoSignalLimit_Custom(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				Enabled:           true,
+				EvalNoSignalLimit: 5,
+			},
+		},
+	}
+	if got := c.evalNoSignalLimit(); got != 5 {
+		t.Errorf("evalNoSignalLimit() = %d, want 5", got)
+	}
+}
+
+func TestEvalNoSignalLimit_NilConfig(t *testing.T) {
+	c := &Controller{config: SessionConfig{PhaseLoop: nil}}
+	if got := c.evalNoSignalLimit(); got != defaultEvalNoSignalLimit {
+		t.Errorf("evalNoSignalLimit() with nil config = %d, want %d", got, defaultEvalNoSignalLimit)
+	}
+}
+
 func TestTruncateForComment(t *testing.T) {
 	tests := []struct {
 		name      string

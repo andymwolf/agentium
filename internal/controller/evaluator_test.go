@@ -151,6 +151,275 @@ func TestEvalContextBudget_Custom(t *testing.T) {
 	}
 }
 
+func TestParseJudgeVerdict_FailClosed(t *testing.T) {
+	tests := []struct {
+		name         string
+		output       string
+		wantVerdict  EvalVerdict
+		wantSignal   bool
+		wantFeedback string
+	}{
+		{
+			name:        "no signal defaults to ITERATE (fail-closed)",
+			output:      "Some output without any eval signal",
+			wantVerdict: VerdictIterate,
+			wantSignal:  false,
+		},
+		{
+			name:        "empty output defaults to ITERATE",
+			output:      "",
+			wantVerdict: VerdictIterate,
+			wantSignal:  false,
+		},
+		{
+			name:         "ADVANCE with signal",
+			output:       "AGENTIUM_EVAL: ADVANCE",
+			wantVerdict:  VerdictAdvance,
+			wantSignal:   true,
+			wantFeedback: "",
+		},
+		{
+			name:         "ITERATE with feedback",
+			output:       "AGENTIUM_EVAL: ITERATE fix compilation errors",
+			wantVerdict:  VerdictIterate,
+			wantSignal:   true,
+			wantFeedback: "fix compilation errors",
+		},
+		{
+			name:         "BLOCKED with reason",
+			output:       "AGENTIUM_EVAL: BLOCKED needs human review",
+			wantVerdict:  VerdictBlocked,
+			wantSignal:   true,
+			wantFeedback: "needs human review",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseJudgeVerdict(tt.output)
+			if result.Verdict != tt.wantVerdict {
+				t.Errorf("Verdict = %q, want %q", result.Verdict, tt.wantVerdict)
+			}
+			if result.SignalFound != tt.wantSignal {
+				t.Errorf("SignalFound = %v, want %v", result.SignalFound, tt.wantSignal)
+			}
+			if result.Feedback != tt.wantFeedback {
+				t.Errorf("Feedback = %q, want %q", result.Feedback, tt.wantFeedback)
+			}
+		})
+	}
+}
+
+func TestParseEvalVerdict_SignalFound(t *testing.T) {
+	// parseEvalVerdict (legacy) should also set SignalFound
+	result := parseEvalVerdict("AGENTIUM_EVAL: ADVANCE")
+	if !result.SignalFound {
+		t.Error("parseEvalVerdict with signal should set SignalFound=true")
+	}
+
+	result = parseEvalVerdict("no signal here")
+	if result.SignalFound {
+		t.Error("parseEvalVerdict without signal should set SignalFound=false")
+	}
+}
+
+func TestBuildJudgePrompt(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "code changes here",
+		ReviewFeedback: "Missing error handling in auth.go",
+		Iteration:      2,
+		MaxIterations:  5,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	contains := []string{
+		"IMPLEMENT",
+		"judge",
+		"github.com/org/repo",
+		"#42",
+		"2/5",
+		"Missing error handling in auth.go",
+		"code changes here",
+		"AGENTIUM_EVAL:",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("buildJudgePrompt() missing %q", substr)
+		}
+	}
+
+	// Should NOT contain final iteration note
+	if containsString(prompt, "FINAL iteration") {
+		t.Error("buildJudgePrompt() should not mention final iteration when iteration < max")
+	}
+}
+
+func TestBuildJudgePrompt_FinalIteration(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "1",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase: PhasePlan,
+		PhaseOutput:    "plan output",
+		ReviewFeedback: "some feedback",
+		Iteration:      3,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if !containsString(prompt, "FINAL iteration") {
+		t.Error("buildJudgePrompt() should mention FINAL iteration when iteration == max")
+	}
+	if !containsString(prompt, "Prefer ADVANCE") {
+		t.Error("buildJudgePrompt() should tell judge to prefer ADVANCE on final iteration")
+	}
+}
+
+func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "1",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase: PhaseTest,
+		PhaseOutput:    "test output",
+		ReviewFeedback: "",
+		Iteration:      1,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if !containsString(prompt, "No feedback provided") {
+		t.Error("buildJudgePrompt() should indicate no feedback when ReviewFeedback is empty")
+	}
+}
+
+func TestParseReviewModeSignal(t *testing.T) {
+	tests := []struct {
+		name string
+		output string
+		want string
+	}{
+		{
+			name:   "FULL signal",
+			output: "Some analysis\nAGENTIUM_REVIEW_MODE: FULL\nDone.",
+			want:   "FULL",
+		},
+		{
+			name:   "SIMPLE signal",
+			output: "AGENTIUM_REVIEW_MODE: SIMPLE\n",
+			want:   "SIMPLE",
+		},
+		{
+			name:   "no signal",
+			output: "Just some output without the signal",
+			want:   "",
+		},
+		{
+			name:   "empty output",
+			output: "",
+			want:   "",
+		},
+		{
+			name:   "invalid value",
+			output: "AGENTIUM_REVIEW_MODE: UNKNOWN",
+			want:   "",
+		},
+		{
+			name:   "not at start of line",
+			output: "prefix AGENTIUM_REVIEW_MODE: FULL",
+			want:   "",
+		},
+		{
+			name:   "trailing whitespace",
+			output: "AGENTIUM_REVIEW_MODE: FULL   \n",
+			want:   "FULL",
+		},
+		{
+			name:   "mixed with eval signal",
+			output: "AGENTIUM_EVAL: ADVANCE\nAGENTIUM_REVIEW_MODE: SIMPLE\n",
+			want:   "SIMPLE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseReviewModeSignal(tt.output)
+			if got != tt.want {
+				t.Errorf("parseReviewModeSignal() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildJudgePrompt_AssessComplexity(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase:   PhasePlan,
+		PhaseOutput:      "plan output",
+		ReviewFeedback:   "feedback here",
+		Iteration:        1,
+		MaxIterations:    3,
+		AssessComplexity: true,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	contains := []string{
+		"Complexity Assessment",
+		"AGENTIUM_REVIEW_MODE: FULL",
+		"AGENTIUM_REVIEW_MODE: SIMPLE",
+		"multiple files",
+		"single-file changes",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("buildJudgePrompt(AssessComplexity=true) missing %q", substr)
+		}
+	}
+}
+
+func TestBuildJudgePrompt_NoAssessComplexity(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase:   PhasePlan,
+		PhaseOutput:      "plan output",
+		ReviewFeedback:   "feedback here",
+		Iteration:        1,
+		MaxIterations:    3,
+		AssessComplexity: false,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if containsString(prompt, "Complexity Assessment") {
+		t.Error("buildJudgePrompt(AssessComplexity=false) should NOT contain complexity section")
+	}
+	if containsString(prompt, "AGENTIUM_REVIEW_MODE") {
+		t.Error("buildJudgePrompt(AssessComplexity=false) should NOT mention AGENTIUM_REVIEW_MODE")
+	}
+}
+
 func TestBuildEvalPrompt_CustomBudget(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
