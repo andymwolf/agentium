@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"sort"
 	"testing"
 )
 
@@ -77,8 +76,7 @@ func TestAdaptersUnique(t *testing.T) {
 	})
 
 	adapters := r.Adapters()
-	sort.Strings(adapters)
-
+	// Adapters() returns sorted results
 	if len(adapters) != 2 {
 		t.Fatalf("expected 2 unique adapters, got %d: %v", len(adapters), adapters)
 	}
@@ -146,5 +144,65 @@ func TestParseModelSpecEmpty(t *testing.T) {
 	cfg := ParseModelSpec("")
 	if cfg.Adapter != "" || cfg.Model != "" {
 		t.Errorf("expected empty, got %+v", cfg)
+	}
+}
+
+func TestUnknownPhases_AllValid(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"IMPLEMENT":   {Model: "sonnet"},
+			"TEST":        {Model: "haiku"},
+			"PR_CREATION": {Model: "opus"},
+		},
+	})
+
+	if unknowns := r.UnknownPhases(); len(unknowns) != 0 {
+		t.Errorf("expected no unknown phases, got %v", unknowns)
+	}
+}
+
+func TestUnknownPhases_HasUnknown(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"IMPLMENT": {Model: "sonnet"},  // typo
+			"TEST":     {Model: "haiku"},
+			"DEPLOY":   {Model: "opus"},    // not a valid phase
+		},
+	})
+
+	unknowns := r.UnknownPhases()
+	if len(unknowns) != 2 {
+		t.Fatalf("expected 2 unknown phases, got %d: %v", len(unknowns), unknowns)
+	}
+	// Sorted output
+	if unknowns[0] != "DEPLOY" || unknowns[1] != "IMPLMENT" {
+		t.Errorf("expected [DEPLOY IMPLMENT], got %v", unknowns)
+	}
+}
+
+func TestUnknownPhases_NilRouter(t *testing.T) {
+	r := NewRouter(nil)
+	if unknowns := r.UnknownPhases(); unknowns != nil {
+		t.Errorf("nil router UnknownPhases should return nil, got %v", unknowns)
+	}
+}
+
+func TestAdaptersSorted(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "zeta", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"TEST":   {Adapter: "alpha", Model: "sonnet"},
+			"REVIEW": {Adapter: "middle", Model: "gpt-4"},
+		},
+	})
+
+	adapters := r.Adapters()
+	if len(adapters) != 3 {
+		t.Fatalf("expected 3 adapters, got %d: %v", len(adapters), adapters)
+	}
+	if adapters[0] != "alpha" || adapters[1] != "middle" || adapters[2] != "zeta" {
+		t.Errorf("adapters not sorted: %v", adapters)
 	}
 }

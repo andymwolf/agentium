@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/andywolf/agentium/internal/routing"
 	"github.com/spf13/viper"
 )
 
@@ -17,19 +18,7 @@ type Config struct {
 	Controller ControllerConfig `mapstructure:"controller"`
 	Claude     ClaudeConfig     `mapstructure:"claude"`
 	Prompts    PromptsConfig    `mapstructure:"prompts"`
-	Routing    RoutingConfig    `mapstructure:"routing"`
-}
-
-// RoutingConfig maps phases to adapter+model pairs
-type RoutingConfig struct {
-	Default   ModelSpec            `mapstructure:"default"`
-	Overrides map[string]ModelSpec `mapstructure:"overrides"`
-}
-
-// ModelSpec identifies an adapter and model combination
-type ModelSpec struct {
-	Adapter string `mapstructure:"adapter"`
-	Model   string `mapstructure:"model"`
+	Routing    routing.PhaseRouting `mapstructure:"routing"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings

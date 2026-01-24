@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/internal/routing"
 )
 
 func TestLoadConfigFromEnv_EnvVar(t *testing.T) {
@@ -627,6 +628,138 @@ func TestBuildPromptForTask(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewController_RoutingAdapterInit(t *testing.T) {
+	// Register a test adapter for routing
+	agent.Register("test-adapter", func() agent.Agent {
+		return &mockAgent{name: "test-adapter"}
+	})
+
+	tests := []struct {
+		name         string
+		routing      *routing.PhaseRouting
+		wantAdapters []string
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name:         "nil routing - only primary adapter",
+			routing:      nil,
+			wantAdapters: []string{"claude-code"},
+		},
+		{
+			name: "routing with same adapter as primary",
+			routing: &routing.PhaseRouting{
+				Default: routing.ModelConfig{Adapter: "claude-code", Model: "opus"},
+			},
+			wantAdapters: []string{"claude-code"},
+		},
+		{
+			name: "routing with additional adapter",
+			routing: &routing.PhaseRouting{
+				Default: routing.ModelConfig{Adapter: "claude-code", Model: "opus"},
+				Overrides: map[string]routing.ModelConfig{
+					"TEST": {Adapter: "test-adapter", Model: "gpt-4"},
+				},
+			},
+			wantAdapters: []string{"claude-code", "test-adapter"},
+		},
+		{
+			name: "routing with unknown adapter fails",
+			routing: &routing.PhaseRouting{
+				Overrides: map[string]routing.ModelConfig{
+					"TEST": {Adapter: "nonexistent-adapter", Model: "gpt-4"},
+				},
+			},
+			wantErr:     true,
+			errContains: "failed to initialize routed adapter",
+		},
+		{
+			name: "routing with unknown phase logs warning but succeeds",
+			routing: &routing.PhaseRouting{
+				Default: routing.ModelConfig{Adapter: "claude-code", Model: "opus"},
+				Overrides: map[string]routing.ModelConfig{
+					"TYPO_PHASE": {Adapter: "claude-code", Model: "sonnet"},
+				},
+			},
+			wantAdapters: []string{"claude-code"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := SessionConfig{
+				ID:            "test-session",
+				Repository:    "github.com/org/repo",
+				Agent:         "claude-code",
+				MaxIterations: 10,
+				MaxDuration:   "1h",
+				Routing:       tt.routing,
+			}
+
+			c, err := New(config)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for _, name := range tt.wantAdapters {
+				if _, ok := c.adapters[name]; !ok {
+					t.Errorf("expected adapter %q in adapters map, got %v", name, adapterNames(c.adapters))
+				}
+			}
+			if len(c.adapters) != len(tt.wantAdapters) {
+				t.Errorf("expected %d adapters, got %d: %v", len(tt.wantAdapters), len(c.adapters), adapterNames(c.adapters))
+			}
+		})
+	}
+}
+
+func TestDetermineActivePhase_Routing(t *testing.T) {
+	c := &Controller{
+		activeTask:     "42",
+		activeTaskType: "issue",
+		taskStates: map[string]*TaskState{
+			"issue:42": {ID: "42", Type: "issue", Phase: PhaseTest},
+		},
+	}
+
+	phase := c.determineActivePhase()
+	if phase != "TEST" {
+		t.Errorf("determineActivePhase() = %q, want %q", phase, "TEST")
+	}
+}
+
+// mockAgent implements the agent.Agent interface for testing
+type mockAgent struct {
+	name string
+}
+
+func (m *mockAgent) Name() string                                                    { return m.name }
+func (m *mockAgent) ContainerImage() string                                          { return "test-image:latest" }
+func (m *mockAgent) BuildEnv(session *agent.Session, iteration int) map[string]string { return nil }
+func (m *mockAgent) BuildCommand(session *agent.Session, iteration int) []string      { return nil }
+func (m *mockAgent) BuildPrompt(session *agent.Session, iteration int) string         { return "" }
+func (m *mockAgent) ParseOutput(exitCode int, stdout, stderr string) (*agent.IterationResult, error) {
+	return &agent.IterationResult{}, nil
+}
+func (m *mockAgent) Validate() error { return nil }
+
+func adapterNames(adapters map[string]agent.Agent) []string {
+	names := make([]string, 0, len(adapters))
+	for name := range adapters {
+		names = append(names, name)
+	}
+	return names
 }
 
 func containsString(s, substr string) bool {

@@ -1,5 +1,7 @@
 package routing
 
+import "sort"
+
 // Router resolves the adapter and model to use for a given phase.
 type Router struct {
 	routing *PhaseRouting
@@ -33,8 +35,8 @@ func (r *Router) IsConfigured() bool {
 	return r.routing.Default.Adapter != "" || r.routing.Default.Model != "" || len(r.routing.Overrides) > 0
 }
 
-// Adapters returns the set of unique adapter names referenced in the config.
-// Used by the controller to initialize all required adapters upfront.
+// Adapters returns the set of unique adapter names referenced in the config,
+// sorted for deterministic ordering.
 func (r *Router) Adapters() []string {
 	if r.routing == nil {
 		return nil
@@ -54,5 +56,22 @@ func (r *Router) Adapters() []string {
 	for name := range seen {
 		adapters = append(adapters, name)
 	}
+	sort.Strings(adapters)
 	return adapters
+}
+
+// UnknownPhases returns phase names used in Overrides that are not in ValidPhases.
+// Returns nil if all phases are recognized or if routing is nil.
+func (r *Router) UnknownPhases() []string {
+	if r.routing == nil {
+		return nil
+	}
+	var unknown []string
+	for phase := range r.routing.Overrides {
+		if !ValidPhases[phase] {
+			unknown = append(unknown, phase)
+		}
+	}
+	sort.Strings(unknown)
+	return unknown
 }

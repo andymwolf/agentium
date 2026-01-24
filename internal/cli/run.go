@@ -189,47 +189,42 @@ func runSession(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Handle --model (overrides all phases)
+	// Handle --model (overrides default for all phases)
 	if model, _ := cmd.Flags().GetString("model"); model != "" {
 		spec := routing.ParseModelSpec(model)
-		sessionConfig.Routing = &provisioner.RoutingConfig{
-			Default: provisioner.ModelSpec{Adapter: spec.Adapter, Model: spec.Model},
+		sessionConfig.Routing = &routing.PhaseRouting{
+			Default: spec,
 		}
 	}
 
 	// Handle --phase-model (per-phase overrides)
 	if phaseModels, _ := cmd.Flags().GetStringSlice("phase-model"); len(phaseModels) > 0 {
 		if sessionConfig.Routing == nil {
-			sessionConfig.Routing = &provisioner.RoutingConfig{}
+			sessionConfig.Routing = &routing.PhaseRouting{}
 		}
 		if sessionConfig.Routing.Overrides == nil {
-			sessionConfig.Routing.Overrides = make(map[string]provisioner.ModelSpec)
+			sessionConfig.Routing.Overrides = make(map[string]routing.ModelConfig)
 		}
 		for _, pm := range phaseModels {
 			parts := strings.SplitN(pm, "=", 2)
-			if len(parts) == 2 {
-				spec := routing.ParseModelSpec(parts[1])
-				sessionConfig.Routing.Overrides[parts[0]] = provisioner.ModelSpec{
-					Adapter: spec.Adapter, Model: spec.Model,
-				}
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("invalid --phase-model value %q: expected format PHASE=adapter:model", pm)
 			}
+			sessionConfig.Routing.Overrides[parts[0]] = routing.ParseModelSpec(parts[1])
 		}
 	}
 
-	// Handle config file routing (if no CLI override)
-	if sessionConfig.Routing == nil && cfg.Routing.Default.Model != "" {
-		sessionConfig.Routing = &provisioner.RoutingConfig{
-			Default: provisioner.ModelSpec{
-				Adapter: cfg.Routing.Default.Adapter,
-				Model:   cfg.Routing.Default.Model,
-			},
-		}
-		if len(cfg.Routing.Overrides) > 0 {
-			sessionConfig.Routing.Overrides = make(map[string]provisioner.ModelSpec)
+	// Merge config file routing when CLI didn't provide overrides
+	if cfg.Routing.Default.Model != "" || len(cfg.Routing.Overrides) > 0 {
+		if sessionConfig.Routing == nil {
+			// No CLI routing at all: use config file entirely
+			cfgRouting := cfg.Routing // copy
+			sessionConfig.Routing = &cfgRouting
+		} else if sessionConfig.Routing.Overrides == nil && len(cfg.Routing.Overrides) > 0 {
+			// CLI set --model default but no --phase-model: merge config file overrides
+			sessionConfig.Routing.Overrides = make(map[string]routing.ModelConfig, len(cfg.Routing.Overrides))
 			for phase, spec := range cfg.Routing.Overrides {
-				sessionConfig.Routing.Overrides[phase] = provisioner.ModelSpec{
-					Adapter: spec.Adapter, Model: spec.Model,
-				}
+				sessionConfig.Routing.Overrides[phase] = spec
 			}
 		}
 	}

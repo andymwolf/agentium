@@ -259,6 +259,9 @@ func New(config SessionConfig) (*Controller, error) {
 		config.Agent: agentAdapter,
 	}
 	if c.modelRouter.IsConfigured() {
+		if unknowns := c.modelRouter.UnknownPhases(); len(unknowns) > 0 {
+			c.logWarning("routing config references unknown phases: %v (valid: IMPLEMENT, TEST, PR_CREATION, REVIEW, ANALYZE, PUSH)", unknowns)
+		}
 		for _, name := range c.modelRouter.Adapters() {
 			if _, exists := c.adapters[name]; !exists {
 				a, err := agent.Get(name)
@@ -1268,6 +1271,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
 				activeAgent = a
+			} else {
+				c.logWarning("Phase %s: configured adapter %q not found in initialized adapters, using default %q", phase, modelCfg.Adapter, c.agent.Name())
 			}
 		}
 		if modelCfg.Model != "" {
@@ -1275,8 +1280,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 				session.IterationContext = &agent.IterationContext{}
 			}
 			session.IterationContext.ModelOverride = modelCfg.Model
-			c.logInfo("Phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 		}
+		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 	}
 
 	// Build environment and command
