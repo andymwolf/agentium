@@ -429,7 +429,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		c.issueDetails = issues
 	}
 
-	c.logInfo("Task queue: %d issues (%s), %d PRs", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
+	c.logInfo("Task queue: %d issue(s) [%s], %d PR(s)", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
 
 	// Main execution loop - processes tasks sequentially (PRs first, then issues)
 	for {
@@ -651,7 +651,7 @@ func (c *Controller) loadPrompts() error {
 	// Load project prompt from workspace (.agentium/AGENT.md)
 	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
 	if err != nil {
-		c.logger.Printf("Warning: failed to load project prompt: %v", err)
+		c.logWarning("failed to load project prompt: %v", err)
 	} else if projectPrompt != "" {
 		c.projectPrompt = projectPrompt
 		c.logInfo("Project prompt loaded from .agentium/AGENT.md")
