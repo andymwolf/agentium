@@ -32,6 +32,9 @@ const (
 
 	// LogFlushTimeout is the maximum time to wait for log flush operations
 	LogFlushTimeout = 10 * time.Second
+
+	// VMTerminationTimeout is the maximum time to wait for the VM deletion command
+	VMTerminationTimeout = 30 * time.Second
 )
 
 // Version is the controller version, set at build time via ldflags.
@@ -204,6 +207,10 @@ type Controller struct {
 	shutdownOnce           sync.Once
 	shutdownCh             chan struct{}        // Closed when shutdown is initiated
 	logFlushFn             func() error        // Function to flush pending logs
+
+	// cmdRunner executes external commands. Defaults to exec.CommandContext.
+	// Override in tests to mock command execution.
+	cmdRunner              func(ctx context.Context, name string, args ...string) *exec.Cmd
 }
 
 // New creates a new session controller
@@ -1596,37 +1603,53 @@ func (c *Controller) setupSignalHandler(ctx context.Context) (context.Context, c
 	return ctx, cancel
 }
 
+// execCommand returns the command runner, defaulting to exec.CommandContext.
+func (c *Controller) execCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	if c.cmdRunner != nil {
+		return c.cmdRunner(ctx, name, args...)
+	}
+	return exec.CommandContext(ctx, name, args...)
+}
+
 func (c *Controller) terminateVM() {
 	c.logger.Println("Initiating VM termination")
 
+	ctx, cancel := context.WithTimeout(context.Background(), VMTerminationTimeout)
+	defer cancel()
+
 	// Get instance name from metadata
-	cmd := exec.Command("curl", "-s", "-H", "Metadata-Flavor: Google",
+	cmd := c.execCommand(ctx, "curl", "-s", "-H", "Metadata-Flavor: Google",
 		"http://metadata.google.internal/computeMetadata/v1/instance/name")
 	instanceName, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Warning: failed to get instance name: %v", err)
+		c.logger.Printf("Error: failed to get instance name from metadata: %v — VM will not be deleted", err)
 		return
 	}
 
 	// Get zone from metadata
-	cmd = exec.Command("curl", "-s", "-H", "Metadata-Flavor: Google",
+	cmd = c.execCommand(ctx, "curl", "-s", "-H", "Metadata-Flavor: Google",
 		"http://metadata.google.internal/computeMetadata/v1/instance/zone")
 	zone, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Warning: failed to get zone: %v", err)
+		c.logger.Printf("Error: failed to get zone from metadata: %v — VM will not be deleted", err)
 		return
 	}
 
-	// Delete instance
+	// Delete instance (blocks until completion or timeout)
 	name := strings.TrimSpace(string(instanceName))
 	zoneName := filepath.Base(strings.TrimSpace(string(zone)))
-	cmd = exec.Command("gcloud", "compute", "instances", "delete",
+	c.logger.Printf("Deleting VM instance %s in zone %s", name, zoneName)
+
+	cmd = c.execCommand(ctx, "gcloud", "compute", "instances", "delete",
 		name,
 		"--zone", zoneName,
 		"--quiet",
 	)
 
-	if err := cmd.Start(); err != nil {
-		c.logger.Printf("Warning: failed to initiate VM deletion: %v", err)
+	if err := cmd.Run(); err != nil {
+		c.logger.Printf("Error: VM deletion command failed: %v — VM may remain running until max_run_duration", err)
+		return
 	}
+
+	c.logger.Println("VM deletion command completed successfully")
 }
