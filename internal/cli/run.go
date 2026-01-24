@@ -39,7 +39,6 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 
 	runCmd.Flags().String("repo", "", "GitHub repository (e.g., github.com/org/repo)")
-	runCmd.MarkFlagRequired("repo")
 	runCmd.Flags().StringSlice("issues", nil, "Issue numbers to work on (comma-separated)")
 	runCmd.Flags().StringSlice("prs", nil, "PR numbers to address review feedback (comma-separated)")
 	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider)")
