@@ -23,6 +23,7 @@ import (
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
+	"github.com/andywolf/agentium/internal/routing"
 	"github.com/andywolf/agentium/internal/skills"
 )
 
@@ -91,6 +92,7 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
+	Routing *routing.PhaseRouting `json:"routing,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -171,6 +173,8 @@ type Controller struct {
 	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
 	skillSelector          *skills.Selector    // Phase-aware skill selector (nil = legacy mode)
 	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
+	modelRouter            *routing.Router     // Phase-to-model routing (nil = no routing)
+	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
 
 	// Shutdown management
 	shutdownHooks          []ShutdownHook
@@ -247,6 +251,26 @@ func New(config SessionConfig) (*Controller, error) {
 			Phase: PhaseImplement,
 		}
 		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "issue", ID: task})
+	}
+
+	// Initialize model routing
+	c.modelRouter = routing.NewRouter(config.Routing)
+	c.adapters = map[string]agent.Agent{
+		config.Agent: agentAdapter,
+	}
+	if c.modelRouter.IsConfigured() {
+		if unknowns := c.modelRouter.UnknownPhases(); len(unknowns) > 0 {
+			c.logWarning("routing config references unknown phases: %v (valid: IMPLEMENT, TEST, PR_CREATION, REVIEW, ANALYZE, PUSH)", unknowns)
+		}
+		for _, name := range c.modelRouter.Adapters() {
+			if _, exists := c.adapters[name]; !exists {
+				a, err := agent.Get(name)
+				if err != nil {
+					return nil, fmt.Errorf("failed to initialize routed adapter %q: %w", name, err)
+				}
+				c.adapters[name] = a
+			}
+		}
 	}
 
 	return c, nil
@@ -1239,14 +1263,35 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
-	// Build environment and command
-	env := c.agent.BuildEnv(session, c.iteration)
-	command := c.agent.BuildCommand(session, c.iteration)
+	// Select adapter and model based on routing config
+	activeAgent := c.agent
+	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
+		phase := c.determineActivePhase()
+		modelCfg := c.modelRouter.ModelForPhase(phase)
+		if modelCfg.Adapter != "" {
+			if a, ok := c.adapters[modelCfg.Adapter]; ok {
+				activeAgent = a
+			} else {
+				c.logWarning("Phase %s: configured adapter %q not found in initialized adapters, using default %q", phase, modelCfg.Adapter, c.agent.Name())
+			}
+		}
+		if modelCfg.Model != "" {
+			if session.IterationContext == nil {
+				session.IterationContext = &agent.IterationContext{}
+			}
+			session.IterationContext.ModelOverride = modelCfg.Model
+		}
+		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
+	}
 
-	c.logger.Printf("Running agent: %s %v", c.agent.ContainerImage(), command)
+	// Build environment and command
+	env := activeAgent.BuildEnv(session, c.iteration)
+	command := activeAgent.BuildCommand(session, c.iteration)
+
+	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
 
 	// Authenticate with GHCR if needed (once per session)
-	if !c.dockerAuthed && strings.Contains(c.agent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
+	if !c.dockerAuthed && strings.Contains(activeAgent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
 		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
 			"-u", "x-access-token", "--password-stdin")
 		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
@@ -1275,7 +1320,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	}
 
 	// Add image and command
-	args = append(args, c.agent.ContainerImage())
+	args = append(args, activeAgent.ContainerImage())
 	args = append(args, command...)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
@@ -1326,7 +1371,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	}
 
 	// Parse output
-	result, parseErr := c.agent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
+	result, parseErr := activeAgent.ParseOutput(exitCode, string(stdoutBytes), string(stderrBytes))
 	if parseErr != nil {
 		return nil, parseErr
 	}

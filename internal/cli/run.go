@@ -16,6 +16,7 @@ import (
 
 	"github.com/andywolf/agentium/internal/config"
 	"github.com/andywolf/agentium/internal/provisioner"
+	"github.com/andywolf/agentium/internal/routing"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -49,6 +50,8 @@ func init() {
 	runCmd.Flags().Bool("dry-run", false, "Show what would be provisioned without creating resources")
 	runCmd.Flags().String("prompt", "", "Custom prompt for the agent")
 	runCmd.Flags().String("claude-auth-mode", "", "Claude auth mode: api (default) or oauth")
+	runCmd.Flags().String("model", "", "Override model for all phases (format: adapter:model)")
+	runCmd.Flags().StringSlice("phase-model", nil, "Per-phase model override (format: PHASE=adapter:model)")
 
 	viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -184,6 +187,46 @@ func runSession(cmd *cobra.Command, args []string) error {
 			AuthMode:       cfg.Claude.AuthMode,
 			AuthJSONBase64: claudeAuthBase64,
 		},
+	}
+
+	// Handle --model (overrides default for all phases)
+	if model, _ := cmd.Flags().GetString("model"); model != "" {
+		spec := routing.ParseModelSpec(model)
+		sessionConfig.Routing = &routing.PhaseRouting{
+			Default: spec,
+		}
+	}
+
+	// Handle --phase-model (per-phase overrides)
+	if phaseModels, _ := cmd.Flags().GetStringSlice("phase-model"); len(phaseModels) > 0 {
+		if sessionConfig.Routing == nil {
+			sessionConfig.Routing = &routing.PhaseRouting{}
+		}
+		if sessionConfig.Routing.Overrides == nil {
+			sessionConfig.Routing.Overrides = make(map[string]routing.ModelConfig)
+		}
+		for _, pm := range phaseModels {
+			parts := strings.SplitN(pm, "=", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("invalid --phase-model value %q: expected format PHASE=adapter:model", pm)
+			}
+			sessionConfig.Routing.Overrides[parts[0]] = routing.ParseModelSpec(parts[1])
+		}
+	}
+
+	// Merge config file routing when CLI didn't provide overrides
+	if cfg.Routing.Default.Model != "" || len(cfg.Routing.Overrides) > 0 {
+		if sessionConfig.Routing == nil {
+			// No CLI routing at all: use config file entirely
+			cfgRouting := cfg.Routing // copy
+			sessionConfig.Routing = &cfgRouting
+		} else if sessionConfig.Routing.Overrides == nil && len(cfg.Routing.Overrides) > 0 {
+			// CLI set --model default but no --phase-model: merge config file overrides
+			sessionConfig.Routing.Overrides = make(map[string]routing.ModelConfig, len(cfg.Routing.Overrides))
+			for phase, spec := range cfg.Routing.Overrides {
+				sessionConfig.Routing.Overrides[phase] = spec
+			}
+		}
 	}
 
 	// Build VM config

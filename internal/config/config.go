@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/andywolf/agentium/internal/routing"
 	"github.com/spf13/viper"
 )
 
@@ -17,6 +18,7 @@ type Config struct {
 	Controller ControllerConfig `mapstructure:"controller"`
 	Claude     ClaudeConfig     `mapstructure:"claude"`
 	Prompts    PromptsConfig    `mapstructure:"prompts"`
+	Routing    routing.PhaseRouting `mapstructure:"routing"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings

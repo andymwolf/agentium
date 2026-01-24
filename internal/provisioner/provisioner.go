@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/andywolf/agentium/internal/routing"
 )
 
 // Provisioner is the interface for cloud provisioning
@@ -43,16 +45,17 @@ type ClaudeAuthConfig struct {
 
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string         `json:"id"`
-	Repository    string         `json:"repository"`
-	Tasks         []string       `json:"tasks"`
-	PRs           []string       `json:"prs,omitempty"`
-	Agent         string         `json:"agent"`
-	MaxIterations int            `json:"max_iterations"`
-	MaxDuration   string         `json:"max_duration"`
-	Prompt        string         `json:"prompt"`
-	GitHub        GitHubConfig   `json:"github"`
-	ClaudeAuth    ClaudeAuthConfig `json:"claude_auth"`
+	ID            string                `json:"id"`
+	Repository    string                `json:"repository"`
+	Tasks         []string              `json:"tasks"`
+	PRs           []string              `json:"prs,omitempty"`
+	Agent         string                `json:"agent"`
+	MaxIterations int                   `json:"max_iterations"`
+	MaxDuration   string                `json:"max_duration"`
+	Prompt        string                `json:"prompt"`
+	GitHub        GitHubConfig          `json:"github"`
+	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
+	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration

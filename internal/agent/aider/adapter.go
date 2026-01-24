@@ -67,8 +67,13 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	prompt := a.BuildPrompt(session, iteration)
 
+	model := a.model
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		model = session.IterationContext.ModelOverride
+	}
+
 	return []string{
-		"--model", a.model,
+		"--model", model,
 		"--yes-always",
 		"--no-git",
 		"--message", prompt,
