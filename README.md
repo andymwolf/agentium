@@ -83,6 +83,9 @@ Agents run with `--dangerously-skip-permissions` (Claude Code's headless mode) o
 - **No lateral movement** — VMs have no access to other infrastructure
 - **Branch protection enforced** — Agents cannot commit directly to main/master
 
+### Dislaimer
+This application was entirely vibe-coded with Claude Code and some Codex review. A few issues were dogfooded through Agentium, and I expect that to be the long-term maintenance approach. Evals have been challenging until the full logging infrastructure is built, so the current state is likely to have some holes in it.
+
 ## Limitations
 
 - **No Dependency Management** — Issues are processed independently. If issue B depends on issue A, you must ensure A is completed and merged before authorizing B. Users need to be dependency-aware when queuing work.
