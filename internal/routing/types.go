@@ -1,6 +1,9 @@
 package routing
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // ModelConfig specifies an adapter and model for a phase
 type ModelConfig struct {
@@ -27,6 +30,16 @@ var ValidPhases = map[string]bool{
 	"NOTHING_TO_DO": true,
 	"ANALYZE":      true,
 	"PUSH":         true,
+}
+
+// ValidPhaseNames returns the sorted list of recognized phase names.
+func ValidPhaseNames() []string {
+	names := make([]string, 0, len(ValidPhases))
+	for phase := range ValidPhases {
+		names = append(names, phase)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // ParseModelSpec parses an "adapter:model" colon-separated string into ModelConfig.

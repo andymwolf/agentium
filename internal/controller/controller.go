@@ -294,7 +294,7 @@ func New(config SessionConfig) (*Controller, error) {
 	}
 	if c.modelRouter.IsConfigured() {
 		if unknowns := c.modelRouter.UnknownPhases(); len(unknowns) > 0 {
-			c.logWarning("routing config references unknown phases: %v (valid: PLAN, IMPLEMENT, TEST, PR_CREATION, REVIEW, EVALUATE, ANALYZE, PUSH)", unknowns)
+			c.logWarning("routing config references unknown phases: %v (valid: %v)", unknowns, routing.ValidPhaseNames())
 		}
 		for _, name := range c.modelRouter.Adapters() {
 			if _, exists := c.adapters[name]; !exists {
