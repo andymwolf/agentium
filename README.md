@@ -50,9 +50,9 @@ Every phase iteration and evaluator verdict is posted as a comment on the GitHub
 
 - **Ralph Wiggum Loop Architecture** — Controller-as-judge phase loop with LLM evaluation between phases
 - **Ephemeral VMs** — One VM per task, automatically destroyed after completion. No state leakage between sessions
-- **No Code Conflicts** — Each task runs in isolation on its own VM with a clean clone, eliminating the merge conflicts that plague local multi-agent setups
+- **No Code Conflicts** — Each session runs in isolation on its own VM with a clean clone, eliminating the merge conflicts that plague local multi-agent setups
 - **PR-Only Output** — Agents never have production access. All changes go through pull requests for human review
-- **Concurrent Sessions** — Run multiple issues in parallel, each on its own VM
+- **Concurrent Sessions** — Launch multiple sessions in parallel, each on its own VM
 - **Multi-Agent Support** — Works with Claude Code and Aider (extensible to other agents)
 - **Multi-Cloud** — GCP support complete, AWS and Azure planned
 - **Structured Logging** — Cloud-native structured logging with real-time streaming, severity filtering, and agent event extraction
@@ -145,11 +145,16 @@ agentium logs agentium-abc12345 --follow
 # 4. Review the PR when it appears
 ```
 
-### Running Multiple Issues Concurrently
+### Running Multiple Issues
 
 ```bash
-# Each issue gets its own VM—no conflicts
+# Multiple issues on one VM, completed sequentially
 agentium run --repo your-org/your-repo --issues 42,43,44
+
+# For true concurrency, launch separate sessions
+agentium run --repo your-org/your-repo --issues 42 &
+agentium run --repo your-org/your-repo --issues 43 &
+agentium run --repo your-org/your-repo --issues 44 &
 ```
 
 ### Monitoring
