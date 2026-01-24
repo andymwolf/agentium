@@ -259,6 +259,22 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Propagate phase loop config from config file
+	if cfg.PhaseLoop.Enabled {
+		sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
+			Enabled:                 cfg.PhaseLoop.Enabled,
+			ReviewEnabled:           cfg.PhaseLoop.ReviewEnabled,
+			ReviewMode:              cfg.PhaseLoop.ReviewMode,
+			PlanMaxIterations:       cfg.PhaseLoop.PlanMaxIterations,
+			ImplementMaxIterations:  cfg.PhaseLoop.ImplementMaxIterations,
+			TestMaxIterations:       cfg.PhaseLoop.TestMaxIterations,
+			ReviewMaxIterations:     cfg.PhaseLoop.ReviewMaxIterations,
+			DocsMaxIterations:       cfg.PhaseLoop.DocsMaxIterations,
+			EvalContextBudget:       cfg.PhaseLoop.EvalContextBudget,
+			EvalNoSignalLimit:       cfg.PhaseLoop.EvalNoSignalLimit,
+		}
+	}
+
 	// Build VM config
 	vmConfig := provisioner.VMConfig{
 		Project:         cfg.Cloud.Project,
