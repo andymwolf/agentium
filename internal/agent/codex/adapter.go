@@ -87,10 +87,13 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = append(args, "--model", model)
 	}
 
-	// Build developer instructions from system/project prompts + status signal instructions
+	// Build developer instructions from system/project prompts + status signal instructions.
+	// Escape newlines so the value survives CLI config parsing as a single argument.
 	developerInstructions := a.buildDeveloperInstructions(session)
 	if developerInstructions != "" {
-		args = append(args, "-c", fmt.Sprintf("developer_instructions=%s", developerInstructions))
+		escaped := strings.ReplaceAll(developerInstructions, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+		args = append(args, "-c", fmt.Sprintf("developer_instructions=%s", escaped))
 	}
 
 	args = append(args, prompt)
@@ -187,6 +190,7 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 type codexEvent struct {
 	Type  string      `json:"type"`
 	Item  *eventItem  `json:"item,omitempty"`
+	Delta *eventDelta `json:"delta,omitempty"`
 	Usage *usage      `json:"usage,omitempty"`
 	Error *eventError `json:"error,omitempty"`
 }
@@ -199,6 +203,11 @@ type eventItem struct {
 	Output   string `json:"output,omitempty"`
 	FilePath string `json:"file_path,omitempty"`
 	Action   string `json:"action,omitempty"`
+}
+
+// eventDelta represents a streaming text delta
+type eventDelta struct {
+	Text string `json:"text,omitempty"`
 }
 
 // usage represents token usage information
@@ -225,6 +234,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	var filesChanged []string
 	var errors []string
 	var totalInput, totalOutput int
+	var parsedEvents int
 
 	lines := strings.Split(stdout, "\n")
 	for _, line := range lines {
@@ -238,6 +248,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 			// Skip malformed JSON lines
 			continue
 		}
+		parsedEvents++
 
 		switch event.Type {
 		case "item.completed":
@@ -257,6 +268,13 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 					}
 				}
 			}
+		case "item.delta", "response.output_text.delta":
+			// Handle streaming delta events that deliver text incrementally
+			if event.Delta != nil && event.Delta.Text != "" {
+				textParts = append(textParts, event.Delta.Text)
+			} else if event.Item != nil && event.Item.Text != "" {
+				textParts = append(textParts, event.Item.Text)
+			}
 		case "turn.completed":
 			if event.Usage != nil {
 				totalInput += event.Usage.InputTokens
@@ -275,6 +293,12 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 
 	// Set token usage
 	result.TokensUsed = totalInput + totalOutput
+
+	// Fallback: if no JSONL events were parsed or no text was extracted,
+	// use raw stdout for signal/PR detection to handle unexpected output formats.
+	if parsedEvents == 0 || (len(textParts) == 0 && stdout != "") {
+		textParts = append(textParts, stdout)
+	}
 
 	// Combine text content for signal detection
 	combined := strings.Join(textParts, "\n") + "\n" + stderr

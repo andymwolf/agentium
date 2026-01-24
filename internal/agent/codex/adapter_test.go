@@ -307,6 +307,58 @@ func TestAdapter_BuildCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("developer_instructions escapes newlines", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:   "github.com/org/repo",
+			Tasks:        []string{"1"},
+			SystemPrompt: "Line one\nLine two\nLine three",
+			Metadata:     map[string]string{},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var configValue string
+		for i, arg := range cmd {
+			if arg == "-c" && i+1 < len(cmd) {
+				configValue = cmd[i+1]
+				break
+			}
+		}
+
+		// Should not contain raw newlines
+		instructionsValue := strings.TrimPrefix(configValue, "developer_instructions=")
+		if strings.Contains(instructionsValue, "\n") {
+			t.Errorf("developer_instructions should not contain raw newlines, got: %q", instructionsValue)
+		}
+		// Should contain escaped \n sequences
+		if !strings.Contains(instructionsValue, `\n`) {
+			t.Errorf("developer_instructions should contain escaped \\n, got: %q", instructionsValue)
+		}
+	})
+
+	t.Run("developer_instructions escapes backslashes", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:   "github.com/org/repo",
+			Tasks:        []string{"1"},
+			SystemPrompt: `path\to\file`,
+			Metadata:     map[string]string{},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var configValue string
+		for i, arg := range cmd {
+			if arg == "-c" && i+1 < len(cmd) {
+				configValue = cmd[i+1]
+				break
+			}
+		}
+
+		if !strings.Contains(configValue, `path\\to\\file`) {
+			t.Errorf("developer_instructions should escape backslashes, got: %q", configValue)
+		}
+	})
+
 	t.Run("SkillsPrompt overrides SystemPrompt", func(t *testing.T) {
 		session := &agent.Session{
 			Repository:   "github.com/org/repo",
@@ -522,6 +574,85 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 		expectedTokens := 1000 + 500 + 800 + 300
 		if result.TokensUsed != expectedTokens {
 			t.Errorf("TokensUsed = %d, want %d", result.TokensUsed, expectedTokens)
+		}
+	})
+
+	t.Run("item.delta event with delta field", func(t *testing.T) {
+		stdout := makeJSONL(
+			codexEvent{
+				Type:  "item.delta",
+				Delta: &eventDelta{Text: "Hello "},
+			},
+			codexEvent{
+				Type:  "item.delta",
+				Delta: &eventDelta{Text: "world"},
+			},
+		)
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "Hello ") || !strings.Contains(result.RawTextContent, "world") {
+			t.Errorf("RawTextContent = %q, want to contain delta text fragments", result.RawTextContent)
+		}
+	})
+
+	t.Run("response.output_text.delta event", func(t *testing.T) {
+		stdout := makeJSONL(
+			codexEvent{
+				Type:  "response.output_text.delta",
+				Delta: &eventDelta{Text: "streaming text here"},
+			},
+		)
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "streaming text here") {
+			t.Errorf("RawTextContent = %q, want to contain delta text", result.RawTextContent)
+		}
+	})
+
+	t.Run("delta event with item text fallback", func(t *testing.T) {
+		stdout := makeJSONL(
+			codexEvent{
+				Type: "item.delta",
+				Item: &eventItem{Type: "agent_message", Text: "fallback text"},
+			},
+		)
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "fallback text") {
+			t.Errorf("RawTextContent = %q, want to contain item text from delta event", result.RawTextContent)
+		}
+	})
+
+	t.Run("status signals detected from delta events", func(t *testing.T) {
+		stdout := makeJSONL(
+			codexEvent{
+				Type:  "item.delta",
+				Delta: &eventDelta{Text: "Working on it...\nAGENTIUM_STATUS: COMPLETE"},
+			},
+		)
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if result.AgentStatus != "COMPLETE" {
+			t.Errorf("AgentStatus = %q, want %q", result.AgentStatus, "COMPLETE")
+		}
+		if !result.PushedChanges {
+			t.Error("PushedChanges should be true for COMPLETE status")
 		}
 	})
 }
@@ -876,6 +1007,48 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 
 		if !result.PushedChanges {
 			t.Error("PushedChanges should be true when git push output is detected")
+		}
+	})
+
+	t.Run("raw stdout fallback when no JSONL parsed", func(t *testing.T) {
+		// Simulate output that is plain text (not JSONL at all)
+		stdout := "Working on issue #12\nAGENTIUM_STATUS: COMPLETE\nCreated pull request #42\nhttps://github.com/org/repo/pull/42"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		// Status should be detected from raw stdout
+		if result.AgentStatus != "COMPLETE" {
+			t.Errorf("AgentStatus = %q, want %q (raw stdout fallback)", result.AgentStatus, "COMPLETE")
+		}
+		// PRs should be detected from raw stdout
+		if len(result.PRsCreated) == 0 {
+			t.Error("PRsCreated should be detected from raw stdout fallback")
+		}
+		if !result.PushedChanges {
+			t.Error("PushedChanges should be true from COMPLETE status in raw fallback")
+		}
+	})
+
+	t.Run("raw stdout fallback when JSONL parsed but no text extracted", func(t *testing.T) {
+		// Simulate events that don't produce text (e.g., only file_change events)
+		stdout := makeJSONL(
+			codexEvent{
+				Type: "item.completed",
+				Item: &eventItem{Type: "file_change", FilePath: "main.go", Action: "modified"},
+			},
+		) + "AGENTIUM_STATUS: PUSHED\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		// The non-JSON line "AGENTIUM_STATUS: PUSHED" should be picked up via raw fallback
+		if result.AgentStatus != "PUSHED" {
+			t.Errorf("AgentStatus = %q, want %q (fallback for non-text JSONL)", result.AgentStatus, "PUSHED")
 		}
 	})
 }
