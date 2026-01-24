@@ -1618,9 +1618,10 @@ func (c *Controller) terminateVM() {
 	}
 
 	// Delete instance
-	zoneName := filepath.Base(string(zone))
+	name := strings.TrimSpace(string(instanceName))
+	zoneName := filepath.Base(strings.TrimSpace(string(zone)))
 	cmd = exec.Command("gcloud", "compute", "instances", "delete",
-		string(instanceName),
+		name,
 		"--zone", zoneName,
 		"--quiet",
 	)
