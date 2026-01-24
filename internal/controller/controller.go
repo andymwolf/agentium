@@ -222,13 +222,15 @@ func New(config SessionConfig) (*Controller, error) {
 		cloudLogger = cloudLoggerInstance
 	}
 
-	// Initialize metadata updater (non-fatal if unavailable)
+	// Initialize metadata updater (only on GCP instances)
 	var metadataUpdater gcp.MetadataUpdater
-	metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
-	if err != nil {
-		log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
-	} else {
-		metadataUpdater = metadataUpdaterInstance
+	if gcp.IsRunningOnGCP() {
+		metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
+		if err != nil {
+			log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
+		} else {
+			metadataUpdater = metadataUpdaterInstance
+		}
 	}
 
 	c := &Controller{

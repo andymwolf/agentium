@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
@@ -171,7 +172,7 @@ func TestComputeMetadataUpdater_UpdateStatus_GetInstanceError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !errors.Is(err, err) || !contains(err.Error(), "failed to get instance metadata") {
+	if !strings.Contains(err.Error(), "failed to get instance metadata") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 
@@ -201,7 +202,7 @@ func TestComputeMetadataUpdater_UpdateStatus_SetMetadataError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !contains(err.Error(), "failed to set instance metadata") {
+	if !strings.Contains(err.Error(), "failed to set instance metadata") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -261,15 +262,3 @@ func TestComputeMetadataUpdater_Close(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

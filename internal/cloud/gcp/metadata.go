@@ -152,6 +152,24 @@ func (u *ComputeMetadataUpdater) Close() error {
 	return nil
 }
 
+// IsRunningOnGCP returns true if the GCP metadata server is reachable,
+// indicating the code is running on a GCP instance. Uses a short timeout
+// to avoid blocking startup on non-GCP environments.
+func IsRunningOnGCP() bool {
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/", nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 // getInstanceMetadataField fetches a single field from the GCP metadata server.
 // The field should be relative to the metadata root, e.g. "instance/name" or "project/project-id".
 func getInstanceMetadataField(ctx context.Context, field string) (string, error) {
