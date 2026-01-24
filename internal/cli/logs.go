@@ -31,7 +31,7 @@ func init() {
 	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output")
 	logsCmd.Flags().Int("tail", 100, "Number of lines to show from the end")
 	logsCmd.Flags().String("since", "", "Show logs since timestamp (e.g., 2024-01-01T00:00:00Z) or duration (e.g., 1h)")
-	logsCmd.Flags().Bool("events", false, "Show agent events (tool calls, decisions)")
+	logsCmd.Flags().Bool("events", false, "Show agent events (tool calls, decisions); implies --level=debug")
 	logsCmd.Flags().String("level", "info", "Minimum log level: debug, info, warning, error")
 }
 

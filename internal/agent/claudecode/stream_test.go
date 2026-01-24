@@ -244,6 +244,39 @@ func TestParseStreamJSON_SystemEvent(t *testing.T) {
 	}
 }
 
+func TestParseStreamJSON_ToolResultArrayContent(t *testing.T) {
+	// Tool result with content as an array of text blocks
+	input := `{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"first part"},{"type":"text","text":"second part"}]}]}}` + "\n"
+	result := ParseStreamJSON([]byte(input))
+
+	if len(result.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(result.Events))
+	}
+
+	evt := result.Events[0]
+	if evt.Content != "first part\nsecond part" {
+		t.Errorf("event content = %q, want %q", evt.Content, "first part\nsecond part")
+	}
+	if !strings.Contains(result.TextContent, "first part") {
+		t.Error("TextContent missing first part of array content")
+	}
+	if !strings.Contains(result.TextContent, "second part") {
+		t.Error("TextContent missing second part of array content")
+	}
+}
+
+func TestParseStreamJSON_ToolResultNilContent(t *testing.T) {
+	input := `{"type":"user","message":{"content":[{"type":"tool_result"}]}}` + "\n"
+	result := ParseStreamJSON([]byte(input))
+
+	if len(result.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(result.Events))
+	}
+	if result.Events[0].Content != "" {
+		t.Errorf("expected empty content for nil tool_result, got %q", result.Events[0].Content)
+	}
+}
+
 func TestParseStreamJSON_EmptyLines(t *testing.T) {
 	input := "\n\n" +
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}` + "\n\n\n"

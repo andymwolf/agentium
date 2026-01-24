@@ -111,12 +111,9 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		c.logAgentEvents(result.Events)
 	}
 
-	// Process memory signals - prefer parsed text content when available
-	signalSource := string(stdoutBytes) + string(stderrBytes)
-	if result.RawTextContent != "" {
-		signalSource = result.RawTextContent + "\n" + string(stderrBytes)
-	}
+	// Process memory signals using the adapter's parsed text content
 	if c.memoryStore != nil {
+		signalSource := result.RawTextContent + "\n" + string(stderrBytes)
 		signals := memory.ParseSignals(signalSource)
 		if len(signals) > 0 {
 			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)

@@ -3,6 +3,7 @@ package claudecode
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 )
 
 // StreamEventType enumerates event types in Claude Code's stream-json output
@@ -195,43 +196,30 @@ func blockContentToString(content interface{}) string {
 	switch v := content.(type) {
 	case string:
 		return v
-	default:
-		// Try to marshal and extract text from array of content blocks
+	case []interface{}:
+		// Array of content blocks with "text" fields
+		var parts []string
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				if text, ok := m["text"].(string); ok && text != "" {
+					parts = append(parts, text)
+				}
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
+		// Fallback: marshal the array as JSON
 		data, err := json.Marshal(v)
 		if err != nil {
 			return ""
 		}
-		// If it's a simple JSON string
-		var s string
-		if json.Unmarshal(data, &s) == nil {
-			return s
-		}
-		// If it's an array of objects with "text" fields
-		var blocks []struct {
-			Text string `json:"text"`
-		}
-		if json.Unmarshal(data, &blocks) == nil {
-			var parts []string
-			for _, b := range blocks {
-				if b.Text != "" {
-					parts = append(parts, b.Text)
-				}
-			}
-			if len(parts) > 0 {
-				return join(parts, "\n")
-			}
+		return string(data)
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return ""
 		}
 		return string(data)
 	}
-}
-
-func join(parts []string, sep string) string {
-	if len(parts) == 0 {
-		return ""
-	}
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result += sep + p
-	}
-	return result
 }
