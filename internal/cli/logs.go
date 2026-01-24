@@ -46,7 +46,7 @@ func getLogs(cmd *cobra.Command, args []string) error {
 	}
 
 	verbose := viper.GetBool("verbose")
-	prov, err := provisioner.New(provider, verbose)
+	prov, err := provisioner.New(provider, verbose, cfg.Cloud.Project)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -81,6 +81,9 @@ func getLogs(cmd *cobra.Command, args []string) error {
 		select {
 		case entry, ok := <-logCh:
 			if !ok {
+				if err := <-errCh; err != nil {
+					return fmt.Errorf("error reading logs: %w", err)
+				}
 				return nil
 			}
 			if entry.Timestamp.IsZero() {
@@ -88,11 +91,6 @@ func getLogs(cmd *cobra.Command, args []string) error {
 			} else {
 				fmt.Printf("[%s] %s\n", entry.Timestamp.Format("15:04:05"), entry.Message)
 			}
-		case err := <-errCh:
-			if err != nil {
-				return fmt.Errorf("error reading logs: %w", err)
-			}
-			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}

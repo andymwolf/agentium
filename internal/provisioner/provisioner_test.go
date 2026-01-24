@@ -45,7 +45,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prov, err := New(tt.provider, false)
+			prov, err := New(tt.provider, false, "test-project")
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("New(%q) expected error, got nil", tt.provider)
@@ -197,6 +197,159 @@ func TestProvisionResult(t *testing.T) {
 	}
 	if result.SessionID != "agentium-abc123" {
 		t.Errorf("SessionID = %q, want %q", result.SessionID, "agentium-abc123")
+	}
+}
+
+func TestBuildLogsArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		project   string
+		sessionID string
+		opts      LogsOptions
+		wantArgs  []string
+	}{
+		{
+			name:      "basic args with project",
+			project:   "my-project",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				"--format=json",
+				"--project=my-project",
+			},
+		},
+		{
+			name:      "no project flag when empty",
+			project:   "",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				"--format=json",
+			},
+		},
+		{
+			name:      "with tail limit",
+			project:   "my-project",
+			sessionID: "agentium-abc123",
+			opts:      LogsOptions{Tail: 50},
+			wantArgs: []string{
+				"logging", "read",
+				`logName=~"agentium-session" AND jsonPayload.session_id="agentium-abc123"`,
+				"--format=json",
+				"--project=my-project",
+				"--limit=50",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &GCPProvisioner{project: tt.project}
+			got := p.buildLogsArgs(tt.sessionID, tt.opts)
+			if len(got) != len(tt.wantArgs) {
+				t.Fatalf("buildLogsArgs() returned %d args, want %d\ngot:  %v\nwant: %v", len(got), len(tt.wantArgs), got, tt.wantArgs)
+			}
+			for i := range got {
+				if got[i] != tt.wantArgs[i] {
+					t.Errorf("arg[%d] = %q, want %q", i, got[i], tt.wantArgs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseLogEntries(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []LogEntry
+		wantErr bool
+	}{
+		{
+			name:  "textPayload entries",
+			input: `[{"timestamp":"2024-01-15T10:00:01.000Z","textPayload":"hello world","severity":"INFO"},{"timestamp":"2024-01-15T10:00:00.000Z","textPayload":"starting up","severity":"DEBUG"}]`,
+			want: []LogEntry{
+				{Message: "starting up", Level: "DEBUG"},
+				{Message: "hello world", Level: "INFO"},
+			},
+		},
+		{
+			name:  "jsonPayload entries",
+			input: `[{"timestamp":"2024-01-15T10:00:00.000Z","severity":"DEFAULT","jsonPayload":{"message":"controller ready","severity":"INFO"}}]`,
+			want: []LogEntry{
+				{Message: "controller ready", Level: "INFO"},
+			},
+		},
+		{
+			name:  "jsonPayload overrides textPayload",
+			input: `[{"timestamp":"2024-01-15T10:00:00.000Z","textPayload":"raw text","severity":"WARNING","jsonPayload":{"message":"structured msg","severity":"ERROR"}}]`,
+			want: []LogEntry{
+				{Message: "structured msg", Level: "ERROR"},
+			},
+		},
+		{
+			name:  "jsonPayload without severity uses top-level severity",
+			input: `[{"timestamp":"2024-01-15T10:00:00.000Z","severity":"WARNING","jsonPayload":{"message":"no level"}}]`,
+			want: []LogEntry{
+				{Message: "no level", Level: "WARNING"},
+			},
+		},
+		{
+			name:  "empty message entries are skipped",
+			input: `[{"timestamp":"2024-01-15T10:00:00.000Z","severity":"INFO"},{"timestamp":"2024-01-15T09:59:00.000Z","textPayload":"visible","severity":"INFO"}]`,
+			want: []LogEntry{
+				{Message: "visible", Level: "INFO"},
+			},
+		},
+		{
+			name:  "entries returned in chronological order",
+			input: `[{"timestamp":"2024-01-15T10:00:02.000Z","textPayload":"third","severity":"INFO"},{"timestamp":"2024-01-15T10:00:01.000Z","textPayload":"second","severity":"INFO"},{"timestamp":"2024-01-15T10:00:00.000Z","textPayload":"first","severity":"INFO"}]`,
+			want: []LogEntry{
+				{Message: "first", Level: "INFO"},
+				{Message: "second", Level: "INFO"},
+				{Message: "third", Level: "INFO"},
+			},
+		},
+		{
+			name:    "invalid JSON returns error",
+			input:   `not json`,
+			wantErr: true,
+		},
+		{
+			name:  "empty array",
+			input: `[]`,
+			want:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseLogEntries([]byte(tt.input))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("parseLogEntries() expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLogEntries() unexpected error: %v", err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("parseLogEntries() returned %d entries, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if got[i].Message != tt.want[i].Message {
+					t.Errorf("entry[%d].Message = %q, want %q", i, got[i].Message, tt.want[i].Message)
+				}
+				if got[i].Level != tt.want[i].Level {
+					t.Errorf("entry[%d].Level = %q, want %q", i, got[i].Level, tt.want[i].Level)
+				}
+			}
+		})
 	}
 }
 

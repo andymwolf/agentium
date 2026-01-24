@@ -120,10 +120,10 @@ type LogEntry struct {
 }
 
 // New creates a new provisioner for the specified cloud provider
-func New(provider string, verbose bool) (Provisioner, error) {
+func New(provider string, verbose bool, project string) (Provisioner, error) {
 	switch provider {
 	case "gcp":
-		return NewGCPProvisioner(verbose)
+		return NewGCPProvisioner(verbose, project)
 	case "aws":
 		return nil, fmt.Errorf("AWS provisioner not yet implemented")
 	case "azure":
