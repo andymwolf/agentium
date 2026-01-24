@@ -65,6 +65,14 @@ prompts:
   system_md_url: ""                 # Override URL for SYSTEM.md prompt
   fetch_timeout: "5s"               # Timeout for fetching remote prompts
 
+# Phase loop (controller-as-judge)
+phase_loop:
+  enabled: true                     # Enable evaluator-driven phase loop
+  plan_max_iterations: 3            # Max PLAN phase iterations
+  implement_max_iterations: 5       # Max IMPLEMENT phase iterations
+  test_max_iterations: 5            # Max TEST phase iterations
+  review_max_iterations: 3          # Max REVIEW phase iterations
+
 # Model routing (per-phase model selection)
 routing:
   default:                          # Default model for all phases
@@ -179,15 +187,43 @@ Model routing enables per-phase model selection for optimizing cost and performa
 
 | Phase | Description |
 |-------|-------------|
+| `PLAN` | Planning the implementation approach |
 | `IMPLEMENT` | Main feature implementation |
 | `TEST` | Test execution and fixing |
 | `PR_CREATION` | Creating pull requests |
 | `REVIEW` | Reviewing own changes |
-| `ANALYZE` | Analysis phase |
+| `EVALUATE` | LLM evaluator phase (controller-as-judge) |
+| `ANALYZE` | Analysis phase (used for PR reviews) |
 | `COMPLETE` | Session completion |
 | `BLOCKED` | Agent blocked, needs human intervention |
 | `NOTHING_TO_DO` | No changes required |
 | `PUSH` | Pushing changes to remote |
+
+### phase_loop
+
+Controls the controller-as-judge phase loop behavior. When enabled, the controller runs an LLM evaluator after each phase to decide whether to advance, iterate, or block.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | bool | No | `false` | Enable the phase loop with evaluator |
+| `plan_max_iterations` | int | No | `3` | Max iterations for the PLAN phase |
+| `implement_max_iterations` | int | No | `5` | Max iterations for the IMPLEMENT phase |
+| `test_max_iterations` | int | No | `5` | Max iterations for the TEST phase |
+| `review_max_iterations` | int | No | `3` | Max iterations for the REVIEW phase |
+| `eval_context_budget` | int | No | `8000` | Max characters of evaluator output to store as context |
+
+**Phase loop sequence for issues:**
+
+```
+PLAN → [EVALUATE] → IMPLEMENT → [EVALUATE] → TEST → [EVALUATE] → REVIEW → [EVALUATE] → PR_CREATION → COMPLETE
+```
+
+After each phase, the evaluator produces a verdict:
+- **ADVANCE** — Proceed to next phase
+- **ITERATE** — Re-run current phase with feedback (up to max iterations)
+- **BLOCKED** — Stop and signal human intervention needed
+
+Evaluator feedback from ITERATE verdicts is stored in the memory system and provided as context in the next iteration of that phase.
 
 ### delegation
 

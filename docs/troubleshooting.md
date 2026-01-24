@@ -16,6 +16,12 @@ agentium logs SESSION_ID --tail 200
 # Follow logs in real-time
 agentium logs SESSION_ID --follow
 
+# Show agent events (tool calls, phase transitions, decisions)
+agentium logs SESSION_ID --events
+
+# Filter by severity level
+agentium logs SESSION_ID --level warning
+
 # Verbose output for any command
 agentium run --repo github.com/org/repo --issues 42 --verbose
 
@@ -460,6 +466,9 @@ agentium logs SESSION_ID --tail 200
 
 # Logs from last hour
 agentium logs SESSION_ID --since 1h
+
+# Agent events (tool calls, phase transitions)
+agentium logs SESSION_ID --events
 ```
 
 ### 4. SSH into the VM (GCP)

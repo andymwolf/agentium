@@ -221,6 +221,8 @@ agentium logs <session-id> [flags]
 | `--follow`, `-f` | bool | `false` | Follow log output (like `tail -f`) |
 | `--tail` | int | `100` | Number of lines from end to display |
 | `--since` | string | - | Show logs since timestamp (RFC3339) or duration (e.g., `1h`, `30m`) |
+| `--events` | bool | `false` | Show agent events (tool calls, decisions); implies `--level=debug` |
+| `--level` | string | `info` | Minimum log level: `debug`, `info`, `warning`, `error` |
 
 **Examples:**
 
@@ -239,6 +241,12 @@ agentium logs agentium-abc12345 --since 2h
 
 # Logs since a specific time
 agentium logs agentium-abc12345 --since "2024-01-15T10:30:00Z"
+
+# Show agent events (tool calls, phase transitions)
+agentium logs agentium-abc12345 --events
+
+# Show only warnings and errors
+agentium logs agentium-abc12345 --level warning
 ```
 
 ---
@@ -312,7 +320,7 @@ For `--phase-model`, use the format:
 PHASE=ADAPTER:MODEL_ID
 ```
 
-Where `PHASE` is one of: `IMPLEMENT`, `TEST`, `PR_CREATION`, `REVIEW`, `ANALYZE`, `COMPLETE`, `BLOCKED`, `NOTHING_TO_DO`, `PUSH`.
+Where `PHASE` is one of: `PLAN`, `IMPLEMENT`, `TEST`, `PR_CREATION`, `REVIEW`, `EVALUATE`, `ANALYZE`, `COMPLETE`, `BLOCKED`, `NOTHING_TO_DO`, `PUSH`.
 
 **Example:**
 

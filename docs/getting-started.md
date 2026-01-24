@@ -1,14 +1,15 @@
 # Getting Started with Agentium
 
-Agentium is an open-source platform for running ephemeral, containerized AI coding agents on cloud VMs. It automates GitHub issue implementation using AI agents (Claude Code or Aider) and creates pull requests for human review.
+Agentium implements the Ralph Wiggum loop pattern for autonomous software development: a controller-as-judge architecture where AI agents plan, implement, test, and self-review code in iterative loops on disposable cloud VMs. Create a GitHub issue, get a pull request.
 
 ## How It Works
 
 1. You point Agentium at a GitHub issue
 2. Agentium provisions an ephemeral cloud VM
-3. An AI agent runs in a container, implements the issue, and creates a PR
-4. The VM self-destructs after the session completes
-5. You review and merge the PR
+3. The agent enters a phase loop (`PLAN → IMPLEMENT → TEST → REVIEW → PR_CREATION`), with an LLM evaluator judging each phase before advancing
+4. The agent creates a pull request with the changes
+5. The VM self-destructs after the session completes
+6. You review and merge the PR
 
 ## Prerequisites
 
@@ -120,6 +121,9 @@ agentium status agentium-abc12345 --watch
 
 # Stream logs
 agentium logs agentium-abc12345 --follow
+
+# View agent events (tool calls, decisions)
+agentium logs agentium-abc12345 --events
 ```
 
 ### 6. Review the Pull Request
@@ -172,13 +176,21 @@ agentium run --repo github.com/org/repo --issues 42 --dry-run
 Each Agentium session follows this lifecycle:
 
 ```
-Provision VM → Initialize → Run Agent → Create PR → Terminate VM
+Provision VM → Phase Loop (PLAN → IMPLEMENT → TEST → REVIEW → PR_CREATION) → Terminate VM
 ```
+
+Within the phase loop, an LLM evaluator judges each phase's output and decides:
+- **ADVANCE** — Work is sufficient, proceed to next phase
+- **ITERATE** — Work needs improvement, re-run the phase with feedback
+- **BLOCKED** — Cannot proceed, needs human intervention
+
+Each phase has configurable iteration limits (e.g., PLAN: 3, IMPLEMENT: 5, TEST: 5, REVIEW: 3) to prevent runaway loops. Phase verdicts are posted as comments on the GitHub issue.
 
 Sessions automatically terminate when:
 - All assigned issues have PRs created
 - Maximum iteration count is reached (default: 30)
 - Maximum duration is exceeded (default: 2 hours)
+- The evaluator returns a BLOCKED verdict
 - An unrecoverable error occurs
 
 You can also manually terminate a session:
