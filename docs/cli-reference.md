@@ -72,7 +72,7 @@ agentium run [flags]
 
 **Required Flags:**
 
-- `--repo` is always required (must be provided on the command line; setting `project.repository` in config is not sufficient)
+- `--repo` is always required (enforced by the CLI; you must provide it on the command line)
 - At least one of `--issues` or `--prs` must be specified
 
 **Flags:**
