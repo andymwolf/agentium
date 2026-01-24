@@ -9,8 +9,10 @@ import (
 
 func TestPhaseToSubTask_AllConfiguredPhases(t *testing.T) {
 	expected := map[TaskPhase]SubTaskType{
+		PhasePlan:       SubTaskPlan,
 		PhaseImplement:  SubTaskImplement,
 		PhaseTest:       SubTaskTest,
+		PhaseReview:     SubTaskReview,
 		PhasePRCreation: SubTaskReview,
 		PhaseAnalyze:    SubTaskPlan,
 		PhasePush:       SubTaskPush,
@@ -29,7 +31,7 @@ func TestPhaseToSubTask_AllConfiguredPhases(t *testing.T) {
 }
 
 func TestPhaseToSubTask_UnconfiguredPhases(t *testing.T) {
-	unconfigured := []TaskPhase{PhaseComplete, PhaseBlocked, PhaseNothingToDo, PhaseReview}
+	unconfigured := []TaskPhase{PhaseComplete, PhaseBlocked, PhaseNothingToDo}
 	for _, phase := range unconfigured {
 		if _, ok := phaseToSubTask[phase]; ok {
 			t.Errorf("phaseToSubTask should not contain phase %s", phase)

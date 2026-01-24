@@ -109,6 +109,17 @@ func (s *Store) Entries() []Entry {
 	return s.data.Entries
 }
 
+// ClearByType removes all entries matching the given signal type.
+func (s *Store) ClearByType(signalType SignalType) {
+	filtered := make([]Entry, 0, len(s.data.Entries))
+	for _, e := range s.data.Entries {
+		if e.Type != signalType {
+			filtered = append(filtered, e)
+		}
+	}
+	s.data.Entries = filtered
+}
+
 // prune drops the oldest entries when the store exceeds maxEntries.
 // Returns the number of entries removed.
 func (s *Store) prune() int {

@@ -18,8 +18,8 @@ func TestLoadManifest(t *testing.T) {
 	// Verify expected skill names
 	expectedNames := []string{
 		"safety", "environment", "status_signals",
-		"planning", "implement", "test",
-		"pr_creation", "pr_review",
+		"planning", "plan", "implement", "test",
+		"pr_creation", "review", "pr_review", "evaluate",
 	}
 
 	names := make(map[string]bool)
@@ -48,10 +48,13 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"environment", nil},
 		{"status_signals", nil},
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
+		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
 		{"test", []string{"TEST", "IMPLEMENT"}},
 		{"pr_creation", []string{"PR_CREATION"}},
+		{"review", []string{"REVIEW"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
+		{"evaluate", []string{"EVALUATE"}},
 	}
 
 	skillMap := make(map[string]SkillEntry)
@@ -145,10 +148,13 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"environment":    "ENVIRONMENT",
 		"status_signals": "STATUS SIGNALING",
 		"planning":       "Plan Your Approach",
+		"plan":           "PLAN PHASE",
 		"implement":      "Pre-Flight Check",
 		"test":           "Development Loop",
 		"pr_creation":    "Push and Create PR",
+		"review":         "REVIEW PHASE",
 		"pr_review":      "PR REVIEW SESSIONS",
+		"evaluate":       "EVALUATE PHASE",
 	}
 
 	skillMap := make(map[string]Skill)

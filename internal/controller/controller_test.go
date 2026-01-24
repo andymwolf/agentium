@@ -284,6 +284,84 @@ func TestLoadConfigFromEnv_FullConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		envValue      string
+		wantNil       bool
+		wantEnabled   bool
+		wantPlan      int
+		wantImplement int
+	}{
+		{
+			name: "phase_loop present and enabled",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo",
+				"phase_loop": {"enabled": true, "plan_max_iterations": 2, "implement_max_iterations": 8}
+			}`,
+			wantNil:       false,
+			wantEnabled:   true,
+			wantPlan:      2,
+			wantImplement: 8,
+		},
+		{
+			name: "phase_loop absent",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo"
+			}`,
+			wantNil: true,
+		},
+		{
+			name: "phase_loop disabled",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo",
+				"phase_loop": {"enabled": false}
+			}`,
+			wantNil:     false,
+			wantEnabled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == "AGENTIUM_SESSION_CONFIG" {
+					return tt.envValue
+				}
+				return ""
+			}
+			readFile := func(path string) ([]byte, error) {
+				return nil, fmt.Errorf("should not be called")
+			}
+
+			config, err := LoadConfigFromEnv(getenv, readFile)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.wantNil {
+				if config.PhaseLoop != nil {
+					t.Errorf("PhaseLoop = %+v, want nil", config.PhaseLoop)
+				}
+				return
+			}
+
+			if config.PhaseLoop == nil {
+				t.Fatal("PhaseLoop is nil, want non-nil")
+			}
+			if config.PhaseLoop.Enabled != tt.wantEnabled {
+				t.Errorf("PhaseLoop.Enabled = %v, want %v", config.PhaseLoop.Enabled, tt.wantEnabled)
+			}
+			if tt.wantPlan > 0 && config.PhaseLoop.PlanMaxIterations != tt.wantPlan {
+				t.Errorf("PlanMaxIterations = %d, want %d", config.PhaseLoop.PlanMaxIterations, tt.wantPlan)
+			}
+			if tt.wantImplement > 0 && config.PhaseLoop.ImplementMaxIterations != tt.wantImplement {
+				t.Errorf("ImplementMaxIterations = %d, want %d", config.PhaseLoop.ImplementMaxIterations, tt.wantImplement)
+			}
+		})
+	}
+}
+
 func TestDefaultConfigPath(t *testing.T) {
 	if DefaultConfigPath != "/etc/agentium/session.json" {
 		t.Errorf("DefaultConfigPath = %q, want %q", DefaultConfigPath, "/etc/agentium/session.json")

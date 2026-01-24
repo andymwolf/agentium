@@ -12,6 +12,8 @@ const (
 	StepPending  SignalType = "STEP_PENDING"
 	FileModified SignalType = "FILE_MODIFIED"
 	Error        SignalType = "ERROR"
+	EvalFeedback SignalType = "EVAL_FEEDBACK"
+	PhaseResult  SignalType = "PHASE_RESULT"
 )
 
 // Signal is a parsed memory signal extracted from agent output.

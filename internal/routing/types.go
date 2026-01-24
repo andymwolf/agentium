@@ -16,15 +16,17 @@ type PhaseRouting struct {
 
 // ValidPhases is the set of recognized task phase names.
 var ValidPhases = map[string]bool{
-	"IMPLEMENT":   true,
-	"TEST":        true,
-	"PR_CREATION": true,
-	"REVIEW":      true,
-	"COMPLETE":    true,
-	"BLOCKED":     true,
+	"PLAN":         true,
+	"IMPLEMENT":    true,
+	"TEST":         true,
+	"PR_CREATION":  true,
+	"REVIEW":       true,
+	"EVALUATE":     true,
+	"COMPLETE":     true,
+	"BLOCKED":      true,
 	"NOTHING_TO_DO": true,
-	"ANALYZE":     true,
-	"PUSH":        true,
+	"ANALYZE":      true,
+	"PUSH":         true,
 }
 
 // ParseModelSpec parses an "adapter:model" colon-separated string into ModelConfig.
