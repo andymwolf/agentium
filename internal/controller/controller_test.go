@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -854,6 +855,105 @@ func containsString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestSetupCodexAuth(t *testing.T) {
+	tests := []struct {
+		name           string
+		authBase64     string
+		wantFile       bool
+		wantContent    string
+		wantErr        bool
+	}{
+		{
+			name:       "empty base64 - no-op",
+			authBase64: "",
+			wantFile:   false,
+		},
+		{
+			name:        "valid base64 writes file",
+			authBase64:  "eyJhY2Nlc3NfdG9rZW4iOiAidGVzdC10b2tlbiJ9", // {"access_token": "test-token"}
+			wantFile:    true,
+			wantContent: `{"access_token": "test-token"}`,
+		},
+		{
+			name:       "invalid base64 returns error",
+			authBase64: "not-valid-base64!!!",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use temp dir as home
+			tmpHome := t.TempDir()
+			t.Setenv("HOME", tmpHome)
+
+			c := &Controller{
+				config: SessionConfig{},
+				logger: log.New(io.Discard, "", 0),
+			}
+			c.config.CodexAuth.AuthJSONBase64 = tt.authBase64
+
+			err := c.setupCodexAuth()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			authPath := fmt.Sprintf("%s/.codex/auth.json", tmpHome)
+			if !tt.wantFile {
+				if _, err := os.Stat(authPath); err == nil {
+					t.Error("auth.json should not exist")
+				}
+				return
+			}
+
+			data, err := os.ReadFile(authPath)
+			if err != nil {
+				t.Fatalf("failed to read auth.json: %v", err)
+			}
+			if string(data) != tt.wantContent {
+				t.Errorf("auth.json content = %q, want %q", string(data), tt.wantContent)
+			}
+
+			// Verify permissions
+			info, _ := os.Stat(authPath)
+			if info.Mode().Perm() != 0600 {
+				t.Errorf("auth.json permissions = %o, want 0600", info.Mode().Perm())
+			}
+		})
+	}
+}
+
+func TestLoadConfigFromEnv_CodexAuth(t *testing.T) {
+	envValue := `{
+		"id": "test", "repository": "github.com/org/repo",
+		"codex_auth": {"auth_json_base64": "dGVzdC1kYXRh"}
+	}`
+
+	getenv := func(key string) string {
+		if key == "AGENTIUM_SESSION_CONFIG" {
+			return envValue
+		}
+		return ""
+	}
+	readFile := func(path string) ([]byte, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+
+	config, err := LoadConfigFromEnv(getenv, readFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if config.CodexAuth.AuthJSONBase64 != "dGVzdC1kYXRh" {
+		t.Errorf("CodexAuth.AuthJSONBase64 = %q, want %q", config.CodexAuth.AuthJSONBase64, "dGVzdC1kYXRh")
+	}
 }
 
 func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {

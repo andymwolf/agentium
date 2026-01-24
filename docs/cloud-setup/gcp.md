@@ -66,6 +66,20 @@ echo -n "sk-ant-your-api-key-here" | \
   gcloud secrets versions add anthropic-api-key --data-file=-
 ```
 
+### 4b. Set Up Codex Authentication (Optional, for Codex agent)
+
+If using the Codex agent, authenticate on a machine with a browser first:
+
+```bash
+# Install Codex
+npm install -g @openai/codex
+
+# Login (opens browser for OAuth)
+codex --login
+```
+
+Agentium will automatically read the cached credentials from `~/.codex/auth.json` (or the macOS Keychain) and transfer them to the VM. Treat `~/.codex/auth.json` like a password — it contains access tokens.
+
 ### 5. Configure Agentium
 
 ```yaml

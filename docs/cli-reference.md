@@ -82,7 +82,7 @@ agentium run [flags]
 | `--repo` | string | **Required** | GitHub repository (e.g., `github.com/org/repo`) |
 | `--issues` | string | - | Issue numbers to work on (comma-separated) |
 | `--prs` | string | - | PR numbers for review sessions (comma-separated) |
-| `--agent` | string | `claude-code` | Agent to use: `claude-code`, `aider` |
+| `--agent` | string | `claude-code` | Agent to use: `claude-code`, `aider`, `codex` |
 | `--max-iterations` | int | `30` | Maximum iterations before termination |
 | `--max-duration` | string | `2h` | Maximum session duration |
 | `--provider` | string | From config | Cloud provider: `gcp`, `aws`, `azure` (required if not in config) |
@@ -107,6 +107,9 @@ agentium run --repo github.com/org/repo --prs 50
 
 # Use Aider agent
 agentium run --repo github.com/org/repo --issues 42 --agent aider
+
+# Use Codex agent (requires codex --login first for OAuth credentials)
+agentium run --repo github.com/org/repo --issues 42 --agent codex
 
 # Override model globally
 agentium run --repo github.com/org/repo --issues 42 --model claude-code:claude-opus-4-20250514

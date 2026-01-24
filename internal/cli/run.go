@@ -41,7 +41,7 @@ func init() {
 	runCmd.Flags().String("repo", "", "GitHub repository (e.g., github.com/org/repo)")
 	runCmd.Flags().StringSlice("issues", nil, "Issue numbers to work on (comma-separated)")
 	runCmd.Flags().StringSlice("prs", nil, "PR numbers to address review feedback (comma-separated)")
-	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider)")
+	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider, codex)")
 	runCmd.Flags().Int("max-iterations", 30, "Maximum number of iterations")
 	runCmd.Flags().String("max-duration", "2h", "Maximum session duration")
 	runCmd.Flags().String("provider", "", "Cloud provider (gcp, aws, azure)")
@@ -136,6 +136,17 @@ func runSession(cmd *cobra.Command, args []string) error {
 		fmt.Println("Using Claude Max OAuth authentication")
 	}
 
+	// Handle Codex OAuth authentication
+	var codexAuthBase64 string
+	if cfg.Session.Agent == "codex" {
+		authJSON, err := readCodexAuthJSON(cfg.Codex.AuthJSONPath)
+		if err != nil {
+			return fmt.Errorf("failed to read Codex auth.json: %w", err)
+		}
+		codexAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
+		fmt.Println("Using Codex OAuth authentication")
+	}
+
 	// Generate session ID
 	sessionID := fmt.Sprintf("agentium-%s", uuid.New().String()[:8])
 
@@ -185,6 +196,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 		ClaudeAuth: provisioner.ClaudeAuthConfig{
 			AuthMode:       cfg.Claude.AuthMode,
 			AuthJSONBase64: claudeAuthBase64,
+		},
+		CodexAuth: provisioner.CodexAuthConfig{
+			AuthJSONBase64: codexAuthBase64,
 		},
 	}
 
@@ -333,6 +347,69 @@ func readAuthFromKeychain() ([]byte, error) {
 
 	if !json.Valid(data) {
 		return nil, fmt.Errorf("Keychain credential is not valid JSON")
+	}
+
+	return data, nil
+}
+
+// readCodexAuthJSON reads Codex OAuth credentials from file or macOS Keychain
+func readCodexAuthJSON(path string) ([]byte, error) {
+	// Expand ~ to home directory
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve home directory: %w", err)
+		}
+		path = filepath.Join(home, path[2:])
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// On macOS, try reading from Keychain
+			if runtime.GOOS == "darwin" {
+				keychainData, keychainErr := readCodexAuthFromKeychain()
+				if keychainErr == nil {
+					return keychainData, nil
+				}
+			}
+			return nil, fmt.Errorf("Codex auth.json not found at %s and not in macOS Keychain\n\nTo use Codex authentication:\n  1. Install Codex: npm install -g @openai/codex\n  2. Run: codex --login\n  3. Try again", path)
+		}
+		return nil, fmt.Errorf("failed to read Codex auth.json: %w", err)
+	}
+
+	if len(data) < 10 {
+		return nil, fmt.Errorf("Codex auth.json appears to be empty or too small")
+	}
+
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("Codex auth.json is not valid JSON")
+	}
+
+	return data, nil
+}
+
+// readCodexAuthFromKeychain reads Codex OAuth credentials from the macOS Keychain
+func readCodexAuthFromKeychain() ([]byte, error) {
+	u, err := user.Current()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	cmd := exec.Command("security", "find-generic-password",
+		"-s", "Codex-credentials",
+		"-a", u.Username,
+		"-w",
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Codex credentials from Keychain: %w", err)
+	}
+
+	data := []byte(strings.TrimSpace(string(output)))
+
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("Codex Keychain credential is not valid JSON")
 	}
 
 	return data, nil

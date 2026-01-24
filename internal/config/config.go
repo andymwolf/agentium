@@ -22,6 +22,11 @@ type DelegationConfigYAML struct {
 	SubAgents map[string]SubAgentConfigYAML `mapstructure:"sub_agents"`
 }
 
+// CodexConfig contains Codex agent authentication settings
+type CodexConfig struct {
+	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json (default: ~/.codex/auth.json)
+}
+
 // Config represents the full Agentium configuration
 type Config struct {
 	Project    ProjectConfig        `mapstructure:"project"`
@@ -31,6 +36,7 @@ type Config struct {
 	Session    SessionConfig        `mapstructure:"session"`
 	Controller ControllerConfig     `mapstructure:"controller"`
 	Claude     ClaudeConfig         `mapstructure:"claude"`
+	Codex      CodexConfig          `mapstructure:"codex"`
 	Prompts    PromptsConfig        `mapstructure:"prompts"`
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
 	Delegation DelegationConfigYAML `mapstructure:"delegation"`
@@ -165,6 +171,10 @@ func applyDefaults(cfg *Config) {
 	if cfg.Claude.AuthJSONPath == "" {
 		cfg.Claude.AuthJSONPath = "~/.config/claude-code/auth.json"
 	}
+
+	if cfg.Codex.AuthJSONPath == "" {
+		cfg.Codex.AuthJSONPath = "~/.codex/auth.json"
+	}
 }
 
 // Validate validates the configuration
@@ -183,9 +193,9 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Session.Agent != "" {
-		validAgents := map[string]bool{"claude-code": true, "aider": true}
+		validAgents := map[string]bool{"claude-code": true, "aider": true, "codex": true}
 		if !validAgents[c.Session.Agent] {
-			return fmt.Errorf("invalid agent: %s (must be claude-code or aider)", c.Session.Agent)
+			return fmt.Errorf("invalid agent: %s (must be claude-code, aider, or codex)", c.Session.Agent)
 		}
 	}
 

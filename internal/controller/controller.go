@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -108,6 +109,9 @@ type SessionConfig struct {
 		AuthMode       string `json:"auth_mode"`
 		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 	} `json:"claude_auth"`
+	CodexAuth struct {
+		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
+	} `json:"codex_auth"`
 	Prompts struct {
 		SystemMDURL  string `json:"system_md_url,omitempty"`
 		FetchTimeout string `json:"fetch_timeout,omitempty"` // Duration string (e.g. "5s", "10s")
@@ -418,6 +422,11 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch GitHub token: %w", err)
 	}
 
+	// Set up Codex auth credentials (if provided)
+	if err := c.setupCodexAuth(); err != nil {
+		c.logWarning("failed to set up Codex auth: %v", err)
+	}
+
 	// Clone repository
 	if err := c.cloneRepository(ctx); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
@@ -591,6 +600,39 @@ func (c *Controller) fetchGitHubToken(ctx context.Context) error {
 	}
 
 	c.gitHubToken = token
+	return nil
+}
+
+// setupCodexAuth writes the Codex auth.json credentials to disk if provided.
+// This enables the Codex agent to authenticate with OpenAI on the VM.
+func (c *Controller) setupCodexAuth() error {
+	if c.config.CodexAuth.AuthJSONBase64 == "" {
+		return nil
+	}
+
+	// Decode base64
+	data, err := base64.StdEncoding.DecodeString(c.config.CodexAuth.AuthJSONBase64)
+	if err != nil {
+		return fmt.Errorf("failed to decode Codex auth data: %w", err)
+	}
+
+	// Determine target path: ~/.codex/auth.json
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		return fmt.Errorf("failed to create %s: %w", codexDir, err)
+	}
+
+	authPath := filepath.Join(codexDir, "auth.json")
+	if err := os.WriteFile(authPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write Codex auth.json: %w", err)
+	}
+
+	c.logInfo("Codex auth credentials written to %s", authPath)
 	return nil
 }
 
@@ -1582,6 +1624,9 @@ func (c *Controller) clearSensitiveData() {
 
 	// Clear Claude auth data
 	c.config.ClaudeAuth.AuthJSONBase64 = ""
+
+	// Clear Codex auth data
+	c.config.CodexAuth.AuthJSONBase64 = ""
 
 	// Clear GitHub app credentials
 	c.config.GitHub.PrivateKeySecret = ""
