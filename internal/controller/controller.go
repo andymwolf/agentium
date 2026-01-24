@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -36,6 +37,12 @@ const (
 
 	// VMTerminationTimeout is the maximum time to wait for the VM deletion command
 	VMTerminationTimeout = 30 * time.Second
+
+	// AgentiumUID is the user ID for the agentium user in agent containers
+	AgentiumUID = 1000
+
+	// AgentiumGID is the group ID for the agentium group in agent containers
+	AgentiumGID = 1000
 )
 
 // Version is the controller version, set at build time via ldflags.
@@ -563,6 +570,14 @@ func (c *Controller) initializeWorkspace(ctx context.Context) error {
 		return err
 	}
 
+	// Set ownership to agentium user so agent containers can access
+	if err := os.Chown(c.workDir, AgentiumUID, AgentiumGID); err != nil {
+		c.logWarning("failed to set workspace ownership: %v", err)
+	}
+
+	// Configure git safe.directory as a fallback
+	_ = c.configureGitSafeDirectory(ctx)
+
 	return nil
 }
 
@@ -736,11 +751,48 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 		// Check if directory already exists with content
 		if entries, _ := os.ReadDir(c.workDir); len(entries) > 0 {
 			c.logInfo("Workspace already contains files, skipping clone")
+			// Fix ownership for existing workspaces
+			if err := c.ensureWorkspaceOwnership(); err != nil {
+				c.logWarning("failed to set workspace ownership: %v", err)
+			}
 			return nil
 		}
 		return err
 	}
 
+	// Fix ownership after clone so agent containers can access
+	if err := c.ensureWorkspaceOwnership(); err != nil {
+		c.logWarning("failed to set workspace ownership after clone: %v", err)
+	}
+
+	return nil
+}
+
+// ensureWorkspaceOwnership recursively changes ownership of the workspace
+// to agentium (uid=1000, gid=1000) so agent containers can access it.
+func (c *Controller) ensureWorkspaceOwnership() error {
+	c.logInfo("Setting workspace ownership to agentium (uid=%d, gid=%d)", AgentiumUID, AgentiumGID)
+
+	return filepath.WalkDir(c.workDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if err := os.Chown(path, AgentiumUID, AgentiumGID); err != nil {
+			return fmt.Errorf("failed to chown %s: %w", path, err)
+		}
+		return nil
+	})
+}
+
+// configureGitSafeDirectory adds the workspace to git's safe.directory config
+// as a fallback for ownership issues.
+func (c *Controller) configureGitSafeDirectory(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "git", "config", "--global", "--add", "safe.directory", c.workDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		c.logWarning("failed to configure git safe.directory: %v (%s)", err, string(output))
+		return err
+	}
+	c.logInfo("Configured git safe.directory for %s", c.workDir)
 	return nil
 }
 
