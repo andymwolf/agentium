@@ -6,13 +6,14 @@ import "github.com/andywolf/agentium/internal/routing"
 type SubTaskType string
 
 const (
-	SubTaskPlan      SubTaskType = "plan"
-	SubTaskImplement SubTaskType = "implement"
-	SubTaskTest      SubTaskType = "test"
-	SubTaskReview    SubTaskType = "review"
-	SubTaskDocs      SubTaskType = "docs"
-	SubTaskPush      SubTaskType = "push"
-	SubTaskEvaluate  SubTaskType = "evaluate"
+	SubTaskPlan       SubTaskType = "plan"
+	SubTaskImplement  SubTaskType = "implement"
+	SubTaskTest       SubTaskType = "test"
+	SubTaskReview     SubTaskType = "review"
+	SubTaskPRCreation SubTaskType = "pr_creation"
+	SubTaskDocs       SubTaskType = "docs"
+	SubTaskPush       SubTaskType = "push"
+	SubTaskEvaluate   SubTaskType = "evaluate"
 )
 
 // phaseToSubTask maps controller task phases to sub-task types.
@@ -22,7 +23,7 @@ var phaseToSubTask = map[TaskPhase]SubTaskType{
 	PhaseTest:       SubTaskTest,
 	PhaseReview:     SubTaskReview,
 	PhaseDocs:       SubTaskDocs,
-	PhasePRCreation: SubTaskReview,
+	PhasePRCreation: SubTaskPRCreation,
 	PhaseAnalyze:    SubTaskPlan,
 	PhasePush:       SubTaskPush,
 }
