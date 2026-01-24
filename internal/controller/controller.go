@@ -71,19 +71,22 @@ type TaskState struct {
 	MaxPhaseIter     int    // Max iterations for current phase (phase loop)
 	LastEvalVerdict  string // Last evaluator verdict (ADVANCE, ITERATE, BLOCKED)
 	LastEvalFeedback string // Last evaluator feedback text
+	ReviewDecided    bool   // Whether auto-review decision has been made
+	ReviewActive     bool   // Whether review loop is active for this task (auto mode)
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	Enabled                 bool `json:"enabled"`
-	ReviewEnabled           bool `json:"review_enabled,omitempty"`
-	PlanMaxIterations       int  `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations  int  `json:"implement_max_iterations,omitempty"`
-	TestMaxIterations       int  `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations     int  `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations       int  `json:"docs_max_iterations,omitempty"`
-	EvalContextBudget       int  `json:"eval_context_budget,omitempty"`
-	EvalNoSignalLimit       int  `json:"eval_no_signal_limit,omitempty"`
+	Enabled                 bool   `json:"enabled"`
+	ReviewEnabled           bool   `json:"review_enabled,omitempty"`
+	ReviewMode              string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
+	PlanMaxIterations       int    `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations  int    `json:"implement_max_iterations,omitempty"`
+	TestMaxIterations       int    `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations     int    `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations       int    `json:"docs_max_iterations,omitempty"`
+	EvalContextBudget       int    `json:"eval_context_budget,omitempty"`
+	EvalNoSignalLimit       int    `json:"eval_no_signal_limit,omitempty"`
 }
 
 // SessionConfig is the configuration passed to the controller

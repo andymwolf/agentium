@@ -188,9 +188,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				return nil
 			}
 
-			// Run evaluator (reviewer+judge when review_enabled, or legacy single-evaluator)
+			// Run evaluator (reviewer+judge when review enabled, or legacy single-evaluator)
 			var evalResult EvalResult
-			if c.reviewEnabled() {
+			if c.shouldReview(state, currentPhase) {
 				// Three-agent loop: reviewer then judge
 				reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
 					CompletedPhase: currentPhase,
@@ -206,16 +206,28 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 						evalResult = EvalResult{Verdict: VerdictAdvance}
 					}
 				} else {
+					// Assess complexity in auto mode during PLAN phase
+					assessComplexity := c.effectiveReviewMode() == "auto" && currentPhase == PhasePlan
+
 					evalResult, err = c.runJudge(ctx, judgeRunParams{
-						CompletedPhase: currentPhase,
-						PhaseOutput:    phaseOutput,
-						ReviewFeedback: reviewResult.Feedback,
-						Iteration:      iter,
-						MaxIterations:  maxIter,
+						CompletedPhase:   currentPhase,
+						PhaseOutput:      phaseOutput,
+						ReviewFeedback:   reviewResult.Feedback,
+						Iteration:        iter,
+						MaxIterations:    maxIter,
+						AssessComplexity: assessComplexity,
 					})
 					if err != nil {
 						c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
 						evalResult = EvalResult{Verdict: VerdictAdvance}
+					}
+
+					// Capture auto-mode review decision from judge
+					if assessComplexity && evalResult.ReviewMode != "" {
+						state.ReviewDecided = true
+						state.ReviewActive = (evalResult.ReviewMode == "FULL")
+						c.logInfo("Auto review mode: judge assessed complexity as %s (review_active=%v)",
+							evalResult.ReviewMode, state.ReviewActive)
 					}
 
 					// Track consecutive no-signal count for fail-closed behavior
@@ -296,9 +308,39 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 // before force-advancing.
 const defaultEvalNoSignalLimit = 2
 
-// reviewEnabled returns true if the review loop (reviewer+judge) is enabled.
-func (c *Controller) reviewEnabled() bool {
-	return c.config.PhaseLoop != nil && c.config.PhaseLoop.ReviewEnabled
+// effectiveReviewMode returns the resolved review mode string.
+// ReviewMode takes precedence; falls back to ReviewEnabled bool for backward compat.
+func (c *Controller) effectiveReviewMode() string {
+	if c.config.PhaseLoop == nil {
+		return ""
+	}
+	if c.config.PhaseLoop.ReviewMode != "" {
+		return c.config.PhaseLoop.ReviewMode
+	}
+	if c.config.PhaseLoop.ReviewEnabled {
+		return "always"
+	}
+	return ""
+}
+
+// shouldReview returns true if the review loop (reviewer+judge) should be used
+// for the given phase and task state.
+func (c *Controller) shouldReview(state *TaskState, phase TaskPhase) bool {
+	mode := c.effectiveReviewMode()
+	switch mode {
+	case "always":
+		return true
+	case "auto":
+		if phase == PhasePlan {
+			return true // PLAN always uses reviewer+judge in auto mode
+		}
+		if !state.ReviewDecided {
+			return true // Not yet decided, default to full review
+		}
+		return state.ReviewActive
+	default:
+		return false
+	}
 }
 
 // evalNoSignalLimit returns the configured max consecutive no-signal evaluations,

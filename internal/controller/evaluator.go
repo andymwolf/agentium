@@ -23,16 +23,18 @@ const (
 type EvalResult struct {
 	Verdict     EvalVerdict
 	Feedback    string
-	SignalFound bool // Whether the AGENTIUM_EVAL signal was found in output
+	SignalFound bool   // Whether the AGENTIUM_EVAL signal was found in output
+	ReviewMode  string // "FULL", "SIMPLE", or "" (only set when AssessComplexity is true)
 }
 
 // judgeRunParams holds parameters for running a judge agent.
 type judgeRunParams struct {
-	CompletedPhase TaskPhase
-	PhaseOutput    string
-	ReviewFeedback string
-	Iteration      int
-	MaxIterations  int
+	CompletedPhase   TaskPhase
+	PhaseOutput      string
+	ReviewFeedback   string
+	Iteration        int
+	MaxIterations    int
+	AssessComplexity bool // When true, judge also emits AGENTIUM_REVIEW_MODE signal
 }
 
 // evalPattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
@@ -64,6 +66,19 @@ func parseJudgeVerdict(output string) EvalResult {
 		Feedback:    strings.TrimSpace(matches[2]),
 		SignalFound: true,
 	}
+}
+
+// reviewModePattern matches lines of the form: AGENTIUM_REVIEW_MODE: FULL|SIMPLE
+var reviewModePattern = regexp.MustCompile(`(?m)^AGENTIUM_REVIEW_MODE:[ \t]+(FULL|SIMPLE)[ \t]*$`)
+
+// parseReviewModeSignal extracts the review mode decision from judge output.
+// Returns "FULL", "SIMPLE", or "" if no signal found.
+func parseReviewModeSignal(output string) string {
+	matches := reviewModePattern.FindStringSubmatch(output)
+	if matches == nil {
+		return ""
+	}
+	return matches[1]
 }
 
 // runEvaluator runs an evaluator agent against the completed phase output,
@@ -243,6 +258,11 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalR
 	evalResult := parseJudgeVerdict(parseSource)
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, evalResult.Verdict, evalResult.SignalFound)
 
+	// Parse review mode signal when complexity assessment was requested
+	if params.AssessComplexity {
+		evalResult.ReviewMode = parseReviewModeSignal(parseSource)
+	}
+
 	// On ITERATE, store the reviewer's feedback (not the judge's) in memory for the worker
 	if evalResult.Verdict == VerdictIterate && params.ReviewFeedback != "" && c.memoryStore != nil {
 		c.memoryStore.Update([]memory.Signal{
@@ -286,6 +306,20 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 
 	if params.Iteration >= params.MaxIterations {
 		sb.WriteString("**NOTE:** This is the FINAL iteration. Prefer ADVANCE unless there are critical issues that would prevent the work from being usable.\n\n")
+	}
+
+	if params.AssessComplexity {
+		sb.WriteString("## Complexity Assessment\n\n")
+		sb.WriteString("In addition to your verdict, assess whether this task is complex enough\n")
+		sb.WriteString("to warrant detailed review in subsequent phases.\n\n")
+		sb.WriteString("Emit exactly one line:\n")
+		sb.WriteString("  AGENTIUM_REVIEW_MODE: FULL\n")
+		sb.WriteString("or\n")
+		sb.WriteString("  AGENTIUM_REVIEW_MODE: SIMPLE\n\n")
+		sb.WriteString("Use FULL when: multiple files, architectural changes, complex logic,\n")
+		sb.WriteString("significant new functionality, or non-trivial testing requirements.\n")
+		sb.WriteString("Use SIMPLE when: single-file changes, straightforward fixes, config\n")
+		sb.WriteString("updates, documentation-only, or well-scoped small features.\n\n")
 	}
 
 	return sb.String()
