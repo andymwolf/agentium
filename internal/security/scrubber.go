@@ -33,7 +33,9 @@ var sensitivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----[\s\S]+?-----END\s+(?:RSA\s+)?PRIVATE\s+KEY-----`),
 
 	// Generic secret patterns
-	regexp.MustCompile(`(?i)(password|passwd|pwd)[\s]*[:=][\s]*["']?([^\s"']{8,})["']?`),
+	regexp.MustCompile(`(?i)(password|passwd|pwd)[\s]*[:=][\s]*"([^"]{8,})"`),
+	regexp.MustCompile(`(?i)(password|passwd|pwd)[\s]*[:=][\s]*'([^']{8,})'`),
+	regexp.MustCompile(`(?i)(password|passwd|pwd)[\s]*[:=][\s]*([^\s"']{8,})`),
 	regexp.MustCompile(`(?i)(secret)[\s]*[:=][\s]*["']?([a-zA-Z0-9_\-./+=]{16,})["']?`),
 
 	// Base64 encoded potential secrets (minimum 40 chars to reduce false positives)

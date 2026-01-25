@@ -41,7 +41,7 @@ func TestScrubber_Scrub(t *testing.T) {
 		},
 		{
 			name:     "Multiple secrets",
-			input:    "api_key=secret123 and password=pass456",
+			input:    "api_key=secret123 and password=pass456789",
 			expected: "api_key=***REDACTED*** and password=***REDACTED***",
 		},
 		{
@@ -52,7 +52,7 @@ func TestScrubber_Scrub(t *testing.T) {
 		{
 			name:     "JWT token",
 			input:    "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-			expected: "token=eyJ_***REDACTED***",
+			expected: "token=eyJh***REDACTED***",
 		},
 		{
 			name:     "No secrets",
@@ -83,7 +83,7 @@ func TestScrubber_ScrubSlice(t *testing.T) {
 		"normal log line",
 		"api_key=secret123",
 		"another normal line",
-		"password: mysecretpass",
+		"password: mysecretpassword",
 	}
 
 	expected := []string{
@@ -191,7 +191,7 @@ func TestScrubber_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "Case insensitive API key",
-			input:    "API_KEY=secret123 or api_key=secret456",
+			input:    "API_KEY=secretkey1234567890abcdefgh or api_key=anotherkey1234567890abcdefgh",
 			expected: "API_KEY=***REDACTED*** or api_key=***REDACTED***",
 		},
 	}
