@@ -54,17 +54,27 @@ func NewGCPProvisioner(verbose bool, project string) (*GCPProvisioner, error) {
 }
 
 // Provision creates a new GCP VM for an agent session
-func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (*ProvisionResult, error) {
-	// Create working directory for this session
+func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result *ProvisionResult, err error) {
+	// Create working directory for this session with restricted permissions (0700)
+	// to protect sensitive tfvars content
 	workDir := filepath.Join(os.TempDir(), "agentium", config.Session.ID)
-	if err := os.MkdirAll(workDir, 0755); err != nil {
+	if err = os.MkdirAll(workDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create work directory: %w", err)
 	}
 
+	// Ensure cleanup on error - workDir is removed on all error paths
+	// Using named return value 'err' so defer can check final error state
+	defer func() {
+		if err != nil {
+			os.RemoveAll(workDir)
+		}
+	}()
+
 	// Write session config as JSON for cloud-init
-	sessionJSON, err := json.Marshal(config.Session)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal session config: %w", err)
+	sessionJSON, marshalErr := json.Marshal(config.Session)
+	if marshalErr != nil {
+		err = fmt.Errorf("failed to marshal session config: %w", marshalErr)
+		return nil, err
 	}
 
 	// Create terraform.tfvars
@@ -101,7 +111,8 @@ claude_auth_mode   = "%s"
 	}
 
 	tfvarsPath := filepath.Join(workDir, "terraform.tfvars")
-	if err = os.WriteFile(tfvarsPath, []byte(tfvars), 0644); err != nil {
+	// Use 0600 permissions: tfvars may contain sensitive auth tokens
+	if err = os.WriteFile(tfvarsPath, []byte(tfvars), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write tfvars: %w", err)
 	}
 
@@ -121,9 +132,11 @@ claude_auth_mode   = "%s"
 	}
 
 	// Get outputs
-	output, err := p.getTerraformOutput(ctx, workDir)
+	var output map[string]string
+	output, err = p.getTerraformOutput(ctx, workDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get terraform output: %w", err)
+		err = fmt.Errorf("failed to get terraform output: %w", err)
+		return nil, err
 	}
 
 	return &ProvisionResult{

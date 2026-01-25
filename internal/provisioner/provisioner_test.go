@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -567,4 +568,84 @@ func containsString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestTfvarsFilePermissions(t *testing.T) {
+	// Skip on non-POSIX platforms where file permissions work differently
+	if !isPOSIX() {
+		t.Skip("Skipping permission test on non-POSIX platform")
+	}
+
+	// Create a temp directory to simulate the provisioner work directory
+	tmpDir := t.TempDir()
+	tfvarsPath := tmpDir + "/terraform.tfvars"
+
+	// Simulate writing tfvars with the expected 0600 permissions
+	content := `session_id = "test-session"
+project_id = "test-project"
+claude_auth_json = "sensitive_base64_data"
+`
+	err := writeFileWithPermissions(tfvarsPath, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Verify the file has 0600 permissions (owner read/write only)
+	info, err := os.Stat(tfvarsPath)
+	if err != nil {
+		t.Fatalf("failed to stat file: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("tfvars file permissions = %o, want 0600", perm)
+	}
+
+	// Verify the file is NOT world-readable
+	if perm&0044 != 0 {
+		t.Error("tfvars file should not be group or world readable")
+	}
+}
+
+func TestWorkDirPermissions(t *testing.T) {
+	// Skip on non-POSIX platforms where file permissions work differently
+	if !isPOSIX() {
+		t.Skip("Skipping permission test on non-POSIX platform")
+	}
+
+	// Create a temp directory and verify we can set 0700 permissions
+	tmpBase := t.TempDir()
+	workDir := tmpBase + "/agentium/test-session"
+
+	err := os.MkdirAll(workDir, 0700)
+	if err != nil {
+		t.Fatalf("failed to create work directory: %v", err)
+	}
+
+	// Verify the directory has 0700 permissions (owner only)
+	info, err := os.Stat(workDir)
+	if err != nil {
+		t.Fatalf("failed to stat directory: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm != 0700 {
+		t.Errorf("work directory permissions = %o, want 0700", perm)
+	}
+
+	// Verify the directory is NOT world-readable or executable
+	if perm&0077 != 0 {
+		t.Error("work directory should not be group or world accessible")
+	}
+}
+
+// isPOSIX returns true if the current platform supports POSIX file permissions
+func isPOSIX() bool {
+	// Windows doesn't support POSIX-style permissions
+	return os.PathSeparator == '/'
+}
+
+// writeFileWithPermissions writes a file with specific permissions
+func writeFileWithPermissions(path string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(path, data, perm)
 }

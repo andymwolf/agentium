@@ -995,3 +995,90 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeGitError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		token    string
+		wantMsg  string
+		wantNil  bool
+		wantSame bool // error should be unchanged
+	}{
+		{
+			name:    "nil error returns nil",
+			err:     nil,
+			token:   "ghp_secret123",
+			wantNil: true,
+		},
+		{
+			name:     "empty token returns original error",
+			err:      errors.New("some error"),
+			token:    "",
+			wantSame: true,
+		},
+		{
+			name:    "error without token returns original",
+			err:     errors.New("failed to connect to server"),
+			token:   "ghp_secret123",
+			wantMsg: "failed to connect to server",
+		},
+		{
+			name:    "error with token gets redacted",
+			err:     errors.New("fatal: Authentication failed for 'https://x-access-token:ghp_secret123@github.com/org/repo.git/'"),
+			token:   "ghp_secret123",
+			wantMsg: "fatal: Authentication failed for 'https://x-access-token:[REDACTED]@github.com/org/repo.git/'",
+		},
+		{
+			name:    "multiple occurrences all redacted",
+			err:     errors.New("token ghp_abc used, retry with ghp_abc failed"),
+			token:   "ghp_abc",
+			wantMsg: "token [REDACTED] used, retry with [REDACTED] failed",
+		},
+		{
+			name:    "token at start of message",
+			err:     errors.New("ghp_secret: invalid token"),
+			token:   "ghp_secret",
+			wantMsg: "[REDACTED]: invalid token",
+		},
+		{
+			name:    "token at end of message",
+			err:     errors.New("invalid token: ghp_secret"),
+			token:   "ghp_secret",
+			wantMsg: "invalid token: [REDACTED]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeGitError(tt.err, tt.token)
+
+			if tt.wantNil {
+				if got != nil {
+					t.Errorf("sanitizeGitError() = %v, want nil", got)
+				}
+				return
+			}
+
+			if tt.wantSame {
+				if got != tt.err {
+					t.Errorf("sanitizeGitError() should return same error, got different: %v vs %v", got, tt.err)
+				}
+				return
+			}
+
+			if got == nil {
+				t.Fatal("sanitizeGitError() = nil, want non-nil error")
+			}
+
+			if got.Error() != tt.wantMsg {
+				t.Errorf("sanitizeGitError().Error() = %q, want %q", got.Error(), tt.wantMsg)
+			}
+
+			// Ensure token is not present in output
+			if tt.token != "" && containsString(got.Error(), tt.token) {
+				t.Errorf("sanitizeGitError() output still contains token %q", tt.token)
+			}
+		})
+	}
+}
