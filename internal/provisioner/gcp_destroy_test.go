@@ -112,11 +112,11 @@ func TestDestroyFallbackResourceNaming(t *testing.T) {
 	// This test verifies that the resource naming in the fallback path
 	// matches the Terraform naming convention.
 	tests := []struct {
-		name            string
-		sessionID       string
-		project         string
-		wantSAEmail     string
-		wantFirewall    string
+		name         string
+		sessionID    string
+		project      string
+		wantSAEmail  string
+		wantFirewall string
 	}{
 		{
 			name:         "standard session ID",

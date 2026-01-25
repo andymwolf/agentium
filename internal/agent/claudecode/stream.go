@@ -34,13 +34,13 @@ type TokenUsage struct {
 
 // StreamEvent is a single high-level event extracted from the NDJSON stream.
 type StreamEvent struct {
-	Type      StreamEventType  `json:"type"`
-	Subtype   ContentBlockType `json:"subtype,omitempty"`
-	Content   string           `json:"content,omitempty"`
-	ToolName  string           `json:"tool_name,omitempty"`
-	ToolInput json.RawMessage  `json:"tool_input,omitempty"`
-	Tokens    *TokenUsage      `json:"usage,omitempty"`
-	StopReason string          `json:"stop_reason,omitempty"`
+	Type       StreamEventType  `json:"type"`
+	Subtype    ContentBlockType `json:"subtype,omitempty"`
+	Content    string           `json:"content,omitempty"`
+	ToolName   string           `json:"tool_name,omitempty"`
+	ToolInput  json.RawMessage  `json:"tool_input,omitempty"`
+	Tokens     *TokenUsage      `json:"usage,omitempty"`
+	StopReason string           `json:"stop_reason,omitempty"`
 }
 
 // ParseResult holds all parsed events and aggregated metadata.

@@ -151,7 +151,7 @@ func TestInitializeWorkspace_CreatesDirectory(t *testing.T) {
 	ctrl := newTestController(workDir)
 
 	ctx := context.Background()
-	if err := ctrl.initializeWorkspace(ctx); err != nil {
+	if err = ctrl.initializeWorkspace(ctx); err != nil {
 		t.Fatalf("initializeWorkspace failed: %v", err)
 	}
 

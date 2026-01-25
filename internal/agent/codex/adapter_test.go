@@ -2,7 +2,6 @@ package codex
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -996,7 +995,7 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 			Type: "item.completed",
 			Item: &eventItem{
 				Type:   "command_execution",
-				Output: fmt.Sprintf("To github.com:org/repo.git\n   abc1234..def5678  main -> main"),
+				Output: "To github.com:org/repo.git\n   abc1234..def5678  main -> main",
 			},
 		})
 

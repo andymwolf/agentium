@@ -235,10 +235,10 @@ func TestAdapter_BuildPrompt_IterationContext(t *testing.T) {
 	a := New()
 
 	tests := []struct {
-		name             string
-		session          *agent.Session
-		wantContains     []string
-		notWantContains  []string
+		name            string
+		session         *agent.Session
+		wantContains    []string
+		notWantContains []string
 	}{
 		{
 			name: "nil IterationContext uses SystemPrompt",

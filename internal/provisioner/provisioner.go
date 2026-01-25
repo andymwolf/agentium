@@ -68,30 +68,30 @@ type SessionConfig struct {
 
 // SubAgentConfig specifies agent overrides for a delegated sub-task type.
 type SubAgentConfig struct {
-	Agent  string              `json:"agent,omitempty"`
+	Agent  string               `json:"agent,omitempty"`
 	Model  *routing.ModelConfig `json:"model,omitempty"`
-	Skills []string            `json:"skills,omitempty"`
+	Skills []string             `json:"skills,omitempty"`
 }
 
 // ProvDelegationConfig controls sub-agent delegation for provisioned sessions.
 type ProvDelegationConfig struct {
-	Enabled   bool                       `json:"enabled"`
-	Strategy  string                     `json:"strategy"`
-	SubAgents map[string]SubAgentConfig  `json:"sub_agents,omitempty"`
+	Enabled   bool                      `json:"enabled"`
+	Strategy  string                    `json:"strategy"`
+	SubAgents map[string]SubAgentConfig `json:"sub_agents,omitempty"`
 }
 
 // ProvPhaseLoopConfig contains phase loop configuration for provisioned sessions.
 type ProvPhaseLoopConfig struct {
-	Enabled                 bool   `json:"enabled"`
-	ReviewEnabled           bool   `json:"review_enabled,omitempty"`
-	ReviewMode              string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
-	PlanMaxIterations       int    `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations  int    `json:"implement_max_iterations,omitempty"`
-	TestMaxIterations       int    `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations     int    `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations       int    `json:"docs_max_iterations,omitempty"`
-	EvalContextBudget       int    `json:"eval_context_budget,omitempty"`
-	EvalNoSignalLimit       int    `json:"eval_no_signal_limit,omitempty"`
+	Enabled                bool   `json:"enabled"`
+	ReviewEnabled          bool   `json:"review_enabled,omitempty"`
+	ReviewMode             string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
+	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
+	TestMaxIterations      int    `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations    int    `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
+	EvalContextBudget      int    `json:"eval_context_budget,omitempty"`
+	EvalNoSignalLimit      int    `json:"eval_no_signal_limit,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration

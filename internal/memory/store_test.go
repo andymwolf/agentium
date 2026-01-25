@@ -42,8 +42,8 @@ func TestLoad_MissingFile(t *testing.T) {
 func TestLoad_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	agentiumDir := filepath.Join(dir, ".agentium")
-	os.MkdirAll(agentiumDir, 0755)
-	os.WriteFile(filepath.Join(agentiumDir, "memory.json"), []byte("not json"), 0644)
+	_ = os.MkdirAll(agentiumDir, 0755)
+	_ = os.WriteFile(filepath.Join(agentiumDir, "memory.json"), []byte("not json"), 0644)
 
 	s := NewStore(dir, Config{})
 	if err := s.Load(); err != nil {
@@ -244,10 +244,10 @@ func TestClearByType_AllMatch(t *testing.T) {
 func TestLoad_ExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	agentiumDir := filepath.Join(dir, ".agentium")
-	os.MkdirAll(agentiumDir, 0755)
+	_ = os.MkdirAll(agentiumDir, 0755)
 
 	data := `{"version":"1","entries":[{"type":"KEY_FACT","content":"loaded","iteration":5,"task_id":"issue:10","timestamp":"2024-01-01T00:00:00Z"}]}`
-	os.WriteFile(filepath.Join(agentiumDir, "memory.json"), []byte(data), 0644)
+	_ = os.WriteFile(filepath.Join(agentiumDir, "memory.json"), []byte(data), 0644)
 
 	s := NewStore(dir, Config{})
 	if err := s.Load(); err != nil {

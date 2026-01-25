@@ -308,9 +308,9 @@ func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
 
 func TestParseReviewModeSignal(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		output string
-		want string
+		want   string
 	}{
 		{
 			name:   "FULL signal",

@@ -144,8 +144,8 @@ func TestGracefulShutdown_HookError(t *testing.T) {
 
 func TestGracefulShutdown_ClearsSensitiveData(t *testing.T) {
 	c := &Controller{
-		logger:     newTestLogger(),
-		shutdownCh: make(chan struct{}),
+		logger:      newTestLogger(),
+		shutdownCh:  make(chan struct{}),
 		gitHubToken: "secret-token-123",
 		config: SessionConfig{
 			Prompt: "sensitive prompt content",

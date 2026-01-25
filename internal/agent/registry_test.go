@@ -9,13 +9,13 @@ type mockAgent struct {
 	name string
 }
 
-func (m *mockAgent) Name() string                                            { return m.name }
-func (m *mockAgent) ContainerImage() string                                  { return "mock:latest" }
-func (m *mockAgent) BuildEnv(s *Session, i int) map[string]string            { return nil }
-func (m *mockAgent) BuildCommand(s *Session, i int) []string                 { return nil }
-func (m *mockAgent) BuildPrompt(s *Session, i int) string                    { return "" }
+func (m *mockAgent) Name() string                                                    { return m.name }
+func (m *mockAgent) ContainerImage() string                                          { return "mock:latest" }
+func (m *mockAgent) BuildEnv(s *Session, i int) map[string]string                    { return nil }
+func (m *mockAgent) BuildCommand(s *Session, i int) []string                         { return nil }
+func (m *mockAgent) BuildPrompt(s *Session, i int) string                            { return "" }
 func (m *mockAgent) ParseOutput(code int, out, err string) (*IterationResult, error) { return nil, nil }
-func (m *mockAgent) Validate() error                                         { return nil }
+func (m *mockAgent) Validate() error                                                 { return nil }
 
 func TestRegister(t *testing.T) {
 	// Clean up registry after test
