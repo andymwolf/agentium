@@ -57,7 +57,6 @@ type TaskPhase string
 const (
 	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
-	PhaseTest        TaskPhase = "TEST"
 	PhaseReview      TaskPhase = "REVIEW"
 	PhaseDocs        TaskPhase = "DOCS"
 	PhasePRCreation  TaskPhase = "PR_CREATION"
@@ -79,24 +78,23 @@ type TaskState struct {
 	PRNumber         string // Linked PR number (for issues that create PRs)
 	PhaseIteration   int    // Current iteration within the active phase (phase loop)
 	MaxPhaseIter     int    // Max iterations for current phase (phase loop)
-	LastEvalVerdict  string // Last evaluator verdict (ADVANCE, ITERATE, BLOCKED)
-	LastEvalFeedback string // Last evaluator feedback text
-	ReviewDecided    bool   // Whether auto-review decision has been made
+	LastJudgeVerdict string // Last judge verdict (ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, REGRESS)
+	LastJudgeFeedback string // Last judge feedback text
+	ReviewDecided    bool   // Whether complexity decision has been made
 	ReviewActive     bool   // Whether review loop is active for this task (auto mode)
+	IsSimple         bool   // Whether task was marked as SIMPLE (skip REVIEW phase)
+	RegressionCount  int    // Number of times we've regressed from REVIEW to PLAN
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	Enabled                bool   `json:"enabled"`
-	ReviewEnabled          bool   `json:"review_enabled,omitempty"`
-	ReviewMode             string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
-	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
-	TestMaxIterations      int    `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations    int    `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
-	EvalContextBudget      int    `json:"eval_context_budget,omitempty"`
-	EvalNoSignalLimit      int    `json:"eval_no_signal_limit,omitempty"`
+	Enabled                bool `json:"enabled"`
+	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
+	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
+	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
+	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
 }
 
 // SessionConfig is the configuration passed to the controller
@@ -1184,7 +1182,7 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 	// Update based on agent status signal
 	switch result.AgentStatus {
 	case "TESTS_RUNNING":
-		state.Phase = PhaseTest
+		// Tests are now part of IMPLEMENT phase, keep phase unchanged
 	case "TESTS_PASSED":
 		if state.Type == "issue" {
 			state.Phase = PhasePRCreation

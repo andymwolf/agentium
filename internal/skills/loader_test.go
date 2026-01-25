@@ -19,7 +19,8 @@ func TestLoadManifest(t *testing.T) {
 	expectedNames := []string{
 		"safety", "environment", "status_signals",
 		"planning", "plan", "implement", "test",
-		"pr_creation", "review", "docs", "pr_review", "evaluate",
+		"pr_creation", "review", "docs", "pr_review",
+		"plan_reviewer", "code_reviewer", "judge",
 	}
 
 	names := make(map[string]bool)
@@ -50,12 +51,14 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
-		{"test", []string{"TEST", "IMPLEMENT"}},
+		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
 		{"pr_creation", []string{"PR_CREATION"}},
 		{"review", []string{"REVIEW"}},
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
-		{"evaluate", []string{"EVALUATE"}},
+		{"plan_reviewer", []string{"PLAN_REVIEW"}},
+		{"code_reviewer", []string{"IMPLEMENT_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW"}},
+		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "REVIEW_JUDGE", "DOCS_JUDGE"}},
 	}
 
 	skillMap := make(map[string]SkillEntry)
@@ -156,7 +159,9 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"review":         "REVIEW PHASE",
 		"docs":           "DOCS PHASE",
 		"pr_review":      "PR REVIEW SESSIONS",
-		"evaluate":       "EVALUATE PHASE",
+		"plan_reviewer":  "PLAN REVIEWER",
+		"code_reviewer":  "CODE REVIEWER",
+		"judge":          "JUDGE",
 	}
 
 	skillMap := make(map[string]Skill)

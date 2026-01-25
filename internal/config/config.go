@@ -24,16 +24,13 @@ type DelegationConfigYAML struct {
 
 // PhaseLoopConfig contains phase loop configuration in YAML config.
 type PhaseLoopConfig struct {
-	Enabled                bool   `mapstructure:"enabled"`
-	ReviewEnabled          bool   `mapstructure:"review_enabled"`
-	ReviewMode             string `mapstructure:"review_mode"` // "always", "auto", "never", ""
-	PlanMaxIterations      int    `mapstructure:"plan_max_iterations"`
-	ImplementMaxIterations int    `mapstructure:"implement_max_iterations"`
-	TestMaxIterations      int    `mapstructure:"test_max_iterations"`
-	ReviewMaxIterations    int    `mapstructure:"review_max_iterations"`
-	DocsMaxIterations      int    `mapstructure:"docs_max_iterations"`
-	EvalContextBudget      int    `mapstructure:"eval_context_budget"`
-	EvalNoSignalLimit      int    `mapstructure:"eval_no_signal_limit"`
+	Enabled                bool `mapstructure:"enabled"`
+	PlanMaxIterations      int  `mapstructure:"plan_max_iterations"`
+	ImplementMaxIterations int  `mapstructure:"implement_max_iterations"`
+	ReviewMaxIterations    int  `mapstructure:"review_max_iterations"`
+	DocsMaxIterations      int  `mapstructure:"docs_max_iterations"`
+	JudgeContextBudget     int  `mapstructure:"judge_context_budget"`
+	JudgeNoSignalLimit     int  `mapstructure:"judge_no_signal_limit"`
 }
 
 // CodexConfig contains Codex agent authentication settings

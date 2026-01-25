@@ -8,10 +8,10 @@ import (
 )
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
+// TEST is merged into IMPLEMENT; REVIEW is skipped for SIMPLE tasks.
 var issuePhaseOrder = []TaskPhase{
 	PhasePlan,
 	PhaseImplement,
-	PhaseTest,
 	PhaseReview,
 	PhaseDocs,
 	PhasePRCreation,
@@ -21,14 +21,13 @@ var issuePhaseOrder = []TaskPhase{
 const (
 	defaultPlanMaxIter      = 3
 	defaultImplementMaxIter = 5
-	defaultTestMaxIter      = 5
 	defaultReviewMaxIter    = 3
 	defaultDocsMaxIter      = 2
 	defaultPRMaxIter        = 1
 )
 
-// defaultEvalContextBudget is the default max characters of phase output sent to the evaluator.
-const defaultEvalContextBudget = 8000
+// defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
+const defaultJudgeContextBudget = 8000
 
 // phaseMaxIterations returns the configured max iterations for a phase,
 // falling back to defaults when not specified.
@@ -45,10 +44,6 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase) int {
 	case PhaseImplement:
 		if cfg.ImplementMaxIterations > 0 {
 			return cfg.ImplementMaxIterations
-		}
-	case PhaseTest:
-		if cfg.TestMaxIterations > 0 {
-			return cfg.TestMaxIterations
 		}
 	case PhaseReview:
 		if cfg.ReviewMaxIterations > 0 {
@@ -68,8 +63,6 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultPlanMaxIter
 	case PhaseImplement:
 		return defaultImplementMaxIter
-	case PhaseTest:
-		return defaultTestMaxIter
 	case PhaseReview:
 		return defaultReviewMaxIter
 	case PhaseDocs:
@@ -83,11 +76,20 @@ func defaultMaxIter(phase TaskPhase) int {
 
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
-func advancePhase(current TaskPhase) TaskPhase {
+// For SIMPLE tasks, REVIEW is skipped.
+func advancePhase(current TaskPhase, isSimple bool) TaskPhase {
 	for i, p := range issuePhaseOrder {
 		if p == current {
 			if i+1 < len(issuePhaseOrder) {
-				return issuePhaseOrder[i+1]
+				next := issuePhaseOrder[i+1]
+				// Skip REVIEW for SIMPLE tasks
+				if next == PhaseReview && isSimple {
+					if i+2 < len(issuePhaseOrder) {
+						return issuePhaseOrder[i+2]
+					}
+					return PhaseComplete
+				}
+				return next
 			}
 			return PhaseComplete
 		}
@@ -95,8 +97,12 @@ func advancePhase(current TaskPhase) TaskPhase {
 	return PhaseComplete
 }
 
+// maxRegressionCount is the maximum number of REGRESS events allowed before
+// forcing the task to BLOCKED to prevent infinite regression loops.
+const maxRegressionCount = 3
+
 // runPhaseLoop executes the controller-as-judge phase loop for the active issue task.
-// It iterates through phases, running the agent and evaluator at each step.
+// It iterates through phases, running the agent and judge at each step.
 func (c *Controller) runPhaseLoop(ctx context.Context) error {
 	taskID := fmt.Sprintf("issue:%s", c.activeTask)
 	state := c.taskStates[taskID]
@@ -106,6 +112,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+phaseLoop:
 	for {
 		// Check context cancellation
 		select {
@@ -173,7 +180,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Post phase comment
 			c.postPhaseComment(ctx, currentPhase, iter, truncateForComment(phaseOutput))
 
-			// Skip evaluator for PR_CREATION (terminal action)
+			// Skip judge for PR_CREATION (terminal action)
 			if currentPhase == PhasePRCreation {
 				// Check if PR was actually created
 				if result.AgentStatus == "PR_CREATED" || len(result.PRsCreated) > 0 {
@@ -183,83 +190,72 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					}
 				} else {
 					state.Phase = PhaseBlocked
-					state.LastEvalFeedback = "PR creation did not produce a PR"
+					state.LastJudgeFeedback = "PR creation did not produce a PR"
 				}
 				return nil
 			}
 
-			// Run evaluator (reviewer+judge when review enabled, or legacy single-evaluator)
-			var evalResult EvalResult
-			if c.shouldReview(state, currentPhase) {
-				// Three-agent loop: reviewer then judge
-				reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
-					CompletedPhase: currentPhase,
-					PhaseOutput:    phaseOutput,
-					Iteration:      iter,
-					MaxIterations:  maxIter,
-				})
-				if reviewErr != nil {
-					c.logWarning("Reviewer error for phase %s: %v (falling back to legacy evaluator)", currentPhase, reviewErr)
-					evalResult, err = c.runEvaluator(ctx, currentPhase, phaseOutput)
-					if err != nil {
-						c.logWarning("Evaluator error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
-						evalResult = EvalResult{Verdict: VerdictAdvance}
-					}
-				} else {
-					// Assess complexity in auto mode during PLAN phase
-					assessComplexity := c.effectiveReviewMode() == "auto" && currentPhase == PhasePlan
-
-					evalResult, err = c.runJudge(ctx, judgeRunParams{
-						CompletedPhase:   currentPhase,
-						PhaseOutput:      phaseOutput,
-						ReviewFeedback:   reviewResult.Feedback,
-						Iteration:        iter,
-						MaxIterations:    maxIter,
-						AssessComplexity: assessComplexity,
-					})
-					if err != nil {
-						c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
-						evalResult = EvalResult{Verdict: VerdictAdvance}
-					}
-
-					// Capture auto-mode review decision from judge
-					if assessComplexity && evalResult.ReviewMode != "" {
-						state.ReviewDecided = true
-						state.ReviewActive = (evalResult.ReviewMode == "FULL")
-						c.logInfo("Auto review mode: judge assessed complexity as %s (review_active=%v)",
-							evalResult.ReviewMode, state.ReviewActive)
-					}
-
-					// Track consecutive no-signal count for fail-closed behavior
-					if !evalResult.SignalFound {
-						noSignalCount++
-						c.logWarning("Judge did not emit signal for phase %s (no-signal count: %d/%d)", currentPhase, noSignalCount, c.evalNoSignalLimit())
-						if noSignalCount >= c.evalNoSignalLimit() {
-							c.logWarning("Phase %s: no-signal limit reached, force-advancing", currentPhase)
-							evalResult = EvalResult{Verdict: VerdictAdvance, SignalFound: false}
-						}
-					} else {
-						noSignalCount = 0
-					}
+			// Run reviewer + judge
+			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
+				CompletedPhase: currentPhase,
+				PhaseOutput:    phaseOutput,
+				Iteration:      iter,
+				MaxIterations:  maxIter,
+			})
+			if reviewErr != nil {
+				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
+				state.LastJudgeVerdict = string(VerdictAdvance)
+				// Clear stale feedback to prevent leaking into later phases
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
 				}
-			} else {
-				// Legacy two-agent loop: direct evaluator
-				evalResult, err = c.runEvaluator(ctx, currentPhase, phaseOutput)
-				if err != nil {
-					c.logWarning("Evaluator error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
-					evalResult = EvalResult{Verdict: VerdictAdvance}
+				// Record phase result
+				if c.memoryStore != nil {
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (reviewer error, forced advance)", currentPhase)},
+					}, c.iteration, taskID)
 				}
+				advanced = true
+				break
 			}
 
-			state.LastEvalVerdict = string(evalResult.Verdict)
-			state.LastEvalFeedback = evalResult.Feedback
+			// Assess complexity during PLAN phase
+			assessComplexity := currentPhase == PhasePlan && !state.ReviewDecided
 
-			// Post eval comment
-			c.postEvalComment(ctx, currentPhase, evalResult)
+			judgeResult, err := c.runJudge(ctx, judgeRunParams{
+				CompletedPhase:   currentPhase,
+				PhaseOutput:      phaseOutput,
+				ReviewFeedback:   reviewResult.Feedback,
+				Iteration:        iter,
+				MaxIterations:    maxIter,
+				AssessComplexity: assessComplexity,
+			})
+			if err != nil {
+				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
+				judgeResult = JudgeResult{Verdict: VerdictAdvance}
+			}
 
-			switch evalResult.Verdict {
+			// Track consecutive no-signal count for fail-closed behavior
+			if !judgeResult.SignalFound {
+				noSignalCount++
+				c.logWarning("Judge did not emit signal for phase %s (no-signal count: %d/%d)", currentPhase, noSignalCount, c.judgeNoSignalLimit())
+				if noSignalCount >= c.judgeNoSignalLimit() {
+					c.logWarning("Phase %s: no-signal limit reached, force-advancing", currentPhase)
+					judgeResult = JudgeResult{Verdict: VerdictAdvance, SignalFound: false}
+				}
+			} else {
+				noSignalCount = 0
+			}
+
+			state.LastJudgeVerdict = string(judgeResult.Verdict)
+			state.LastJudgeFeedback = judgeResult.Feedback
+
+			// Post judge comment
+			c.postJudgeComment(ctx, currentPhase, judgeResult)
+
+			switch judgeResult.Verdict {
 			case VerdictAdvance:
-				// Clear eval feedback from memory and move to next phase
+				// Clear feedback from memory and move to next phase
 				if c.memoryStore != nil {
 					c.memoryStore.ClearByType(memory.EvalFeedback)
 				}
@@ -272,14 +268,85 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				advanced = true
 
 			case VerdictIterate:
-				// Feedback is already stored in memory by runEvaluator
-				c.logInfo("Phase %s: evaluator requested iteration (feedback: %s)", currentPhase, evalResult.Feedback)
+				// Feedback is already stored in memory by runJudge
+				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
 				continue
 
 			case VerdictBlocked:
 				state.Phase = PhaseBlocked
-				c.logInfo("Phase %s: evaluator returned BLOCKED: %s", currentPhase, evalResult.Feedback)
+				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
 				return nil
+
+			case VerdictSimple:
+				// Mark task as simple (skip REVIEW phase)
+				state.IsSimple = true
+				state.ReviewDecided = true
+				c.logInfo("Phase %s: judge marked task as SIMPLE (REVIEW will be skipped)", currentPhase)
+				// Clear feedback and advance
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+				}
+				advanced = true
+
+			case VerdictComplex:
+				// Mark task as complex (include REVIEW phase)
+				state.IsSimple = false
+				state.ReviewDecided = true
+				c.logInfo("Phase %s: judge marked task as COMPLEX (REVIEW will be used)", currentPhase)
+				// Clear feedback and advance
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+				}
+				advanced = true
+
+			case VerdictRegress:
+				// Return to PLAN phase (only valid during REVIEW)
+				if currentPhase != PhaseReview {
+					c.logWarning("Phase %s: REGRESS verdict only valid during REVIEW, treating as ITERATE", currentPhase)
+					continue
+				}
+				state.RegressionCount++
+
+				// Guard against infinite regression loops
+				if state.RegressionCount > maxRegressionCount {
+					c.logWarning("Phase %s: max regression count (%d) exceeded, marking as BLOCKED",
+						currentPhase, maxRegressionCount)
+					state.Phase = PhaseBlocked
+					state.LastJudgeFeedback = fmt.Sprintf("Exceeded max regression count (%d)", maxRegressionCount)
+					return nil
+				}
+
+				c.logInfo("Phase %s: judge requested regression to PLAN (count: %d/%d, feedback: %s)",
+					currentPhase, state.RegressionCount, maxRegressionCount, judgeResult.Feedback)
+
+				// Keep review feedback in memory for context
+				if c.memoryStore != nil && judgeResult.Feedback != "" {
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.EvalFeedback, Content: fmt.Sprintf("REVIEW regression: %s", judgeResult.Feedback)},
+					}, c.iteration, taskID)
+				}
+
+				// Reset to PLAN phase with fresh iterations
+				state.Phase = PhasePlan
+				state.PhaseIteration = 0
+				// Don't clear IsSimple - let the new PLAN judge reassess
+				state.ReviewDecided = false
+				continue phaseLoop // Restart the outer loop without recursion
+			}
+
+			// Apply ReviewMode if set (complexity assessment during PLAN phase)
+			// This happens in addition to the verdict, e.g., ADVANCE + REVIEW_MODE: SIMPLE
+			if judgeResult.ReviewMode != "" && !state.ReviewDecided {
+				switch judgeResult.ReviewMode {
+				case "SIMPLE":
+					state.IsSimple = true
+					state.ReviewDecided = true
+					c.logInfo("Phase %s: complexity assessment = SIMPLE (REVIEW will be skipped)", currentPhase)
+				case "FULL":
+					state.IsSimple = false
+					state.ReviewDecided = true
+					c.logInfo("Phase %s: complexity assessment = FULL (REVIEW will be used)", currentPhase)
+				}
 			}
 
 			if advanced {
@@ -291,65 +358,30 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Exhausted max iterations without ADVANCE — force advance
 			c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance", currentPhase, maxIter)
 			c.postPhaseComment(ctx, currentPhase, maxIter,
-				fmt.Sprintf("Forced advance: exhausted %d iterations without evaluator ADVANCE", maxIter))
+				fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE", maxIter))
 			if c.memoryStore != nil {
 				c.memoryStore.ClearByType(memory.EvalFeedback)
 			}
 		}
 
-		// Move to next phase
-		nextPhase := advancePhase(currentPhase)
-		c.logInfo("Phase loop: advancing from %s to %s", currentPhase, nextPhase)
+		// Move to next phase (respecting SIMPLE/COMPLEX path)
+		nextPhase := advancePhase(currentPhase, state.IsSimple)
+		c.logInfo("Phase loop: advancing from %s to %s (simple=%v)", currentPhase, nextPhase, state.IsSimple)
 		state.Phase = nextPhase
 	}
 }
 
-// defaultEvalNoSignalLimit is the default max consecutive no-signal evaluations
+// defaultJudgeNoSignalLimit is the default max consecutive no-signal judgments
 // before force-advancing.
-const defaultEvalNoSignalLimit = 2
+const defaultJudgeNoSignalLimit = 2
 
-// effectiveReviewMode returns the resolved review mode string.
-// ReviewMode takes precedence; falls back to ReviewEnabled bool for backward compat.
-func (c *Controller) effectiveReviewMode() string {
-	if c.config.PhaseLoop == nil {
-		return ""
-	}
-	if c.config.PhaseLoop.ReviewMode != "" {
-		return c.config.PhaseLoop.ReviewMode
-	}
-	if c.config.PhaseLoop.ReviewEnabled {
-		return "always"
-	}
-	return ""
-}
-
-// shouldReview returns true if the review loop (reviewer+judge) should be used
-// for the given phase and task state.
-func (c *Controller) shouldReview(state *TaskState, phase TaskPhase) bool {
-	mode := c.effectiveReviewMode()
-	switch mode {
-	case "always":
-		return true
-	case "auto":
-		if phase == PhasePlan {
-			return true // PLAN always uses reviewer+judge in auto mode
-		}
-		if !state.ReviewDecided {
-			return true // Not yet decided, default to full review
-		}
-		return state.ReviewActive
-	default:
-		return false
-	}
-}
-
-// evalNoSignalLimit returns the configured max consecutive no-signal evaluations,
+// judgeNoSignalLimit returns the configured max consecutive no-signal judgments,
 // falling back to the default when not specified.
-func (c *Controller) evalNoSignalLimit() int {
-	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalNoSignalLimit > 0 {
-		return c.config.PhaseLoop.EvalNoSignalLimit
+func (c *Controller) judgeNoSignalLimit() int {
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.JudgeNoSignalLimit > 0 {
+		return c.config.PhaseLoop.JudgeNoSignalLimit
 	}
-	return defaultEvalNoSignalLimit
+	return defaultJudgeNoSignalLimit
 }
 
 // truncateForComment truncates text for use in GitHub comments.

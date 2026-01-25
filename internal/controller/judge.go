@@ -10,18 +10,21 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 )
 
-// EvalVerdict represents the outcome of an evaluator judgment.
-type EvalVerdict string
+// JudgeVerdict represents the outcome of a judge decision.
+type JudgeVerdict string
 
 const (
-	VerdictAdvance EvalVerdict = "ADVANCE"
-	VerdictIterate EvalVerdict = "ITERATE"
-	VerdictBlocked EvalVerdict = "BLOCKED"
+	VerdictAdvance JudgeVerdict = "ADVANCE"
+	VerdictIterate JudgeVerdict = "ITERATE"
+	VerdictBlocked JudgeVerdict = "BLOCKED"
+	VerdictSimple  JudgeVerdict = "SIMPLE"  // Task is simple, skip reviewers
+	VerdictComplex JudgeVerdict = "COMPLEX" // Task is complex, use reviewers
+	VerdictRegress JudgeVerdict = "REGRESS" // Return to PLAN phase
 )
 
-// EvalResult holds the parsed evaluator verdict and feedback.
-type EvalResult struct {
-	Verdict     EvalVerdict
+// JudgeResult holds the parsed judge verdict and feedback.
+type JudgeResult struct {
+	Verdict     JudgeVerdict
 	Feedback    string
 	SignalFound bool   // Whether the AGENTIUM_EVAL signal was found in output
 	ReviewMode  string // "FULL", "SIMPLE", or "" (only set when AssessComplexity is true)
@@ -37,32 +40,18 @@ type judgeRunParams struct {
 	AssessComplexity bool // When true, judge also emits AGENTIUM_REVIEW_MODE signal
 }
 
-// evalPattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
-var evalPattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED)[ \t]*(.*)$`)
-
-// parseEvalVerdict extracts the evaluator verdict from agent output.
-// If no verdict line is found, defaults to ADVANCE (fail-open) for backward compatibility.
-func parseEvalVerdict(output string) EvalResult {
-	matches := evalPattern.FindStringSubmatch(output)
-	if matches == nil {
-		return EvalResult{Verdict: VerdictAdvance, SignalFound: false}
-	}
-	return EvalResult{
-		Verdict:     EvalVerdict(matches[1]),
-		Feedback:    strings.TrimSpace(matches[2]),
-		SignalFound: true,
-	}
-}
+// judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
+var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED|SIMPLE|COMPLEX|REGRESS)[ \t]*(.*)$`)
 
 // parseJudgeVerdict extracts the judge verdict from agent output.
 // If no verdict line is found, defaults to ITERATE (fail-closed).
-func parseJudgeVerdict(output string) EvalResult {
-	matches := evalPattern.FindStringSubmatch(output)
+func parseJudgeVerdict(output string) JudgeResult {
+	matches := judgePattern.FindStringSubmatch(output)
 	if matches == nil {
-		return EvalResult{Verdict: VerdictIterate, SignalFound: false}
+		return JudgeResult{Verdict: VerdictIterate, SignalFound: false}
 	}
-	return EvalResult{
-		Verdict:     EvalVerdict(matches[1]),
+	return JudgeResult{
+		Verdict:     JudgeVerdict(matches[1]),
 		Feedback:    strings.TrimSpace(matches[2]),
 		SignalFound: true,
 	}
@@ -81,97 +70,9 @@ func parseReviewModeSignal(output string) string {
 	return matches[1]
 }
 
-// runEvaluator runs an evaluator agent against the completed phase output,
-// parses the verdict, and stores feedback in memory on ITERATE.
-func (c *Controller) runEvaluator(ctx context.Context, completedPhase TaskPhase, phaseOutput string) (EvalResult, error) {
-	evalPrompt := c.buildEvalPrompt(completedPhase, phaseOutput)
-
-	session := &agent.Session{
-		ID:             c.config.ID,
-		Repository:     c.config.Repository,
-		Tasks:          c.config.Tasks,
-		WorkDir:        c.workDir,
-		GitHubToken:    c.gitHubToken,
-		MaxIterations:  1,
-		MaxDuration:    c.config.MaxDuration,
-		Prompt:         evalPrompt,
-		Metadata:       make(map[string]string),
-		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
-		SystemPrompt:   c.systemPrompt,
-		ActiveTask:     c.activeTask,
-	}
-
-	// Compose EVALUATE phase skills
-	if c.skillSelector != nil {
-		session.IterationContext = &agent.IterationContext{
-			Phase:        "EVALUATE",
-			SkillsPrompt: c.skillSelector.SelectForPhase("EVALUATE"),
-		}
-	}
-
-	// Select adapter for EVALUATE phase
-	activeAgent := c.agent
-	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
-		modelCfg := c.modelRouter.ModelForPhase("EVALUATE")
-		if modelCfg.Adapter != "" {
-			if a, ok := c.adapters[modelCfg.Adapter]; ok {
-				activeAgent = a
-			}
-		}
-		if modelCfg.Model != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
-			session.IterationContext.ModelOverride = modelCfg.Model
-		}
-	}
-
-	env := activeAgent.BuildEnv(session, 0)
-	command := activeAgent.BuildCommand(session, 0)
-
-	c.logInfo("Running evaluator for phase %s", completedPhase)
-
-	result, err := c.runAgentContainer(ctx, containerRunParams{
-		Agent:   activeAgent,
-		Session: session,
-		Env:     env,
-		Command: command,
-		LogTag:  "Evaluator",
-	})
-	if err != nil {
-		return EvalResult{Verdict: VerdictAdvance}, fmt.Errorf("evaluator failed: %w", err)
-	}
-
-	// Parse verdict from raw text content first, fall back to summary
-	parseSource := result.RawTextContent
-	if parseSource == "" {
-		parseSource = result.Summary
-	}
-	evalResult := parseEvalVerdict(parseSource)
-	c.logInfo("Evaluator verdict for phase %s: %s", completedPhase, evalResult.Verdict)
-
-	// On ITERATE, store feedback in memory for the next iteration
-	if evalResult.Verdict == VerdictIterate && evalResult.Feedback != "" && c.memoryStore != nil {
-		c.memoryStore.Update([]memory.Signal{
-			{Type: memory.EvalFeedback, Content: evalResult.Feedback},
-		}, c.iteration, fmt.Sprintf("issue:%s", c.activeTask))
-	}
-
-	return evalResult, nil
-}
-
-// evalContextBudget returns the configured max characters for evaluator context,
-// falling back to the default when not specified.
-func (c *Controller) evalContextBudget() int {
-	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalContextBudget > 0 {
-		return c.config.PhaseLoop.EvalContextBudget
-	}
-	return defaultEvalContextBudget
-}
-
 // runJudge runs a judge agent that interprets reviewer feedback and decides
-// whether to ADVANCE, ITERATE, or BLOCKED.
-func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalResult, error) {
+// whether to ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, or REGRESS.
+func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (JudgeResult, error) {
 	judgePrompt := c.buildJudgePrompt(params)
 
 	session := &agent.Session{
@@ -189,7 +90,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalR
 		ActiveTask:     c.activeTask,
 	}
 
-	// Resolve phase key: <PHASE>_JUDGE → JUDGE → EVALUATE → default
+	// Resolve phase key: <PHASE>_JUDGE → JUDGE → default
 	judgePhase := fmt.Sprintf("%s_JUDGE", params.CompletedPhase)
 	skillPhase := judgePhase
 
@@ -213,16 +114,13 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalR
 		}
 	}
 
-	// Select adapter via compound key fallback chain
+	// Select adapter via compound key fallback chain: <PHASE>_JUDGE → JUDGE → default
 	activeAgent := c.agent
 	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
 		modelCfg := c.modelRouter.ModelForPhase(judgePhase)
-		// Fallback: JUDGE → EVALUATE → default
+		// Fallback: JUDGE → default
 		if modelCfg.Adapter == "" && modelCfg.Model == "" {
 			modelCfg = c.modelRouter.ModelForPhase("JUDGE")
-		}
-		if modelCfg.Adapter == "" && modelCfg.Model == "" {
-			modelCfg = c.modelRouter.ModelForPhase("EVALUATE")
 		}
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
@@ -250,29 +148,38 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalR
 		LogTag:  "Judge",
 	})
 	if err != nil {
-		return EvalResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)
+		return JudgeResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)
 	}
 
 	parseSource := result.RawTextContent
 	if parseSource == "" {
 		parseSource = result.Summary
 	}
-	evalResult := parseJudgeVerdict(parseSource)
-	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, evalResult.Verdict, evalResult.SignalFound)
+	judgeResult := parseJudgeVerdict(parseSource)
+	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
 
 	// Parse review mode signal when complexity assessment was requested
 	if params.AssessComplexity {
-		evalResult.ReviewMode = parseReviewModeSignal(parseSource)
+		judgeResult.ReviewMode = parseReviewModeSignal(parseSource)
 	}
 
-	// On ITERATE, store the reviewer's feedback (not the judge's) in memory for the worker
-	if evalResult.Verdict == VerdictIterate && params.ReviewFeedback != "" && c.memoryStore != nil {
+	// On ITERATE or REGRESS, store the reviewer's feedback (not the judge's) in memory for the worker
+	if (judgeResult.Verdict == VerdictIterate || judgeResult.Verdict == VerdictRegress) && params.ReviewFeedback != "" && c.memoryStore != nil {
 		c.memoryStore.Update([]memory.Signal{
 			{Type: memory.EvalFeedback, Content: params.ReviewFeedback},
 		}, c.iteration, fmt.Sprintf("issue:%s", c.activeTask))
 	}
 
-	return evalResult, nil
+	return judgeResult, nil
+}
+
+// judgeContextBudget returns the configured max characters for judge context,
+// falling back to the default when not specified.
+func (c *Controller) judgeContextBudget() int {
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.JudgeContextBudget > 0 {
+		return c.config.PhaseLoop.JudgeContextBudget
+	}
+	return defaultJudgeContextBudget
 }
 
 // buildJudgePrompt composes the judge prompt with reviewer feedback and iteration context.
@@ -293,7 +200,7 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	sb.WriteString("\n\n")
 
 	sb.WriteString("## Phase Output Summary\n\n")
-	budget := c.evalContextBudget()
+	budget := c.judgeContextBudget()
 	output := params.PhaseOutput
 	if len(output) > budget {
 		output = output[:budget] + "\n\n... (output truncated)"
@@ -305,6 +212,18 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	sb.WriteString("## Your Task\n\n")
 	sb.WriteString("Based on the reviewer's feedback, decide if the work should advance or iterate.\n")
 	sb.WriteString("You MUST emit exactly one line starting with `AGENTIUM_EVAL:` followed by your verdict.\n\n")
+
+	sb.WriteString("### Available Verdicts\n\n")
+	sb.WriteString("- `AGENTIUM_EVAL: ADVANCE` - Phase complete, move to next phase\n")
+	sb.WriteString("- `AGENTIUM_EVAL: ITERATE <feedback>` - More work needed in current phase\n")
+	sb.WriteString("- `AGENTIUM_EVAL: BLOCKED <reason>` - Unresolvable issue, needs human intervention\n")
+
+	// Only show REGRESS option during REVIEW phase
+	if params.CompletedPhase == PhaseReview {
+		sb.WriteString("- `AGENTIUM_EVAL: REGRESS <reason>` - Significant issues found, return to PLAN phase\n")
+	}
+
+	sb.WriteString("\n")
 
 	if params.Iteration >= params.MaxIterations {
 		sb.WriteString("**NOTE:** This is the FINAL iteration. Prefer ADVANCE unless there are critical issues that would prevent the work from being usable.\n\n")
@@ -323,32 +242,6 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 		sb.WriteString("Use SIMPLE when: single-file changes, straightforward fixes, config\n")
 		sb.WriteString("updates, documentation-only, or well-scoped small features.\n\n")
 	}
-
-	return sb.String()
-}
-
-// buildEvalPrompt composes the evaluator prompt with phase context.
-func (c *Controller) buildEvalPrompt(phase TaskPhase, phaseOutput string) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("You are evaluating the output of the **%s** phase.\n\n", phase))
-	sb.WriteString(fmt.Sprintf("Repository: %s\n", c.config.Repository))
-	sb.WriteString(fmt.Sprintf("Issue: #%s\n\n", c.activeTask))
-
-	sb.WriteString("## Phase Output\n\n")
-	// Truncate very long outputs to avoid exceeding context
-	budget := c.evalContextBudget()
-	output := phaseOutput
-	if len(output) > budget {
-		output = output[:budget] + "\n\n... (output truncated)"
-	}
-	sb.WriteString("```\n")
-	sb.WriteString(output)
-	sb.WriteString("\n```\n\n")
-
-	sb.WriteString("## Your Task\n\n")
-	sb.WriteString("Evaluate the phase output above and emit your verdict.\n")
-	sb.WriteString("You MUST emit exactly one line starting with `AGENTIUM_EVAL:` followed by your verdict.\n")
 
 	return sb.String()
 }

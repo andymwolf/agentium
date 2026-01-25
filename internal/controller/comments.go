@@ -18,9 +18,9 @@ func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iter
 	c.postIssueComment(ctx, body)
 }
 
-// postEvalComment posts an evaluator verdict comment on the GitHub issue.
+// postJudgeComment posts a judge verdict comment on the GitHub issue.
 // This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) postEvalComment(ctx context.Context, phase TaskPhase, result EvalResult) {
+func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, result JudgeResult) {
 	if c.activeTaskType != "issue" {
 		return
 	}
@@ -28,11 +28,17 @@ func (c *Controller) postEvalComment(ctx context.Context, phase TaskPhase, resul
 	var body string
 	switch result.Verdict {
 	case VerdictAdvance:
-		body = fmt.Sprintf("**Evaluator:** Phase `%s` — ADVANCE", phase)
+		body = fmt.Sprintf("**Judge:** Phase `%s` — ADVANCE", phase)
 	case VerdictIterate:
-		body = fmt.Sprintf("**Evaluator:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("**Judge:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
 	case VerdictBlocked:
-		body = fmt.Sprintf("**Evaluator:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("**Judge:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+	case VerdictSimple:
+		body = fmt.Sprintf("**Judge:** Phase `%s` — SIMPLE (REVIEW will be skipped)", phase)
+	case VerdictComplex:
+		body = fmt.Sprintf("**Judge:** Phase `%s` — COMPLEX (REVIEW will be used)", phase)
+	case VerdictRegress:
+		body = fmt.Sprintf("**Judge:** Phase `%s` — REGRESS (returning to PLAN)\n\n> %s", phase, result.Feedback)
 	}
 
 	c.postIssueComment(ctx, body)

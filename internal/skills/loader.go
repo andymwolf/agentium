@@ -12,10 +12,8 @@ package skills
 //go:generate cp ../../prompts/skills/review.md review.md
 //go:generate cp ../../prompts/skills/docs.md docs.md
 //go:generate cp ../../prompts/skills/pr_review.md pr_review.md
-//go:generate cp ../../prompts/skills/evaluate.md evaluate.md
-//go:generate cp ../../prompts/skills/evaluate_plan.md evaluate_plan.md
-//go:generate cp ../../prompts/skills/evaluate_implement.md evaluate_implement.md
-//go:generate cp ../../prompts/skills/evaluate_test_phase.md evaluate_test_phase.md
+//go:generate cp ../../prompts/skills/plan_reviewer.md plan_reviewer.md
+//go:generate cp ../../prompts/skills/code_reviewer.md code_reviewer.md
 //go:generate cp ../../prompts/skills/judge.md judge.md
 
 import (
@@ -62,39 +60,31 @@ var embeddedDocs string
 //go:embed pr_review.md
 var embeddedPRReview string
 
-//go:embed evaluate.md
-var embeddedEvaluate string
+//go:embed plan_reviewer.md
+var embeddedPlanReviewer string
 
-//go:embed evaluate_plan.md
-var embeddedEvaluatePlan string
-
-//go:embed evaluate_implement.md
-var embeddedEvaluateImplement string
-
-//go:embed evaluate_test_phase.md
-var embeddedEvaluateTestPhase string
+//go:embed code_reviewer.md
+var embeddedCodeReviewer string
 
 //go:embed judge.md
 var embeddedJudge string
 
 // skillFiles maps filenames to their embedded content.
 var skillFiles = map[string]string{
-	"safety.md":              embeddedSafety,
-	"environment.md":         embeddedEnvironment,
-	"status_signals.md":      embeddedStatusSignals,
-	"planning.md":            embeddedPlanning,
-	"plan.md":                embeddedPlan,
-	"implement.md":           embeddedImplement,
-	"test.md":                embeddedTest,
-	"pr_creation.md":         embeddedPRCreation,
-	"review.md":              embeddedReview,
-	"docs.md":                embeddedDocs,
-	"pr_review.md":           embeddedPRReview,
-	"evaluate.md":            embeddedEvaluate,
-	"evaluate_plan.md":       embeddedEvaluatePlan,
-	"evaluate_implement.md":  embeddedEvaluateImplement,
-	"evaluate_test_phase.md": embeddedEvaluateTestPhase,
-	"judge.md":               embeddedJudge,
+	"safety.md":         embeddedSafety,
+	"environment.md":    embeddedEnvironment,
+	"status_signals.md": embeddedStatusSignals,
+	"planning.md":       embeddedPlanning,
+	"plan.md":           embeddedPlan,
+	"implement.md":      embeddedImplement,
+	"test.md":           embeddedTest,
+	"pr_creation.md":    embeddedPRCreation,
+	"review.md":         embeddedReview,
+	"docs.md":           embeddedDocs,
+	"pr_review.md":      embeddedPRReview,
+	"plan_reviewer.md":  embeddedPlanReviewer,
+	"code_reviewer.md":  embeddedCodeReviewer,
+	"judge.md":          embeddedJudge,
 }
 
 // LoadManifest parses the embedded manifest YAML.

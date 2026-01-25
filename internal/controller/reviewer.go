@@ -112,7 +112,7 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString(fmt.Sprintf("Issue: #%s\n\n", c.activeTask))
 
 	sb.WriteString("## Phase Output\n\n")
-	budget := c.evalContextBudget()
+	budget := c.judgeContextBudget()
 	output := params.PhaseOutput
 	if len(output) > budget {
 		output = output[:budget] + "\n\n... (output truncated)"
