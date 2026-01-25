@@ -176,8 +176,8 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 // judgeContextBudget returns the configured max characters for judge context,
 // falling back to the default when not specified.
 func (c *Controller) judgeContextBudget() int {
-	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalContextBudget > 0 {
-		return c.config.PhaseLoop.EvalContextBudget
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.JudgeContextBudget > 0 {
+		return c.config.PhaseLoop.JudgeContextBudget
 	}
 	return defaultJudgeContextBudget
 }

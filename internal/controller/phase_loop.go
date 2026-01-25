@@ -338,8 +338,8 @@ const defaultJudgeNoSignalLimit = 2
 // judgeNoSignalLimit returns the configured max consecutive no-signal judgments,
 // falling back to the default when not specified.
 func (c *Controller) judgeNoSignalLimit() int {
-	if c.config.PhaseLoop != nil && c.config.PhaseLoop.EvalNoSignalLimit > 0 {
-		return c.config.PhaseLoop.EvalNoSignalLimit
+	if c.config.PhaseLoop != nil && c.config.PhaseLoop.JudgeNoSignalLimit > 0 {
+		return c.config.PhaseLoop.JudgeNoSignalLimit
 	}
 	return defaultJudgeNoSignalLimit
 }

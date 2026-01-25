@@ -82,16 +82,13 @@ type ProvDelegationConfig struct {
 
 // ProvPhaseLoopConfig contains phase loop configuration for provisioned sessions.
 type ProvPhaseLoopConfig struct {
-	Enabled                bool   `json:"enabled"`
-	ReviewEnabled          bool   `json:"review_enabled,omitempty"`
-	ReviewMode             string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
-	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
-	TestMaxIterations      int    `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations    int    `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
-	EvalContextBudget      int    `json:"eval_context_budget,omitempty"`
-	EvalNoSignalLimit      int    `json:"eval_no_signal_limit,omitempty"`
+	Enabled                bool `json:"enabled"`
+	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
+	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
+	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
+	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration

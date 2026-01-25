@@ -152,8 +152,8 @@ func TestJudgeNoSignalLimit_Custom(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:           true,
-				EvalNoSignalLimit: 5,
+				Enabled:            true,
+				JudgeNoSignalLimit: 5,
 			},
 		},
 	}
