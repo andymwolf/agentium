@@ -202,7 +202,9 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (EvalR
 
 	// Inject eval memory context for iteration awareness
 	if c.memoryStore != nil {
-		evalCtx := c.memoryStore.BuildEvalContext()
+		// Build context scoped to the current task
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		evalCtx := c.memoryStore.BuildEvalContext(taskID)
 		if evalCtx != "" {
 			if session.IterationContext == nil {
 				session.IterationContext = &agent.IterationContext{}

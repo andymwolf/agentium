@@ -78,13 +78,14 @@ func (s *Store) Update(signals []Signal, iteration int, taskID string) int {
 			Timestamp: now,
 		})
 	}
-	s.resolvePending(signals)
+	s.resolvePending(signals, taskID)
 	return s.prune()
 }
 
 // resolvePending removes STEP_PENDING entries whose content matches any
 // incoming STEP_DONE signal, so completed steps don't linger as pending.
-func (s *Store) resolvePending(signals []Signal) {
+// This is now task-scoped to prevent clearing unrelated pending steps.
+func (s *Store) resolvePending(signals []Signal, taskID string) {
 	done := make(map[string]bool)
 	for _, sig := range signals {
 		if sig.Type == StepDone {
@@ -96,7 +97,10 @@ func (s *Store) resolvePending(signals []Signal) {
 	}
 	filtered := s.data.Entries[:0]
 	for _, e := range s.data.Entries {
-		if e.Type == StepPending && done[e.Content] {
+		// Only remove STEP_PENDING entries that match both:
+		// 1. The content is marked as done
+		// 2. The entry belongs to the same task
+		if e.Type == StepPending && done[e.Content] && e.TaskID == taskID {
 			continue
 		}
 		filtered = append(filtered, e)

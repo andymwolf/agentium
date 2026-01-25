@@ -1039,11 +1039,13 @@ func (c *Controller) buildPromptForPR(pr prWithReviews) string {
 // detectExistingWork checks GitHub for existing branches and PRs related to an issue.
 func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string) *agent.ExistingWork {
 	// Check for existing open PRs with branch matching agentium/issue-<N>
+	// Use --search to find matching PRs regardless of age (avoids missing older PRs beyond default limit)
+	branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
 	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
 		"--repo", c.config.Repository,
 		"--state", "open",
+		"--search", fmt.Sprintf("head:%s", branchPrefix),
 		"--json", "number,title,headRefName",
-		"--limit", "10",
 	)
 	cmd.Dir = c.workDir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
@@ -1055,7 +1057,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 			HeadRefName string `json:"headRefName"`
 		}
 		if unmarshalErr := json.Unmarshal(output, &prs); unmarshalErr == nil {
-			branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
+			// The search should already filter for matching branches, but double-check to be safe
 			for _, pr := range prs {
 				if strings.HasPrefix(pr.HeadRefName, branchPrefix) {
 					c.logInfo("Found existing PR #%d for issue #%s on branch %s",
@@ -1365,7 +1367,9 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	// Inject memory context if store is available
 	if c.memoryStore != nil {
-		memCtx := c.memoryStore.BuildContext()
+		// Build context scoped to the current task
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
 			if session.IterationContext == nil {
 				session.IterationContext = &agent.IterationContext{}

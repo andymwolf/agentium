@@ -39,14 +39,19 @@ var evalSectionOrder = []SignalType{
 // evaluator-relevant entries (EvalFeedback and PhaseResult). This provides the
 // judge with iteration history without agent-internal signals like StepPending
 // or FileModified.
-func (s *Store) BuildEvalContext() string {
+// If taskID is provided (non-empty), only entries for that task are included.
+func (s *Store) BuildEvalContext(taskID string) string {
 	if len(s.data.Entries) == 0 {
 		return ""
 	}
 
-	// Group only eval-relevant entries by type
+	// Group only eval-relevant entries by type, filtering by taskID if provided
 	groups := make(map[SignalType][]string)
 	for _, e := range s.data.Entries {
+		// Skip entries from other tasks if taskID is specified
+		if taskID != "" && e.TaskID != taskID {
+			continue
+		}
 		if e.Type == EvalFeedback || e.Type == PhaseResult {
 			groups[e.Type] = append(groups[e.Type], fmt.Sprintf("[iter %d] %s", e.Iteration, e.Content))
 		}
@@ -90,14 +95,19 @@ func (s *Store) BuildEvalContext() string {
 // BuildContext generates a budget-aware Markdown summary of the memory entries.
 // It groups entries by type and renders sections in priority order, stopping
 // when approaching the context budget limit.
-func (s *Store) BuildContext() string {
+// If taskID is provided (non-empty), only entries for that task are included.
+func (s *Store) BuildContext(taskID string) string {
 	if len(s.data.Entries) == 0 {
 		return ""
 	}
 
-	// Group entries by type
+	// Group entries by type, filtering by taskID if provided
 	groups := make(map[SignalType][]string)
 	for _, e := range s.data.Entries {
+		// Skip entries from other tasks if taskID is specified
+		if taskID != "" && e.TaskID != taskID {
+			continue
+		}
 		groups[e.Type] = append(groups[e.Type], e.Content)
 	}
 
