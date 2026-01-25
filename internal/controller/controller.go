@@ -1459,7 +1459,9 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	// Inject memory context if store is available
 	if c.memoryStore != nil {
-		memCtx := c.memoryStore.BuildContext()
+		// Build context scoped to the current task
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
 			if session.IterationContext == nil {
 				session.IterationContext = &agent.IterationContext{}

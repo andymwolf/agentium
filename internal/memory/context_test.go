@@ -8,7 +8,7 @@ import (
 
 func TestBuildContext_Empty(t *testing.T) {
 	s := NewStore(t.TempDir(), Config{})
-	ctx := s.BuildContext()
+	ctx := s.BuildContext("")
 	if ctx != "" {
 		t.Errorf("expected empty context for empty store, got %q", ctx)
 	}
@@ -24,7 +24,7 @@ func TestBuildContext_GroupsByType(t *testing.T) {
 		{Type: Decision, Content: "use JWT", Iteration: 1, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildContext()
+	ctx := s.BuildContext("")
 
 	// Check header
 	if !strings.Contains(ctx, "## Memory from Previous Iterations") {
@@ -70,7 +70,7 @@ func TestBuildContext_RespectsBudget(t *testing.T) {
 		{Type: Decision, Content: "should not appear", Iteration: 1, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildContext()
+	ctx := s.BuildContext("")
 
 	// The first section (Pending Steps) should fit, but the second (Key Facts with 200 chars) should not
 	if !strings.Contains(ctx, "### Pending Steps") {
@@ -86,7 +86,7 @@ func TestBuildContext_RespectsBudget(t *testing.T) {
 
 func TestBuildEvalContext_Empty(t *testing.T) {
 	s := NewStore(t.TempDir(), Config{})
-	ctx := s.BuildEvalContext()
+	ctx := s.BuildEvalContext("")
 	if ctx != "" {
 		t.Errorf("expected empty eval context for empty store, got %q", ctx)
 	}
@@ -103,7 +103,7 @@ func TestBuildEvalContext_FiltersToEvalRelevant(t *testing.T) {
 		{Type: EvalFeedback, Content: "add error handling", Iteration: 2, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildEvalContext()
+	ctx := s.BuildEvalContext("")
 
 	// Should contain eval-relevant entries
 	if !strings.Contains(ctx, "## Iteration History") {
@@ -141,7 +141,7 @@ func TestBuildEvalContext_IncludesIterationNumbers(t *testing.T) {
 		{Type: PhaseResult, Content: "phase done", Iteration: 5, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildEvalContext()
+	ctx := s.BuildEvalContext("")
 
 	if !strings.Contains(ctx, "[iter 3]") {
 		t.Error("should include iteration number for feedback entry")
@@ -159,7 +159,7 @@ func TestBuildEvalContext_NoEvalEntries(t *testing.T) {
 		{Type: FileModified, Content: "main.go", Iteration: 2, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildEvalContext()
+	ctx := s.BuildEvalContext("")
 	if ctx != "" {
 		t.Errorf("expected empty eval context when no eval-relevant entries, got %q", ctx)
 	}
@@ -172,7 +172,7 @@ func TestBuildEvalContext_RespectsBudget(t *testing.T) {
 		{Type: PhaseResult, Content: strings.Repeat("x", 200), Iteration: 2, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildEvalContext()
+	ctx := s.BuildEvalContext("")
 
 	if !strings.Contains(ctx, "### Evaluator Feedback") {
 		t.Error("first section should fit within budget")
@@ -188,8 +188,70 @@ func TestBuildContext_AllEntriesExceedBudget(t *testing.T) {
 		{Type: StepPending, Content: strings.Repeat("x", 200), Iteration: 1, Timestamp: time.Now()},
 	}
 
-	ctx := s.BuildContext()
+	ctx := s.BuildContext("")
 	if ctx != "" {
 		t.Errorf("expected empty context when no section fits budget, got %q", ctx)
+	}
+}
+
+func TestBuildContext_FiltersByTaskID(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: KeyFact, Content: "task1 fact", Iteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: KeyFact, Content: "task2 fact", Iteration: 1, TaskID: "issue:456", Timestamp: time.Now()},
+		{Type: StepPending, Content: "task1 step", Iteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: StepPending, Content: "task2 step", Iteration: 1, TaskID: "issue:456", Timestamp: time.Now()},
+		{Type: Decision, Content: "task1 decision", Iteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	// Build context for task1
+	ctx := s.BuildContext("issue:123")
+
+	// Should contain only task1 entries
+	if !strings.Contains(ctx, "task1 fact") {
+		t.Error("missing task1 fact")
+	}
+	if !strings.Contains(ctx, "task1 step") {
+		t.Error("missing task1 step")
+	}
+	if !strings.Contains(ctx, "task1 decision") {
+		t.Error("missing task1 decision")
+	}
+
+	// Should NOT contain task2 entries
+	if strings.Contains(ctx, "task2 fact") {
+		t.Error("should not contain task2 fact")
+	}
+	if strings.Contains(ctx, "task2 step") {
+		t.Error("should not contain task2 step")
+	}
+}
+
+func TestBuildEvalContext_FiltersByTaskID(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "task1 feedback", Iteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "task2 feedback", Iteration: 1, TaskID: "issue:456", Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "task1 result", Iteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "task2 result", Iteration: 1, TaskID: "issue:456", Timestamp: time.Now()},
+	}
+
+	// Build eval context for task1
+	ctx := s.BuildEvalContext("issue:123")
+
+	// Should contain only task1 entries
+	if !strings.Contains(ctx, "task1 feedback") {
+		t.Error("missing task1 feedback")
+	}
+	if !strings.Contains(ctx, "task1 result") {
+		t.Error("missing task1 result")
+	}
+
+	// Should NOT contain task2 entries
+	if strings.Contains(ctx, "task2 feedback") {
+		t.Error("should not contain task2 feedback")
+	}
+	if strings.Contains(ctx, "task2 result") {
+		t.Error("should not contain task2 result")
 	}
 }

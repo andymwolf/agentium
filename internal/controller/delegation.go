@@ -65,7 +65,9 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	// Inject memory context if store is available
 	if c.memoryStore != nil {
-		memCtx := c.memoryStore.BuildContext()
+		// Build context scoped to the current task
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
 			session.IterationContext.MemoryContext = memCtx
 		}

@@ -261,3 +261,47 @@ func TestLoad_ExistingFile(t *testing.T) {
 		t.Errorf("expected content 'loaded', got %q", entries[0].Content)
 	}
 }
+
+func TestResolvePending_TaskScoped(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+
+	// Add pending steps for different tasks
+	s.Update([]Signal{{Type: StepPending, Content: "write tests"}}, 1, "issue:123")
+	s.Update([]Signal{{Type: StepPending, Content: "write tests"}}, 1, "issue:456")
+	s.Update([]Signal{{Type: StepPending, Content: "add docs"}}, 1, "issue:123")
+
+	if len(s.Entries()) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(s.Entries()))
+	}
+
+	// Complete "write tests" for task issue:123 only
+	s.Update([]Signal{{Type: StepDone, Content: "write tests"}}, 2, "issue:123")
+
+	entries := s.Entries()
+	// Should have 3 entries:
+	// 1. "write tests" STEP_PENDING for issue:456 (not resolved - different task)
+	// 2. "add docs" STEP_PENDING for issue:123 (not resolved - different content)
+	// 3. "write tests" STEP_DONE for issue:123 (the new entry)
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries after resolve, got %d", len(entries))
+	}
+
+	// Verify issue:456's "write tests" is still pending
+	foundTask456Pending := false
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "write tests" && e.TaskID == "issue:456" {
+			foundTask456Pending = true
+			break
+		}
+	}
+	if !foundTask456Pending {
+		t.Error("STEP_PENDING 'write tests' for issue:456 should not have been resolved")
+	}
+
+	// Verify issue:123's "write tests" is no longer pending
+	for _, e := range entries {
+		if e.Type == StepPending && e.Content == "write tests" && e.TaskID == "issue:123" {
+			t.Error("STEP_PENDING 'write tests' for issue:123 should have been resolved")
+		}
+	}
+}
