@@ -28,6 +28,14 @@ Your plan should include:
 - Be specific about file paths and function names where possible
 - Consider edge cases and backward compatibility
 
+### Scope Discipline
+
+- Your plan should address ONLY what the issue explicitly requires
+- Do NOT plan for additional improvements, enhancements, or "nice-to-haves"
+- If the issue says "fix X", plan to fix X — not refactor Y and add Z while you're there
+- A good plan is MINIMAL: the smallest set of changes that closes the issue
+- For each proposed file/change, ask: "Is this REQUIRED to close the issue?"
+
 ### Completion
 
 When your plan is ready, emit:

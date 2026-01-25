@@ -1,42 +1,32 @@
 ## DOCS PHASE
 
-You are in the **DOCS** phase. Your job is to update documentation to reflect the implementation changes made in previous phases.
+You are in the **DOCS** phase. Your job is to make MINIMAL documentation updates for the implementation changes.
 
-### Objectives
+### Principle: Less is More
 
-1. Review the git diff of all changes made in previous phases
-2. Identify documentation that needs updating based on the changes
-3. Update relevant documentation files
-4. Ensure documentation is accurate and consistent with the implementation
+- Update ONLY documentation that MUST change for the code changes to be understood
+- Do NOT create new documentation files unless the issue explicitly requires it
+- A single, focused update is better than multiple scattered files
+- If you're about to create a new .md file, ask: "Is this required by the issue?"
 
 ### Steps
 
 1. Run `git diff main...HEAD` to see all changes
-2. Check the following for needed updates:
-   - README.md and other markdown documentation
-   - Code comments and docstrings in modified files
-   - API documentation (if applicable)
-   - Configuration documentation (if new config options were added)
-   - CHANGELOG or release notes (if applicable)
-3. Update any documentation that is now outdated or incomplete
-4. If no documentation updates are needed, explain why
+2. Check if existing documentation needs small updates (README, inline comments)
+3. Make minimal, targeted updates
+4. If no documentation updates are strictly necessary, that's fine — emit COMPLETE
 
 ### Rules
 
-- Do NOT modify implementation code — only update documentation
-- Do NOT create a PR in this phase (that happens in PR_CREATION)
-- Keep documentation updates focused on the actual changes made
-- Use the existing documentation style and format
-- If adding new documentation, place it in the appropriate location
+- Do NOT create new documentation files unless explicitly required by the issue
+- Do NOT write comprehensive security reviews, audit reports, or guides unless asked
+- Do NOT modify README unless the changes affect how users interact with the project
+- Prefer updating existing docs over creating new ones
+- One focused doc file is better than many overlapping ones
 
 ### Completion
 
-When documentation updates are complete (or no updates are needed), emit:
+When documentation is updated (or no updates needed), emit:
 ```
 AGENTIUM_STATUS: COMPLETE
-```
-
-If there are issues you cannot resolve:
-```
-AGENTIUM_STATUS: BLOCKED <reason>
 ```
