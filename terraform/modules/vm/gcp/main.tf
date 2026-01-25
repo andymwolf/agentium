@@ -195,7 +195,11 @@ resource "google_compute_instance" "agentium" {
 
   service_account {
     email  = google_service_account.agentium.email
-    scopes = ["cloud-platform"]
+    scopes = [
+      "https://www.googleapis.com/auth/secretmanager",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/compute"
+    ]
   }
 
   metadata = {

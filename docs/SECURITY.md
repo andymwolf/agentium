@@ -84,6 +84,14 @@ The VM service account has these minimal roles:
 
 ## Container Security
 
+### Docker Socket Access
+
+The controller container requires access to the Docker socket to manage agent containers. This is a controlled risk:
+- Controller runs in an isolated VM that self-terminates
+- VM has minimal IAM permissions
+- No external access to the VM
+- Controller code is trusted and version-controlled
+
 ### Runtime Security
 
 All agent containers run with:
