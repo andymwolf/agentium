@@ -1,0 +1,16 @@
+run:
+  timeout: 5m
+  go: "1.19"
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+
+linters-settings:
+  govet:
+    disable:
+      - shadow
+      - unusedwrite
