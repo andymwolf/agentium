@@ -97,6 +97,10 @@ func advancePhase(current TaskPhase, isSimple bool) TaskPhase {
 	return PhaseComplete
 }
 
+// maxRegressionCount is the maximum number of REGRESS events allowed before
+// forcing the task to BLOCKED to prevent infinite regression loops.
+const maxRegressionCount = 3
+
 // runPhaseLoop executes the controller-as-judge phase loop for the active issue task.
 // It iterates through phases, running the agent and judge at each step.
 func (c *Controller) runPhaseLoop(ctx context.Context) error {
@@ -108,6 +112,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+phaseLoop:
 	for {
 		// Check context cancellation
 		select {
@@ -200,6 +205,16 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			if reviewErr != nil {
 				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
 				state.LastJudgeVerdict = string(VerdictAdvance)
+				// Clear stale feedback to prevent leaking into later phases
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+				}
+				// Record phase result
+				if c.memoryStore != nil {
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (reviewer error, forced advance)", currentPhase)},
+					}, c.iteration, taskID)
+				}
 				advanced = true
 				break
 			}
@@ -291,8 +306,18 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					continue
 				}
 				state.RegressionCount++
-				c.logInfo("Phase %s: judge requested regression to PLAN (count: %d, feedback: %s)",
-					currentPhase, state.RegressionCount, judgeResult.Feedback)
+
+				// Guard against infinite regression loops
+				if state.RegressionCount > maxRegressionCount {
+					c.logWarning("Phase %s: max regression count (%d) exceeded, marking as BLOCKED",
+						currentPhase, maxRegressionCount)
+					state.Phase = PhaseBlocked
+					state.LastJudgeFeedback = fmt.Sprintf("Exceeded max regression count (%d)", maxRegressionCount)
+					return nil
+				}
+
+				c.logInfo("Phase %s: judge requested regression to PLAN (count: %d/%d, feedback: %s)",
+					currentPhase, state.RegressionCount, maxRegressionCount, judgeResult.Feedback)
 
 				// Keep review feedback in memory for context
 				if c.memoryStore != nil && judgeResult.Feedback != "" {
@@ -306,7 +331,22 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				state.PhaseIteration = 0
 				// Don't clear IsSimple - let the new PLAN judge reassess
 				state.ReviewDecided = false
-				return c.runPhaseLoop(ctx) // Restart the loop
+				continue phaseLoop // Restart the outer loop without recursion
+			}
+
+			// Apply ReviewMode if set (complexity assessment during PLAN phase)
+			// This happens in addition to the verdict, e.g., ADVANCE + REVIEW_MODE: SIMPLE
+			if judgeResult.ReviewMode != "" && !state.ReviewDecided {
+				switch judgeResult.ReviewMode {
+				case "SIMPLE":
+					state.IsSimple = true
+					state.ReviewDecided = true
+					c.logInfo("Phase %s: complexity assessment = SIMPLE (REVIEW will be skipped)", currentPhase)
+				case "FULL":
+					state.IsSimple = false
+					state.ReviewDecided = true
+					c.logInfo("Phase %s: complexity assessment = FULL (REVIEW will be used)", currentPhase)
+				}
 			}
 
 			if advanced {
