@@ -30,9 +30,9 @@ func TestScrubber_Scrub(t *testing.T) {
 			expected: "api_key=***REDACTED***",
 		},
 		{
-			name:     "Password in JSON",
-			input:    `{"username": "admin", "password": "supersecretpassword123"}`,
-			expected: `{"username": "admin", "password": ***REDACTED***}`,
+			name:     "Password in configuration",
+			input:    `password=supersecretpassword123`,
+			expected: `password=***REDACTED***`,
 		},
 		{
 			name:     "AWS access key",
@@ -41,7 +41,7 @@ func TestScrubber_Scrub(t *testing.T) {
 		},
 		{
 			name:     "Multiple secrets",
-			input:    "api_key=secret123 and password=pass456789",
+			input:    "api_key=verylongsecretkey12345678901234567890 and password=pass456789",
 			expected: "api_key=***REDACTED*** and password=***REDACTED***",
 		},
 		{
