@@ -134,6 +134,12 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 	}()
 	wg.Wait()
 
+	// Scrub sensitive information from agent output
+	if c.scrubber != nil {
+		stdoutBytes = []byte(c.scrubber.Scrub(string(stdoutBytes)))
+		stderrBytes = []byte(c.scrubber.Scrub(string(stderrBytes)))
+	}
+
 	if stdoutErr != nil {
 		c.logger.Printf("%s warning: reading stdout: %v", logTag, stdoutErr)
 	}

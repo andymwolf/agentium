@@ -97,33 +97,8 @@ locals {
   zone = var.zone != "" ? var.zone : "${var.region}-a"
 }
 
-# Service account for the VM
-resource "google_service_account" "agentium" {
-  account_id   = "agentium-${substr(var.session_id, 0, 20)}"
-  display_name = "Agentium Session ${var.session_id}"
-  project      = var.project_id
-}
-
-# Grant secret accessor role
-resource "google_project_iam_member" "secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-}
-
-# Grant logging writer role
-resource "google_project_iam_member" "logging_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-}
-
-# Grant compute instance admin (for self-deletion)
-resource "google_project_iam_member" "compute_admin" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-}
+# Note: Service account and IAM configuration moved to iam.tf for better organization
+# The service account with restricted permissions is created there
 
 # Cloud-init script
 locals {
@@ -194,7 +169,7 @@ resource "google_compute_instance" "agentium" {
   }
 
   service_account {
-    email  = google_service_account.agentium.email
+    email  = google_service_account.agentium_restricted.email
     scopes = ["cloud-platform"]
   }
 
@@ -266,5 +241,5 @@ output "zone" {
 
 output "service_account" {
   description = "The service account email"
-  value       = google_service_account.agentium.email
+  value       = google_service_account.agentium_restricted.email
 }
