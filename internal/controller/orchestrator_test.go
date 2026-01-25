@@ -9,8 +9,8 @@ import (
 func TestConfigForPhase_UnconfiguredPhases(t *testing.T) {
 	orch := &SubTaskOrchestrator{
 		config: DelegationConfig{
-			Enabled:   true,
-			Strategy:  "sequential",
+			Enabled:  true,
+			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
 				SubTaskImplement: {Agent: "claude-code"},
 			},
@@ -59,10 +59,10 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 	}{
 		{PhaseImplement, "claude-code", "claude-opus-4-20250514"},
 		{PhaseTest, "aider", "claude-sonnet-4-20250514"},
-		{PhaseReview, "claude-code", ""},       // review type
-		{PhasePRCreation, "claude-code", ""},   // pr_creation type
-		{PhaseAnalyze, "claude-code", ""},      // plan type
-		{PhasePush, "claude-code", ""},         // push type
+		{PhaseReview, "claude-code", ""},     // review type
+		{PhasePRCreation, "claude-code", ""}, // pr_creation type
+		{PhaseAnalyze, "claude-code", ""},    // plan type
+		{PhasePush, "claude-code", ""},       // push type
 	}
 
 	for _, tt := range tests {

@@ -417,12 +417,12 @@ func TestNewCloudLoggerWithWriter_NilLabels(t *testing.T) {
 }
 
 func TestCloudLoggerConfig_Defaults(t *testing.T) {
-	cfg := CloudLoggerConfig{
-		SessionID: "test-session",
-	}
+	cfg := CloudLoggerConfig{}
 
 	if cfg.LogName != "" {
 		t.Errorf("default LogName should be empty (set by NewCloudLogger), got %q", cfg.LogName)
 	}
+	if cfg.SessionID != "" {
+		t.Errorf("default SessionID should be empty, got %q", cfg.SessionID)
+	}
 }
-

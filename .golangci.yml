@@ -5,12 +5,20 @@ run:
 linters:
   disable-all: true
   enable:
+    - errcheck
+    - gosimple
     - govet
     - ineffassign
     - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - unparam
 
 linters-settings:
   govet:
-    disable:
+    enable:
       - shadow
       - unusedwrite

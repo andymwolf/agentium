@@ -30,9 +30,9 @@ func TestPostEvalComment_OnlyForIssues(t *testing.T) {
 func TestEvalResultFormatting(t *testing.T) {
 	// Verify EvalResult struct fields are correctly populated
 	tests := []struct {
-		name     string
-		result   EvalResult
-		wantStr  string
+		name    string
+		result  EvalResult
+		wantStr string
 	}{
 		{
 			name:    "advance verdict",

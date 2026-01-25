@@ -20,16 +20,16 @@ type IterationContext struct {
 
 // Session represents an agent session with all necessary context
 type Session struct {
-	ID             string
-	Repository     string
-	Tasks          []string
-	PRs            []string // PR numbers for review sessions
-	WorkDir        string
-	GitHubToken    string
-	MaxIterations  int
-	MaxDuration    string
-	Prompt         string
-	Metadata       map[string]string
+	ID               string
+	Repository       string
+	Tasks            []string
+	PRs              []string // PR numbers for review sessions
+	WorkDir          string
+	GitHubToken      string
+	MaxIterations    int
+	MaxDuration      string
+	Prompt           string
+	Metadata         map[string]string
 	ClaudeAuthMode   string            // "api" or "oauth"
 	SystemPrompt     string            // Content of SYSTEM.md (safety constraints, workflow, status signals)
 	ProjectPrompt    string            // Content of .agentium/AGENT.md from target repo (may be empty)

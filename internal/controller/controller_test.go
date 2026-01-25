@@ -391,10 +391,10 @@ func TestNextQueuedTask(t *testing.T) {
 				{Type: "issue", ID: "7"},
 			},
 			taskStates: map[string]*TaskState{
-				"pr:57":    {ID: "57", Type: "pr", Phase: PhaseAnalyze},
-				"pr:54":    {ID: "54", Type: "pr", Phase: PhaseAnalyze},
-				"issue:6":  {ID: "6", Type: "issue", Phase: PhaseImplement},
-				"issue:7":  {ID: "7", Type: "issue", Phase: PhaseImplement},
+				"pr:57":   {ID: "57", Type: "pr", Phase: PhaseAnalyze},
+				"pr:54":   {ID: "54", Type: "pr", Phase: PhaseAnalyze},
+				"issue:6": {ID: "6", Type: "issue", Phase: PhaseImplement},
+				"issue:7": {ID: "7", Type: "issue", Phase: PhaseImplement},
 			},
 			wantType: "pr",
 			wantID:   "57",
@@ -829,8 +829,8 @@ type mockAgent struct {
 	name string
 }
 
-func (m *mockAgent) Name() string                                                    { return m.name }
-func (m *mockAgent) ContainerImage() string                                          { return "test-image:latest" }
+func (m *mockAgent) Name() string                                                     { return m.name }
+func (m *mockAgent) ContainerImage() string                                           { return "test-image:latest" }
 func (m *mockAgent) BuildEnv(session *agent.Session, iteration int) map[string]string { return nil }
 func (m *mockAgent) BuildCommand(session *agent.Session, iteration int) []string      { return nil }
 func (m *mockAgent) BuildPrompt(session *agent.Session, iteration int) string         { return "" }
@@ -904,13 +904,13 @@ func TestCodexAuthConfig(t *testing.T) {
 
 func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 	tests := []struct {
-		name        string
-		taskType    string
-		agentStatus string
-		prsCreated  []string
+		name         string
+		taskType     string
+		agentStatus  string
+		prsCreated   []string
 		initialPhase TaskPhase
-		wantPhase   TaskPhase
-		wantPR      string
+		wantPhase    TaskPhase
+		wantPR       string
 	}{
 		{
 			name:         "no status signal but PR detected for issue - transitions to complete",
@@ -946,7 +946,7 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 			prsCreated:   []string{"110"},
 			initialPhase: PhasePRCreation,
 			wantPhase:    PhaseComplete,
-			wantPR:       "",  // StatusMessage is used, not PRsCreated
+			wantPR:       "", // StatusMessage is used, not PRsCreated
 		},
 		{
 			name:         "explicit COMPLETE status - no fallback needed",

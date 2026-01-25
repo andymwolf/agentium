@@ -52,15 +52,15 @@ func init() {
 	runCmd.Flags().String("model", "", "Override model for all phases (format: adapter:model)")
 	runCmd.Flags().StringSlice("phase-model", nil, "Per-phase model override (format: PHASE=adapter:model)")
 
-	viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
-	viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
-	viper.BindPFlag("session.prs", runCmd.Flags().Lookup("prs"))
-	viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
-	viper.BindPFlag("session.max_iterations", runCmd.Flags().Lookup("max-iterations"))
-	viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
-	viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
-	viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
-	viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
+	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
+	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
+	_ = viper.BindPFlag("session.prs", runCmd.Flags().Lookup("prs"))
+	_ = viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
+	_ = viper.BindPFlag("session.max_iterations", runCmd.Flags().Lookup("max-iterations"))
+	_ = viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
+	_ = viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
+	_ = viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
+	_ = viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
 }
 
 func runSession(cmd *cobra.Command, args []string) error {
@@ -128,7 +128,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 	// Handle Claude OAuth authentication
 	var claudeAuthBase64 string
 	if cfg.Claude.AuthMode == "oauth" {
-		authJSON, err := readAuthJSON(cfg.Claude.AuthJSONPath)
+		var authJSON []byte
+		authJSON, err = readAuthJSON(cfg.Claude.AuthJSONPath)
 		if err != nil {
 			return fmt.Errorf("failed to read Claude auth.json: %w", err)
 		}
@@ -139,7 +140,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 	// Handle Codex OAuth authentication
 	var codexAuthBase64 string
 	if cfg.Session.Agent == "codex" {
-		authJSON, err := readCodexAuthJSON(cfg.Codex.AuthJSONPath)
+		var authJSON []byte
+		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
 		if err != nil {
 			return fmt.Errorf("failed to read Codex auth.json: %w", err)
 		}
@@ -262,16 +264,16 @@ func runSession(cmd *cobra.Command, args []string) error {
 	// Propagate phase loop config from config file
 	if cfg.PhaseLoop.Enabled {
 		sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
-			Enabled:                 cfg.PhaseLoop.Enabled,
-			ReviewEnabled:           cfg.PhaseLoop.ReviewEnabled,
-			ReviewMode:              cfg.PhaseLoop.ReviewMode,
-			PlanMaxIterations:       cfg.PhaseLoop.PlanMaxIterations,
-			ImplementMaxIterations:  cfg.PhaseLoop.ImplementMaxIterations,
-			TestMaxIterations:       cfg.PhaseLoop.TestMaxIterations,
-			ReviewMaxIterations:     cfg.PhaseLoop.ReviewMaxIterations,
-			DocsMaxIterations:       cfg.PhaseLoop.DocsMaxIterations,
-			EvalContextBudget:       cfg.PhaseLoop.EvalContextBudget,
-			EvalNoSignalLimit:       cfg.PhaseLoop.EvalNoSignalLimit,
+			Enabled:                cfg.PhaseLoop.Enabled,
+			ReviewEnabled:          cfg.PhaseLoop.ReviewEnabled,
+			ReviewMode:             cfg.PhaseLoop.ReviewMode,
+			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+			TestMaxIterations:      cfg.PhaseLoop.TestMaxIterations,
+			ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
+			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+			EvalContextBudget:      cfg.PhaseLoop.EvalContextBudget,
+			EvalNoSignalLimit:      cfg.PhaseLoop.EvalNoSignalLimit,
 		}
 	}
 

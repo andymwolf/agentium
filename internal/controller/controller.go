@@ -87,16 +87,16 @@ type TaskState struct {
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	Enabled                 bool   `json:"enabled"`
-	ReviewEnabled           bool   `json:"review_enabled,omitempty"`
-	ReviewMode              string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
-	PlanMaxIterations       int    `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations  int    `json:"implement_max_iterations,omitempty"`
-	TestMaxIterations       int    `json:"test_max_iterations,omitempty"`
-	ReviewMaxIterations     int    `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations       int    `json:"docs_max_iterations,omitempty"`
-	EvalContextBudget       int    `json:"eval_context_budget,omitempty"`
-	EvalNoSignalLimit       int    `json:"eval_no_signal_limit,omitempty"`
+	Enabled                bool   `json:"enabled"`
+	ReviewEnabled          bool   `json:"review_enabled,omitempty"`
+	ReviewMode             string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
+	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
+	TestMaxIterations      int    `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations    int    `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
+	EvalContextBudget      int    `json:"eval_context_budget,omitempty"`
+	EvalNoSignalLimit      int    `json:"eval_no_signal_limit,omitempty"`
 }
 
 // SessionConfig is the configuration passed to the controller
@@ -192,44 +192,44 @@ type ShutdownHook func(ctx context.Context) error
 
 // Controller manages the agent execution lifecycle
 type Controller struct {
-	config        SessionConfig
-	agent         agent.Agent
-	workDir       string
+	config                 SessionConfig
+	agent                  agent.Agent
+	workDir                string
 	iteration              int
 	startTime              time.Time
 	maxDuration            time.Duration
 	gitHubToken            string
 	completed              map[string]bool
-	pushedChanges          bool                // Tracks if changes were pushed (for PR review sessions)
-	dockerAuthed           bool                // Tracks if docker login to GHCR was done
+	pushedChanges          bool // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed           bool // Tracks if docker login to GHCR was done
 	taskStates             map[string]*TaskState
 	logger                 *log.Logger
-	cloudLogger            *gcp.CloudLogger    // Structured cloud logging (may be nil if unavailable)
+	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
-	systemPrompt           string              // Loaded SYSTEM.md content
-	projectPrompt          string              // Loaded .agentium/AGENT.md content (may be empty)
-	taskQueue              []TaskQueueItem     // Ordered queue: PRs first, then issues
-	issueDetails           []issueDetail       // Fetched issue details for prompt building
-	prDetails              []prWithReviews     // Fetched PR details for prompt building
-	activeTask             string              // Current task ID being focused on
-	activeTaskType         string              // "pr" or "issue"
-	activeTaskExistingWork *agent.ExistingWork // Existing work detected for active task (issues only)
-	skillSelector          *skills.Selector    // Phase-aware skill selector (nil = legacy mode)
-	memoryStore            *memory.Store       // Persistent memory store (nil = disabled)
-	modelRouter            *routing.Router     // Phase-to-model routing (nil = no routing)
+	systemPrompt           string                 // Loaded SYSTEM.md content
+	projectPrompt          string                 // Loaded .agentium/AGENT.md content (may be empty)
+	taskQueue              []TaskQueueItem        // Ordered queue: PRs first, then issues
+	issueDetails           []issueDetail          // Fetched issue details for prompt building
+	prDetails              []prWithReviews        // Fetched PR details for prompt building
+	activeTask             string                 // Current task ID being focused on
+	activeTaskType         string                 // "pr" or "issue"
+	activeTaskExistingWork *agent.ExistingWork    // Existing work detected for active task (issues only)
+	skillSelector          *skills.Selector       // Phase-aware skill selector (nil = legacy mode)
+	memoryStore            *memory.Store          // Persistent memory store (nil = disabled)
+	modelRouter            *routing.Router        // Phase-to-model routing (nil = no routing)
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
 	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
-	metadataUpdater        gcp.MetadataUpdater // Instance metadata updater (nil if unavailable)
+	metadataUpdater        gcp.MetadataUpdater    // Instance metadata updater (nil if unavailable)
 
 	// Shutdown management
-	shutdownHooks          []ShutdownHook
-	shutdownOnce           sync.Once
-	shutdownCh             chan struct{}        // Closed when shutdown is initiated
-	logFlushFn             func() error        // Function to flush pending logs
+	shutdownHooks []ShutdownHook
+	shutdownOnce  sync.Once
+	shutdownCh    chan struct{} // Closed when shutdown is initiated
+	logFlushFn    func() error  // Function to flush pending logs
 
 	// cmdRunner executes external commands. Defaults to exec.CommandContext.
 	// Override in tests to mock command execution.
-	cmdRunner              func(ctx context.Context, name string, args ...string) *exec.Cmd
+	cmdRunner func(ctx context.Context, name string, args ...string) *exec.Cmd
 }
 
 // New creates a new session controller
@@ -443,18 +443,10 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	// Fetch all task details upfront
 	if len(c.config.PRs) > 0 {
-		prDetails, err := c.fetchPRDetails(ctx)
-		if err != nil {
-			c.logWarning("failed to fetch PR details: %v", err)
-		}
-		c.prDetails = prDetails
+		c.prDetails = c.fetchPRDetails(ctx)
 	}
 	if len(c.config.Tasks) > 0 {
-		issues, err := c.fetchIssueDetails(ctx)
-		if err != nil {
-			c.logWarning("failed to fetch issue details: %v", err)
-		}
-		c.issueDetails = issues
+		c.issueDetails = c.fetchIssueDetails(ctx)
 	}
 
 	c.logInfo("Task queue: %d issue(s) [%s], %d PR(s)", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
@@ -761,8 +753,8 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 			c.logInfo("Workspace already contains files, skipping clone")
 			// Fix ownership for existing workspaces (only when running as root)
 			if os.Getuid() == 0 {
-				if err := c.ensureWorkspaceOwnership(); err != nil {
-					c.logWarning("failed to set workspace ownership: %v", err)
+				if ownerErr := c.ensureWorkspaceOwnership(); ownerErr != nil {
+					c.logWarning("failed to set workspace ownership: %v", ownerErr)
 				}
 			}
 			return nil
@@ -833,7 +825,7 @@ type prComment struct {
 	DiffHunk string `json:"diffHunk"`
 }
 
-func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, error) {
+func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 	c.logInfo("Fetching issue details")
 
 	issues := make([]issueDetail, 0, len(c.config.Tasks))
@@ -861,7 +853,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) ([]issueDetail, erro
 		issues = append(issues, issue)
 	}
 
-	return issues, nil
+	return issues
 }
 
 type prWithReviews struct {
@@ -870,7 +862,7 @@ type prWithReviews struct {
 	Comments []prComment
 }
 
-func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error) {
+func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 	c.logInfo("Fetching PR details")
 
 	prs := make([]prWithReviews, 0, len(c.config.PRs))
@@ -929,93 +921,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) ([]prWithReviews, error
 		prs = append(prs, prWithRev)
 	}
 
-	return prs, nil
-}
-
-func (c *Controller) buildPromptWithPRs(prs []prWithReviews) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
-	sb.WriteString("## PR REVIEW SESSION\n\n")
-	sb.WriteString("You are addressing code review feedback on existing pull request(s).\n\n")
-
-	for _, pr := range prs {
-		sb.WriteString(fmt.Sprintf("### PR #%d: %s\n", pr.Detail.Number, pr.Detail.Title))
-		sb.WriteString(fmt.Sprintf("Branch: %s\n\n", pr.Detail.HeadRefName))
-
-		// Add review comments
-		if len(pr.Reviews) > 0 {
-			sb.WriteString("**Review Feedback:**\n")
-			for _, review := range pr.Reviews {
-				if review.Body != "" {
-					body := review.Body
-					if len(body) > 500 {
-						body = body[:500] + "..."
-					}
-					sb.WriteString(fmt.Sprintf("- [%s] %s\n", review.State, body))
-				}
-			}
-			sb.WriteString("\n")
-		}
-
-		// Add inline comments
-		if len(pr.Comments) > 0 {
-			sb.WriteString("**Inline Comments:**\n")
-			for _, comment := range pr.Comments {
-				body := comment.Body
-				if len(body) > 300 {
-					body = body[:300] + "..."
-				}
-				sb.WriteString(fmt.Sprintf("- File: %s (line %d)\n", comment.Path, comment.Line))
-				sb.WriteString(fmt.Sprintf("  Comment: %s\n", body))
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	sb.WriteString("## Instructions\n\n")
-	sb.WriteString("1. You are ALREADY on the PR branch - do NOT create a new branch\n")
-	sb.WriteString("2. Read and understand the review comments\n")
-	sb.WriteString("3. Make targeted changes to address the feedback\n")
-	sb.WriteString("4. Run tests to verify your changes\n")
-	sb.WriteString("5. Commit with message: \"Address review feedback\"\n")
-	sb.WriteString("6. Push your changes: `git push origin HEAD`\n\n")
-	sb.WriteString("## DO NOT\n\n")
-	sb.WriteString("- Create a new branch (you're already on the PR branch)\n")
-	sb.WriteString("- Close or merge the PR\n")
-	sb.WriteString("- Dismiss reviews\n")
-	sb.WriteString("- Force push (unless absolutely necessary)\n")
-	sb.WriteString("- Make unrelated changes\n")
-
-	return sb.String()
-}
-
-func (c *Controller) buildPromptWithIssues(issues []issueDetail) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
-	sb.WriteString("Complete these GitHub issues:\n\n")
-
-	for _, issue := range issues {
-		sb.WriteString(fmt.Sprintf("Issue #%d: %s\n", issue.Number, issue.Title))
-		if issue.Body != "" {
-			// Truncate long bodies
-			body := issue.Body
-			if len(body) > 1000 {
-				body = body[:1000] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("Description: %s\n", body))
-		}
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("For each issue:\n")
-	sb.WriteString("1. Create branch: agentium/issue-<number>-<short-description>\n")
-	sb.WriteString("2. Implement the fix\n")
-	sb.WriteString("3. Run tests\n")
-	sb.WriteString("4. Create a PR linking to the issue\n")
-
-	return sb.String()
+	return prs
 }
 
 // nextQueuedTask returns the first task in the queue that hasn't reached a terminal phase.
@@ -1058,10 +964,10 @@ func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
 	checkoutCmd := exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
 	checkoutCmd.Dir = c.workDir
 	if err := checkoutCmd.Run(); err != nil {
-		// Try fetching first
+		// Try fetching first (ignore error - subsequent checkout will fail if needed)
 		fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin", prData.Detail.HeadRefName)
 		fetchCmd.Dir = c.workDir
-		fetchCmd.Run()
+		_ = fetchCmd.Run()
 		checkoutCmd = exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
 		checkoutCmd.Dir = c.workDir
 		if err := checkoutCmd.Run(); err != nil {
@@ -1148,7 +1054,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 			Title       string `json:"title"`
 			HeadRefName string `json:"headRefName"`
 		}
-		if err := json.Unmarshal(output, &prs); err == nil {
+		if unmarshalErr := json.Unmarshal(output, &prs); unmarshalErr == nil {
 			branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
 			for _, pr := range prs {
 				if strings.HasPrefix(pr.HeadRefName, branchPrefix) {

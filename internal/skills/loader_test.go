@@ -189,4 +189,3 @@ func TestLoadSkills_MissingFile(t *testing.T) {
 		t.Fatal("LoadSkills() with missing file should return error")
 	}
 }
-

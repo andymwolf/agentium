@@ -101,22 +101,22 @@ claude_auth_mode   = "%s"
 	}
 
 	tfvarsPath := filepath.Join(workDir, "terraform.tfvars")
-	if err := os.WriteFile(tfvarsPath, []byte(tfvars), 0644); err != nil {
+	if err = os.WriteFile(tfvarsPath, []byte(tfvars), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tfvars: %w", err)
 	}
 
 	// Copy terraform files to work directory
-	if err := p.copyTerraformFiles(workDir); err != nil {
+	if err = p.copyTerraformFiles(workDir); err != nil {
 		return nil, fmt.Errorf("failed to copy terraform files: %w", err)
 	}
 
 	// Run terraform init
-	if err := p.runTerraform(ctx, workDir, "init"); err != nil {
+	if err = p.runTerraform(ctx, workDir, "init"); err != nil {
 		return nil, fmt.Errorf("terraform init failed: %w", err)
 	}
 
 	// Run terraform apply
-	if err := p.runTerraform(ctx, workDir, "apply", "-auto-approve"); err != nil {
+	if err = p.runTerraform(ctx, workDir, "apply", "-auto-approve"); err != nil {
 		return nil, fmt.Errorf("terraform apply failed: %w", err)
 	}
 

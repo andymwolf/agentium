@@ -97,7 +97,6 @@ func TestDelegation_SkillsSelection_PhaseFallback(t *testing.T) {
 func TestDelegation_ModelOverride(t *testing.T) {
 	model := &routing.ModelConfig{Adapter: "claude-code", Model: "claude-opus-4-20250514"}
 	cfg := SubTaskConfig{
-		Agent: "claude-code",
 		Model: model,
 	}
 
@@ -110,7 +109,7 @@ func TestDelegation_ModelOverride(t *testing.T) {
 }
 
 func TestDelegation_ModelOverride_Nil(t *testing.T) {
-	cfg := SubTaskConfig{Agent: "aider"}
+	cfg := SubTaskConfig{}
 	if cfg.Model != nil {
 		t.Errorf("Model should be nil, got %+v", cfg.Model)
 	}

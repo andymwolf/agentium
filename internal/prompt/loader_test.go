@@ -15,7 +15,7 @@ func TestLoadSystemPrompt_FetchSuccess(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(expected))
+		_, _ = w.Write([]byte(expected))
 	}))
 	defer server.Close()
 
@@ -84,7 +84,7 @@ func TestLoadSystemPrompt_LargeResponseTruncated(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(largeContent))
+		_, _ = w.Write([]byte(largeContent))
 	}))
 	defer server.Close()
 
@@ -100,7 +100,7 @@ func TestLoadSystemPrompt_LargeResponseTruncated(t *testing.T) {
 func TestLoadSystemPrompt_CustomTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("custom timeout test"))
+		_, _ = w.Write([]byte("custom timeout test"))
 	}))
 	defer server.Close()
 

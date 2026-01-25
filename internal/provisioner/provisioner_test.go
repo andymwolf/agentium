@@ -94,6 +94,18 @@ func TestVMConfig(t *testing.T) {
 	if config.Region != "us-central1" {
 		t.Errorf("Region = %q, want %q", config.Region, "us-central1")
 	}
+	if config.MachineType != "e2-medium" {
+		t.Errorf("MachineType = %q, want %q", config.MachineType, "e2-medium")
+	}
+	if !config.UseSpot {
+		t.Error("UseSpot = false, want true")
+	}
+	if config.DiskSizeGB != 50 {
+		t.Errorf("DiskSizeGB = %d, want 50", config.DiskSizeGB)
+	}
+	if config.ControllerImage != "ghcr.io/test/controller:latest" {
+		t.Errorf("ControllerImage = %q, want %q", config.ControllerImage, "ghcr.io/test/controller:latest")
+	}
 	if config.Session.ID != "test-session" {
 		t.Errorf("Session.ID = %q, want %q", config.Session.ID, "test-session")
 	}
@@ -128,11 +140,35 @@ func TestSessionStatus(t *testing.T) {
 	if status.State != "running" {
 		t.Errorf("State = %q, want %q", status.State, "running")
 	}
+	if status.InstanceID != "instance-123" {
+		t.Errorf("InstanceID = %q, want %q", status.InstanceID, "instance-123")
+	}
+	if status.PublicIP != "35.192.0.1" {
+		t.Errorf("PublicIP = %q, want %q", status.PublicIP, "35.192.0.1")
+	}
+	if status.Zone != "us-central1-a" {
+		t.Errorf("Zone = %q, want %q", status.Zone, "us-central1-a")
+	}
+	if status.StartTime.After(now) {
+		t.Error("StartTime should be before now")
+	}
 	if !status.EndTime.IsZero() {
 		t.Error("EndTime should be zero for running session")
 	}
+	if status.CurrentIteration != 5 {
+		t.Errorf("CurrentIteration = %d, want 5", status.CurrentIteration)
+	}
+	if status.MaxIterations != 30 {
+		t.Errorf("MaxIterations = %d, want 30", status.MaxIterations)
+	}
 	if len(status.CompletedTasks) != 2 {
 		t.Errorf("len(CompletedTasks) = %d, want 2", len(status.CompletedTasks))
+	}
+	if len(status.PendingTasks) != 1 {
+		t.Errorf("len(PendingTasks) = %d, want 1", len(status.PendingTasks))
+	}
+	if status.LastError != "" {
+		t.Errorf("LastError = %q, want empty", status.LastError)
 	}
 }
 

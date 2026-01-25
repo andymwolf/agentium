@@ -166,9 +166,9 @@ func TestUnknownPhases_HasUnknown(t *testing.T) {
 	r := NewRouter(&PhaseRouting{
 		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
 		Overrides: map[string]ModelConfig{
-			"IMPLMENT": {Model: "sonnet"},  // typo
+			"IMPLMENT": {Model: "sonnet"}, // typo
 			"TEST":     {Model: "haiku"},
-			"DEPLOY":   {Model: "opus"},    // not a valid phase
+			"DEPLOY":   {Model: "opus"}, // not a valid phase
 		},
 	})
 

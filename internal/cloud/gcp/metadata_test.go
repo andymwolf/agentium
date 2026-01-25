@@ -261,4 +261,3 @@ func TestComputeMetadataUpdater_Close(t *testing.T) {
 		t.Errorf("Close() should return nil, got: %v", err)
 	}
 }
-
