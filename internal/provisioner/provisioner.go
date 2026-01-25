@@ -63,6 +63,7 @@ type SessionConfig struct {
 	CodexAuth     CodexAuthConfig       `json:"codex_auth,omitempty"`
 	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
+	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
 }
 
 // SubAgentConfig specifies agent overrides for a delegated sub-task type.
@@ -77,6 +78,20 @@ type ProvDelegationConfig struct {
 	Enabled   bool                       `json:"enabled"`
 	Strategy  string                     `json:"strategy"`
 	SubAgents map[string]SubAgentConfig  `json:"sub_agents,omitempty"`
+}
+
+// ProvPhaseLoopConfig contains phase loop configuration for provisioned sessions.
+type ProvPhaseLoopConfig struct {
+	Enabled                 bool   `json:"enabled"`
+	ReviewEnabled           bool   `json:"review_enabled,omitempty"`
+	ReviewMode              string `json:"review_mode,omitempty"` // "always", "auto", "never", ""
+	PlanMaxIterations       int    `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations  int    `json:"implement_max_iterations,omitempty"`
+	TestMaxIterations       int    `json:"test_max_iterations,omitempty"`
+	ReviewMaxIterations     int    `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations       int    `json:"docs_max_iterations,omitempty"`
+	EvalContextBudget       int    `json:"eval_context_budget,omitempty"`
+	EvalNoSignalLimit       int    `json:"eval_no_signal_limit,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration
