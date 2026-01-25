@@ -84,6 +84,15 @@ Agents run with `--dangerously-skip-permissions` (Claude Code's headless mode) o
 - **No lateral movement** — VMs have no access to other infrastructure
 - **Branch protection enforced** — Agents cannot commit directly to main/master
 
+### Security Enhancements (v0.2.0)
+- **Credential Scrubbing** — All logs are automatically scrubbed of sensitive patterns (API keys, tokens, passwords)
+- **Secret Management** — Secrets stored in cloud provider secret managers, never in code
+- **Least Privilege IAM** — VMs run with minimal permissions: read secrets, write logs, self-delete
+- **Secure Auth Files** — Authentication files mounted with restrictive permissions (0600)
+- **Network Restrictions** — Documented approach for limiting egress to required endpoints only
+
+For detailed security information, see [SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md).
+
 ### Disclaimer
 This application was entirely vibe-coded with Claude Code (with some Codex review). A number of issues have been dogfooded through Agentium itself, and that is the intended long-term maintenance approach. Evals have been difficult without the full logging infrastructure in place, so expect rough edges in the current state.
 

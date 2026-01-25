@@ -25,6 +25,7 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
+	"github.com/andywolf/agentium/internal/security"
 	"github.com/andywolf/agentium/internal/skills"
 )
 
@@ -218,6 +219,7 @@ type Controller struct {
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
 	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater    // Instance metadata updater (nil if unavailable)
+	scrubber               *security.Scrubber     // Credential scrubber for logs
 
 	// Shutdown management
 	shutdownHooks []ShutdownHook
@@ -291,6 +293,7 @@ func New(config SessionConfig) (*Controller, error) {
 		cloudLogger:     cloudLogger,
 		secretManager:   secretManager,
 		metadataUpdater: metadataUpdater,
+		scrubber:        security.NewScrubber(),
 		shutdownCh:      make(chan struct{}),
 	}
 
@@ -362,6 +365,10 @@ func New(config SessionConfig) (*Controller, error) {
 // logInfo logs at INFO level to both local logger and cloud logger
 func (c *Controller) logInfo(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
+	// Scrub sensitive information before logging
+	if c.scrubber != nil {
+		msg = c.scrubber.Scrub(msg)
+	}
 	c.logger.Printf("%s", msg)
 	if c.cloudLogger != nil {
 		c.cloudLogger.Info(msg)
@@ -371,6 +378,10 @@ func (c *Controller) logInfo(format string, args ...interface{}) {
 // logWarning logs at WARNING level to both local logger and cloud logger
 func (c *Controller) logWarning(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
+	// Scrub sensitive information before logging
+	if c.scrubber != nil {
+		msg = c.scrubber.Scrub(msg)
+	}
 	c.logger.Printf("Warning: %s", msg)
 	if c.cloudLogger != nil {
 		c.cloudLogger.Warning(msg)
@@ -380,6 +391,10 @@ func (c *Controller) logWarning(format string, args ...interface{}) {
 // logError logs at ERROR level to both local logger and cloud logger
 func (c *Controller) logError(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
+	// Scrub sensitive information before logging
+	if c.scrubber != nil {
+		msg = c.scrubber.Scrub(msg)
+	}
 	c.logger.Printf("Error: %s", msg)
 	if c.cloudLogger != nil {
 		c.cloudLogger.Error(msg)
