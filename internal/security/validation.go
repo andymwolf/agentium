@@ -62,19 +62,19 @@ func (v *CommandValidator) ValidateCommand(cmd string, args []string) error {
 func (v *CommandValidator) validateArgument(arg string) error {
 	// Check for shell metacharacters that could lead to injection
 	dangerous := []string{
-		"$(",  // Command substitution
-		"${",  // Variable expansion
-		"`",   // Command substitution
-		"&&",  // Command chaining
-		"||",  // Command chaining
-		";",   // Command separator
-		"|",   // Pipe (sometimes ok, but flag for review)
-		">",   // Redirect
-		"<",   // Redirect
-		">>",  // Append redirect
-		"&",   // Background execution
-		"\n",  // Newline
-		"\r",  // Carriage return
+		"$(", // Command substitution
+		"${", // Variable expansion
+		"`",  // Command substitution
+		"&&", // Command chaining
+		"||", // Command chaining
+		";",  // Command separator
+		"|",  // Pipe (sometimes ok, but flag for review)
+		">",  // Redirect
+		"<",  // Redirect
+		">>", // Append redirect
+		"&",  // Background execution
+		"\n", // Newline
+		"\r", // Carriage return
 	}
 
 	for _, pattern := range dangerous {
