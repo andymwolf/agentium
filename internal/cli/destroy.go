@@ -42,7 +42,11 @@ func destroySession(cmd *cobra.Command, args []string) error {
 		fmt.Print("Are you sure? [y/N]: ")
 
 		var confirm string
-		fmt.Scanln(&confirm)
+		if _, err := fmt.Scanln(&confirm); err != nil {
+			// Treat scan errors (e.g., EOF) as cancellation
+			fmt.Println("Cancelled.")
+			return nil
+		}
 		if confirm != "y" && confirm != "Y" {
 			fmt.Println("Cancelled.")
 			return nil
