@@ -154,7 +154,6 @@ func TestScrubber_AddPattern(t *testing.T) {
 	scrubber.AddPattern(customPattern)
 
 	input := "Found custom_token_abcdef1234567890 in config"
-	expected := "cust***REDACTED***"
 
 	result := scrubber.Scrub(input)
 	if !strings.Contains(result, "***REDACTED***") {
