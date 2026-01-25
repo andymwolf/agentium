@@ -814,13 +814,13 @@ func TestDetermineActivePhase_Routing(t *testing.T) {
 		activeTask:     "42",
 		activeTaskType: "issue",
 		taskStates: map[string]*TaskState{
-			"issue:42": {ID: "42", Type: "issue", Phase: PhaseTest},
+			"issue:42": {ID: "42", Type: "issue", Phase: PhaseImplement},
 		},
 	}
 
 	phase := c.determineActivePhase()
-	if phase != "TEST" {
-		t.Errorf("determineActivePhase() = %q, want %q", phase, "TEST")
+	if phase != "IMPLEMENT" {
+		t.Errorf("determineActivePhase() = %q, want %q", phase, "IMPLEMENT")
 	}
 }
 

@@ -2,195 +2,111 @@ package controller
 
 import "testing"
 
-func TestParseEvalVerdict(t *testing.T) {
+func TestParseJudgeVerdict(t *testing.T) {
 	tests := []struct {
 		name         string
 		output       string
-		wantVerdict  EvalVerdict
+		wantVerdict  JudgeVerdict
 		wantFeedback string
+		wantSignal   bool
 	}{
 		{
 			name:         "ADVANCE verdict",
 			output:       "Some analysis...\nAGENTIUM_EVAL: ADVANCE\nDone.",
 			wantVerdict:  VerdictAdvance,
 			wantFeedback: "",
+			wantSignal:   true,
 		},
 		{
 			name:         "ITERATE with feedback",
 			output:       "Analysis...\nAGENTIUM_EVAL: ITERATE Tests failed in auth/handler_test.go\nDone.",
 			wantVerdict:  VerdictIterate,
 			wantFeedback: "Tests failed in auth/handler_test.go",
+			wantSignal:   true,
 		},
 		{
 			name:         "BLOCKED with reason",
 			output:       "AGENTIUM_EVAL: BLOCKED Need API credentials for integration test",
 			wantVerdict:  VerdictBlocked,
 			wantFeedback: "Need API credentials for integration test",
+			wantSignal:   true,
 		},
 		{
-			name:         "no signal defaults to ADVANCE",
+			name:         "no signal defaults to ITERATE (fail-closed)",
 			output:       "Some output without any eval signal",
-			wantVerdict:  VerdictAdvance,
+			wantVerdict:  VerdictIterate,
 			wantFeedback: "",
+			wantSignal:   false,
 		},
 		{
-			name:         "empty output defaults to ADVANCE",
+			name:         "empty output defaults to ITERATE",
 			output:       "",
-			wantVerdict:  VerdictAdvance,
+			wantVerdict:  VerdictIterate,
 			wantFeedback: "",
+			wantSignal:   false,
 		},
 		{
 			name:         "ADVANCE with trailing whitespace",
 			output:       "AGENTIUM_EVAL: ADVANCE   ",
 			wantVerdict:  VerdictAdvance,
 			wantFeedback: "",
+			wantSignal:   true,
 		},
 		{
 			name:         "ITERATE with multi-word feedback",
 			output:       "AGENTIUM_EVAL: ITERATE fix the nil pointer in TestLogin and add error handling",
 			wantVerdict:  VerdictIterate,
 			wantFeedback: "fix the nil pointer in TestLogin and add error handling",
+			wantSignal:   true,
 		},
 		{
 			name:         "malformed - wrong prefix",
 			output:       "AGENTIUM_STATUS: ADVANCE",
-			wantVerdict:  VerdictAdvance,
+			wantVerdict:  VerdictIterate,
 			wantFeedback: "",
+			wantSignal:   false,
 		},
 		{
 			name:         "malformed - invalid verdict",
 			output:       "AGENTIUM_EVAL: UNKNOWN something",
-			wantVerdict:  VerdictAdvance,
+			wantVerdict:  VerdictIterate,
 			wantFeedback: "",
+			wantSignal:   false,
 		},
 		{
 			name:         "multiple verdicts - first wins",
 			output:       "AGENTIUM_EVAL: ITERATE fix tests\nAGENTIUM_EVAL: ADVANCE",
 			wantVerdict:  VerdictIterate,
 			wantFeedback: "fix tests",
+			wantSignal:   true,
 		},
 		{
 			name:         "verdict not at start of line is ignored",
 			output:       "prefix AGENTIUM_EVAL: ADVANCE\nAGENTIUM_EVAL: BLOCKED real issue",
 			wantVerdict:  VerdictBlocked,
 			wantFeedback: "real issue",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseEvalVerdict(tt.output)
-			if result.Verdict != tt.wantVerdict {
-				t.Errorf("Verdict = %q, want %q", result.Verdict, tt.wantVerdict)
-			}
-			if result.Feedback != tt.wantFeedback {
-				t.Errorf("Feedback = %q, want %q", result.Feedback, tt.wantFeedback)
-			}
-		})
-	}
-}
-
-func TestBuildEvalPrompt(t *testing.T) {
-	c := &Controller{
-		config:     SessionConfig{Repository: "github.com/org/repo"},
-		activeTask: "42",
-	}
-
-	prompt := c.buildEvalPrompt(PhaseImplement, "some output here")
-
-	contains := []string{
-		"IMPLEMENT",
-		"github.com/org/repo",
-		"#42",
-		"some output here",
-		"AGENTIUM_EVAL:",
-	}
-	for _, substr := range contains {
-		if !containsString(prompt, substr) {
-			t.Errorf("buildEvalPrompt() missing %q", substr)
-		}
-	}
-}
-
-func TestBuildEvalPrompt_TruncatesLongOutput(t *testing.T) {
-	c := &Controller{
-		config:     SessionConfig{Repository: "github.com/org/repo"},
-		activeTask: "1",
-	}
-
-	// Create output longer than default 8000 chars
-	longOutput := ""
-	for i := 0; i < 1000; i++ {
-		longOutput += "0123456789"
-	}
-
-	prompt := c.buildEvalPrompt(PhaseTest, longOutput)
-	if !containsString(prompt, "output truncated") {
-		t.Error("expected truncation marker in prompt for long output")
-	}
-}
-
-func TestEvalContextBudget_Default(t *testing.T) {
-	c := &Controller{config: SessionConfig{}}
-	if got := c.evalContextBudget(); got != defaultEvalContextBudget {
-		t.Errorf("evalContextBudget() = %d, want %d", got, defaultEvalContextBudget)
-	}
-}
-
-func TestEvalContextBudget_Custom(t *testing.T) {
-	c := &Controller{
-		config: SessionConfig{
-			PhaseLoop: &PhaseLoopConfig{
-				Enabled:           true,
-				EvalContextBudget: 20000,
-			},
-		},
-	}
-	if got := c.evalContextBudget(); got != 20000 {
-		t.Errorf("evalContextBudget() = %d, want 20000", got)
-	}
-}
-
-func TestParseJudgeVerdict_FailClosed(t *testing.T) {
-	tests := []struct {
-		name         string
-		output       string
-		wantVerdict  EvalVerdict
-		wantSignal   bool
-		wantFeedback string
-	}{
-		{
-			name:        "no signal defaults to ITERATE (fail-closed)",
-			output:      "Some output without any eval signal",
-			wantVerdict: VerdictIterate,
-			wantSignal:  false,
-		},
-		{
-			name:        "empty output defaults to ITERATE",
-			output:      "",
-			wantVerdict: VerdictIterate,
-			wantSignal:  false,
-		},
-		{
-			name:         "ADVANCE with signal",
-			output:       "AGENTIUM_EVAL: ADVANCE",
-			wantVerdict:  VerdictAdvance,
 			wantSignal:   true,
+		},
+		{
+			name:         "SIMPLE verdict",
+			output:       "AGENTIUM_EVAL: SIMPLE",
+			wantVerdict:  VerdictSimple,
 			wantFeedback: "",
+			wantSignal:   true,
 		},
 		{
-			name:         "ITERATE with feedback",
-			output:       "AGENTIUM_EVAL: ITERATE fix compilation errors",
-			wantVerdict:  VerdictIterate,
+			name:         "COMPLEX verdict",
+			output:       "AGENTIUM_EVAL: COMPLEX multiple files involved",
+			wantVerdict:  VerdictComplex,
+			wantFeedback: "multiple files involved",
 			wantSignal:   true,
-			wantFeedback: "fix compilation errors",
 		},
 		{
-			name:         "BLOCKED with reason",
-			output:       "AGENTIUM_EVAL: BLOCKED needs human review",
-			wantVerdict:  VerdictBlocked,
+			name:         "REGRESS verdict",
+			output:       "AGENTIUM_EVAL: REGRESS fundamental design issue",
+			wantVerdict:  VerdictRegress,
+			wantFeedback: "fundamental design issue",
 			wantSignal:   true,
-			wantFeedback: "needs human review",
 		},
 	}
 
@@ -200,26 +116,34 @@ func TestParseJudgeVerdict_FailClosed(t *testing.T) {
 			if result.Verdict != tt.wantVerdict {
 				t.Errorf("Verdict = %q, want %q", result.Verdict, tt.wantVerdict)
 			}
-			if result.SignalFound != tt.wantSignal {
-				t.Errorf("SignalFound = %v, want %v", result.SignalFound, tt.wantSignal)
-			}
 			if result.Feedback != tt.wantFeedback {
 				t.Errorf("Feedback = %q, want %q", result.Feedback, tt.wantFeedback)
+			}
+			if result.SignalFound != tt.wantSignal {
+				t.Errorf("SignalFound = %v, want %v", result.SignalFound, tt.wantSignal)
 			}
 		})
 	}
 }
 
-func TestParseEvalVerdict_SignalFound(t *testing.T) {
-	// parseEvalVerdict (legacy) should also set SignalFound
-	result := parseEvalVerdict("AGENTIUM_EVAL: ADVANCE")
-	if !result.SignalFound {
-		t.Error("parseEvalVerdict with signal should set SignalFound=true")
+func TestJudgeContextBudget_Default(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	if got := c.judgeContextBudget(); got != defaultJudgeContextBudget {
+		t.Errorf("judgeContextBudget() = %d, want %d", got, defaultJudgeContextBudget)
 	}
+}
 
-	result = parseEvalVerdict("no signal here")
-	if result.SignalFound {
-		t.Error("parseEvalVerdict without signal should set SignalFound=false")
+func TestJudgeContextBudget_Custom(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				Enabled:           true,
+				EvalContextBudget: 20000,
+			},
+		},
+	}
+	if got := c.judgeContextBudget(); got != 20000 {
+		t.Errorf("judgeContextBudget() = %d, want 20000", got)
 	}
 }
 
@@ -259,6 +183,11 @@ func TestBuildJudgePrompt(t *testing.T) {
 	if containsString(prompt, "FINAL iteration") {
 		t.Error("buildJudgePrompt() should not mention final iteration when iteration < max")
 	}
+
+	// Should NOT mention REGRESS for non-REVIEW phase
+	if containsString(prompt, "REGRESS") {
+		t.Error("buildJudgePrompt() should not mention REGRESS for IMPLEMENT phase")
+	}
 }
 
 func TestBuildJudgePrompt_FinalIteration(t *testing.T) {
@@ -292,7 +221,7 @@ func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
 	}
 
 	params := judgeRunParams{
-		CompletedPhase: PhaseTest,
+		CompletedPhase: PhaseImplement,
 		PhaseOutput:    "test output",
 		ReviewFeedback: "",
 		Iteration:      1,
@@ -303,6 +232,27 @@ func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
 
 	if !containsString(prompt, "No feedback provided") {
 		t.Error("buildJudgePrompt() should indicate no feedback when ReviewFeedback is empty")
+	}
+}
+
+func TestBuildJudgePrompt_ReviewPhaseShowsRegress(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "1",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase: PhaseReview,
+		PhaseOutput:    "review output",
+		ReviewFeedback: "some feedback",
+		Iteration:      1,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if !containsString(prompt, "REGRESS") {
+		t.Error("buildJudgePrompt() should mention REGRESS for REVIEW phase")
 	}
 }
 
@@ -420,7 +370,7 @@ func TestBuildJudgePrompt_NoAssessComplexity(t *testing.T) {
 	}
 }
 
-func TestBuildEvalPrompt_CustomBudget(t *testing.T) {
+func TestBuildJudgePrompt_TruncatesLongOutput(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			Repository: "github.com/org/repo",
@@ -435,7 +385,14 @@ func TestBuildEvalPrompt_CustomBudget(t *testing.T) {
 		longOutput += "0123456789"
 	}
 
-	prompt := c.buildEvalPrompt(PhaseImplement, longOutput)
+	params := judgeRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    longOutput,
+		Iteration:      1,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildJudgePrompt(params)
 	if !containsString(prompt, "output truncated") {
 		t.Error("expected truncation marker with custom budget")
 	}

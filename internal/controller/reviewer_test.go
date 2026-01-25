@@ -65,8 +65,8 @@ func TestBuildReviewPrompt_NoMemoryInjected(t *testing.T) {
 	}
 
 	params := reviewRunParams{
-		CompletedPhase: PhaseTest,
-		PhaseOutput:    "tests passed",
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "implementation complete",
 		Iteration:      1,
 		MaxIterations:  3,
 	}

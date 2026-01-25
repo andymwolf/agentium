@@ -27,15 +27,15 @@ func TestConfigForPhase_UnconfiguredPhases(t *testing.T) {
 		t.Errorf("ConfigForPhase(BLOCKED) = %+v, want nil", cfg)
 	}
 
-	// PhaseTest maps to SubTaskTest, but not configured in SubAgents
-	if cfg := orch.ConfigForPhase(PhaseTest); cfg != nil {
-		t.Errorf("ConfigForPhase(TEST) = %+v, want nil (not in SubAgents)", cfg)
+	// PhaseReview maps to SubTaskReview, but not configured in SubAgents
+	if cfg := orch.ConfigForPhase(PhaseReview); cfg != nil {
+		t.Errorf("ConfigForPhase(REVIEW) = %+v, want nil (not in SubAgents)", cfg)
 	}
 }
 
 func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 	implModel := &routing.ModelConfig{Adapter: "claude-code", Model: "claude-opus-4-20250514"}
-	testModel := &routing.ModelConfig{Model: "claude-sonnet-4-20250514"}
+	docsModel := &routing.ModelConfig{Model: "claude-sonnet-4-20250514"}
 
 	orch := &SubTaskOrchestrator{
 		config: DelegationConfig{
@@ -43,7 +43,7 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
 				SubTaskImplement:  {Agent: "claude-code", Model: implModel, Skills: []string{"implement"}},
-				SubTaskTest:       {Agent: "aider", Model: testModel},
+				SubTaskDocs:       {Agent: "aider", Model: docsModel},
 				SubTaskReview:     {Agent: "claude-code", Skills: []string{"pr_review"}},
 				SubTaskPRCreation: {Agent: "claude-code", Skills: []string{"pr_create"}},
 				SubTaskPlan:       {Agent: "claude-code", Skills: []string{"planning"}},
@@ -58,7 +58,7 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 		wantModel string
 	}{
 		{PhaseImplement, "claude-code", "claude-opus-4-20250514"},
-		{PhaseTest, "aider", "claude-sonnet-4-20250514"},
+		{PhaseDocs, "aider", "claude-sonnet-4-20250514"},
 		{PhaseReview, "claude-code", ""},     // review type
 		{PhasePRCreation, "claude-code", ""}, // pr_creation type
 		{PhaseAnalyze, "claude-code", ""},    // plan type
@@ -84,14 +84,14 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 }
 
 func TestConfigForPhase_PartialDelegation(t *testing.T) {
-	// Only configure implement and test, leaving review/plan unconfigured
+	// Only configure implement and docs, leaving review/plan unconfigured
 	orch := &SubTaskOrchestrator{
 		config: DelegationConfig{
 			Enabled:  true,
 			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
 				SubTaskImplement: {Agent: "claude-code"},
-				SubTaskTest:      {Agent: "aider"},
+				SubTaskDocs:      {Agent: "aider"},
 			},
 		},
 	}
@@ -100,8 +100,8 @@ func TestConfigForPhase_PartialDelegation(t *testing.T) {
 	if cfg := orch.ConfigForPhase(PhaseImplement); cfg == nil {
 		t.Error("ConfigForPhase(IMPLEMENT) should return config")
 	}
-	if cfg := orch.ConfigForPhase(PhaseTest); cfg == nil {
-		t.Error("ConfigForPhase(TEST) should return config")
+	if cfg := orch.ConfigForPhase(PhaseDocs); cfg == nil {
+		t.Error("ConfigForPhase(DOCS) should return config")
 	}
 
 	// Unconfigured phases should return nil

@@ -37,7 +37,6 @@ skills:
     file: test.md
     priority: 60
     phases:
-      - TEST
       - IMPLEMENT
 
   - name: pr_creation
@@ -65,29 +64,19 @@ skills:
       - ANALYZE
       - PUSH
 
-  - name: evaluate
-    file: evaluate.md
+  - name: plan_reviewer
+    file: plan_reviewer.md
     priority: 90
-    phases:
-      - EVALUATE
-
-  - name: evaluate_plan
-    file: evaluate_plan.md
-    priority: 91
     phases:
       - PLAN_REVIEW
 
-  - name: evaluate_implement
-    file: evaluate_implement.md
-    priority: 92
+  - name: code_reviewer
+    file: code_reviewer.md
+    priority: 91
     phases:
       - IMPLEMENT_REVIEW
-
-  - name: evaluate_test_phase
-    file: evaluate_test_phase.md
-    priority: 93
-    phases:
-      - TEST_REVIEW
+      - REVIEW_REVIEW
+      - DOCS_REVIEW
 
   - name: judge
     file: judge.md
@@ -96,6 +85,5 @@ skills:
       - JUDGE
       - PLAN_JUDGE
       - IMPLEMENT_JUDGE
-      - TEST_JUDGE
       - REVIEW_JUDGE
       - DOCS_JUDGE

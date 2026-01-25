@@ -21,11 +21,9 @@ type PhaseRouting struct {
 var ValidPhases = map[string]bool{
 	"PLAN":          true,
 	"IMPLEMENT":     true,
-	"TEST":          true,
 	"PR_CREATION":   true,
 	"REVIEW":        true,
 	"DOCS":          true,
-	"EVALUATE":      true,
 	"COMPLETE":      true,
 	"BLOCKED":       true,
 	"NOTHING_TO_DO": true,
@@ -34,14 +32,12 @@ var ValidPhases = map[string]bool{
 	// Compound phase keys for reviewer
 	"PLAN_REVIEW":      true,
 	"IMPLEMENT_REVIEW": true,
-	"TEST_REVIEW":      true,
 	"REVIEW_REVIEW":    true,
 	"DOCS_REVIEW":      true,
 	// Compound phase keys for judge
 	"JUDGE":           true,
 	"PLAN_JUDGE":      true,
 	"IMPLEMENT_JUDGE": true,
-	"TEST_JUDGE":      true,
 	"REVIEW_JUDGE":    true,
 	"DOCS_JUDGE":      true,
 }
