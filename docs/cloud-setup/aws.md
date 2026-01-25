@@ -111,16 +111,9 @@ If you'd like to contribute to AWS support, see the provisioner interface in `in
 - `internal/provisioner/gcp.go` - Reference implementation
 - `internal/cloud/` - Cloud provider client abstractions
 
-## Current Workaround
+## Current Status
 
-Until AWS support is implemented, you can use the GCP provider or run Agentium locally using the bootstrap system:
-
-```bash
-cd bootstrap
-./run.sh --repo org/repo --issue 42 \
-  --app-id 123456 --installation-id 789012 \
-  --private-key-secret github-app-key
-```
+Until AWS support is implemented, use GCP as the cloud provider. See [GCP Setup](gcp.md) for configuration instructions.
 
 ## Next Steps
 

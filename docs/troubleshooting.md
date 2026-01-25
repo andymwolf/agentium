@@ -154,14 +154,7 @@ gcloud compute machine-types list --zones=us-central1-a
 
 **Cause:** AWS and Azure providers are not yet available.
 
-**Fix:** Use GCP as the cloud provider, or use the bootstrap system:
-
-```bash
-cd bootstrap
-./run.sh --repo org/repo --issue 42 \
-  --app-id 123456 --installation-id 789012 \
-  --private-key-secret github-app-key
-```
+**Fix:** Currently only GCP is supported. AWS and Azure providers are planned for a future release.
 
 ## GitHub Authentication Issues
 

@@ -21,8 +21,7 @@ agentium/
 │   ├── provisioner/    # Cloud VM provisioning
 │   └── cloud/          # Cloud provider clients (aws, gcp, azure)
 ├── terraform/modules/  # Terraform modules for VM/IAM/networking
-├── docker/             # Agent runtime container Dockerfiles
-└── bootstrap/          # Phase 0 bootstrap system (GCP-only, script-based)
+└── docker/             # Agent runtime container Dockerfiles
 ```
 
 ## Core Concepts
@@ -57,9 +56,9 @@ go build -o controller ./cmd/controller
 
 ## Current Implementation Status
 
-- **GCP**: Fully functional (provisioner, terraform, bootstrap)
+- **GCP**: Fully functional (provisioner, terraform)
 - **AWS/Azure**: Planned, not yet implemented
-- **GitHub App auth**: Implemented in bootstrap, stubbed in Go controller
+- **GitHub App auth**: Implemented in Go controller
 - **Cloud Logging**: Not yet implemented
 
 ## Architecture Reference
