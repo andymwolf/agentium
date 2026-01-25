@@ -59,6 +59,7 @@ Every phase iteration and evaluator verdict is posted as a comment on the GitHub
 - **Cost Optimized** — Uses spot/preemptible instances by default
 - **Memory System** — Persistent memory carries context (key facts, decisions, evaluator feedback) between phase iterations
 - **Model Routing** — Assign different models to different phases (e.g., Opus for planning, Haiku for implementation)
+- **Language Runtime Auto-Detection** — Automatically installs Go, Rust, Java, Ruby, or .NET runtimes based on project type
 
 ## Safety and Security
 

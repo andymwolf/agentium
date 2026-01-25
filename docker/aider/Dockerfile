@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     jq \
     build-essential \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
@@ -28,8 +29,16 @@ RUN pip install --no-cache-dir aider-chat
 RUN getent passwd 1000 > /dev/null 2>&1 && userdel -r $(getent passwd 1000 | cut -d: -f1) || true && \
     useradd -m -u 1000 agentium
 
+# Allow agentium user to run sudo for package installation
+RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 # Create workspace
 RUN mkdir -p /workspace && chown agentium:agentium /workspace
+
+# Copy runtime installation scripts
+COPY docker/scripts/install-runtime.sh /runtime-scripts/install-runtime.sh
+COPY docker/scripts/agent-wrapper.sh /runtime-scripts/agent-wrapper.sh
+RUN chmod +x /runtime-scripts/*.sh
 
 # Configure git for the user
 RUN git config --global user.email "agentium@example.com" && \
@@ -42,5 +51,5 @@ WORKDIR /workspace
 # Switch to non-root user
 USER agentium
 
-# Default entrypoint
-ENTRYPOINT ["aider"]
+# Use wrapper script as entrypoint
+ENTRYPOINT ["/runtime-scripts/agent-wrapper.sh", "aider"]
