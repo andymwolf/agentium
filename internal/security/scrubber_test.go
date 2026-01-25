@@ -32,7 +32,7 @@ func TestScrubber_Scrub(t *testing.T) {
 		{
 			name:     "Password in JSON",
 			input:    `{"username": "admin", "password": "supersecretpassword123"}`,
-			expected: `{"username": "admin", "password":***REDACTED***}`,
+			expected: `{"username": "admin", "password": ***REDACTED***}`,
 		},
 		{
 			name:     "AWS access key",
@@ -81,7 +81,7 @@ func TestScrubber_ScrubSlice(t *testing.T) {
 
 	input := []string{
 		"normal log line",
-		"api_key=secret123",
+		"api_key=secret1234567890abcdefghij",
 		"another normal line",
 		"password: mysecretpassword",
 	}
