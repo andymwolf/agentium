@@ -204,7 +204,7 @@ type Controller struct {
 	dockerAuthed           bool // Tracks if docker login to GHCR was done
 	taskStates             map[string]*TaskState
 	logger                 *log.Logger
-	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
+	cloudLogger            *gcp.SecureCloudLogger // Structured cloud logging with sanitization (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
 	systemPrompt           string                 // Loaded SYSTEM.md content
 	projectPrompt          string                 // Loaded .agentium/AGENT.md content (may be empty)
@@ -258,16 +258,16 @@ func New(config SessionConfig) (*Controller, error) {
 		workDir = "/workspace"
 	}
 
-	// Initialize Cloud Logging (non-fatal if unavailable)
-	var cloudLogger *gcp.CloudLogger
-	cloudLoggerInstance, err := gcp.NewCloudLogger(context.Background(), gcp.CloudLoggerConfig{
+	// Initialize Secure Cloud Logging with automatic sanitization (non-fatal if unavailable)
+	var cloudLogger *gcp.SecureCloudLogger
+	secureLoggerInstance, err := gcp.NewSecureCloudLogger(context.Background(), gcp.CloudLoggerConfig{
 		SessionID:  config.ID,
 		Repository: config.Repository,
 	})
 	if err != nil {
 		log.Printf("[controller] Warning: Cloud Logging unavailable, using local logs only: %v", err)
 	} else {
-		cloudLogger = cloudLoggerInstance
+		cloudLogger = secureLoggerInstance
 	}
 
 	// Initialize metadata updater (only on GCP instances)
