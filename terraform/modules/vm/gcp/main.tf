@@ -118,10 +118,10 @@ resource "google_project_iam_member" "logging_writer" {
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 
-# Grant compute instance admin (for self-deletion)
-resource "google_project_iam_member" "compute_admin" {
+# Grant minimal compute permissions for self-deletion
+resource "google_project_iam_member" "compute_self_delete" {
   project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
+  role    = google_project_iam_custom_role.agentium_vm_self_delete.id
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 

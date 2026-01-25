@@ -39,11 +39,17 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		}
 	}
 
-	// Build Docker arguments
+	// Build Docker arguments with security hardening
 	args := []string{
 		"run", "--rm",
 		"-v", fmt.Sprintf("%s:/workspace", c.workDir),
 		"-w", "/workspace",
+		"--security-opt=no-new-privileges",
+		"--cap-drop=ALL",
+		"--read-only",
+		"--tmpfs", "/tmp",
+		"--memory=4g",
+		"--cpus=2",
 	}
 
 	for k, v := range params.Env {

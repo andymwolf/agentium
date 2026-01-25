@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,6 +51,23 @@ const (
 
 // Version is the controller version, set at build time via ldflags.
 var Version = "dev"
+
+// sanitizeForLogging removes sensitive data from strings before logging
+func sanitizeForLogging(s string) string {
+	// Remove GitHub tokens from URLs
+	tokenPattern := regexp.MustCompile(`https://x-access-token:[^@]+@`)
+	s = tokenPattern.ReplaceAllString(s, "https://[REDACTED]@")
+
+	// Remove potential base64 encoded credentials (long base64 strings)
+	base64Pattern := regexp.MustCompile(`[A-Za-z0-9+/]{100,}={0,2}`)
+	s = base64Pattern.ReplaceAllString(s, "[REDACTED-BASE64]")
+
+	// Remove JWT tokens
+	jwtPattern := regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
+	s = jwtPattern.ReplaceAllString(s, "[REDACTED-JWT]")
+
+	return s
+}
 
 // TaskPhase represents the current phase of a task in its lifecycle
 type TaskPhase string
@@ -617,7 +635,7 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 		if err == nil {
 			return secret, nil
 		}
-		c.logger.Printf("Warning: Secret Manager client failed: %v, falling back to gcloud CLI", err)
+		c.logger.Printf("Warning: Secret Manager client failed: %v, falling back to gcloud CLI", sanitizeForLogging(err.Error()))
 	}
 
 	// Fallback to gcloud CLI
@@ -655,7 +673,7 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 		return "", fmt.Errorf("failed to exchange token: %w", err)
 	}
 
-	c.logger.Printf("Generated installation token (expires at %s)", token.ExpiresAt.Format(time.RFC3339))
+	c.logger.Printf("Successfully generated GitHub installation token")
 	return token.Token, nil
 }
 
@@ -736,9 +754,12 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 
 	// Clone with token authentication
 	cloneURL := repo
+	sanitizedURL := repo // For logging
 	if c.gitHubToken != "" && strings.HasPrefix(repo, "https://") {
 		// Insert token for authentication
 		cloneURL = strings.Replace(repo, "https://", fmt.Sprintf("https://x-access-token:%s@", c.gitHubToken), 1)
+		// Keep sanitized version for logging
+		sanitizedURL = repo
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, c.workDir)

@@ -29,8 +29,8 @@ RUN pip install --no-cache-dir aider-chat
 RUN getent passwd 1000 > /dev/null 2>&1 && userdel -r $(getent passwd 1000 | cut -d: -f1) || true && \
     useradd -m -u 1000 agentium
 
-# Allow agentium user to run sudo for package installation
-RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+# Note: sudo access removed for security. Runtime installations should be done
+# via pre-built images or init containers
 
 # Create workspace
 RUN mkdir -p /workspace && chown agentium:agentium /workspace

@@ -30,8 +30,8 @@ RUN npm install -g @openai/codex
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
 
-# Allow agentium user to run sudo for package installation
-RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+# Note: sudo access removed for security. Runtime installations should be done
+# via pre-built images or init containers
 
 # Create workspace and Codex config directory
 RUN mkdir -p /workspace && chown agentium:agentium /workspace && \
