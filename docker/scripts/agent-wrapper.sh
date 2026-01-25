@@ -9,5 +9,10 @@ set -e
 # Source updated environment variables
 source ~/.bashrc
 
+# Also source cargo env if it exists (for Rust)
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
 # Execute the original command (the agent)
 exec "$@"
