@@ -114,15 +114,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 		cfg.Claude.AuthMode = authMode
 	}
 
-	// Validate required fields
-	if cfg.Session.Repository == "" {
-		return fmt.Errorf("repository is required (use --repo or set in config)")
-	}
-	if len(cfg.Session.Tasks) == 0 && len(cfg.Session.PRs) == 0 {
-		return fmt.Errorf("at least one issue or PR is required (use --issues or --prs)")
-	}
-	if cfg.Cloud.Provider == "" {
-		return fmt.Errorf("cloud provider is required (use --provider or set in config)")
+	// Validate configuration after applying CLI flags
+	if err := cfg.ValidateForRun(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	// Handle Claude OAuth authentication

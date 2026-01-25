@@ -285,6 +285,53 @@ func TestConfig_ValidateForRun(t *testing.T) {
 			wantErr: true,
 			errMsg:  "GitHub App private key secret path is required",
 		},
+		{
+			name: "oauth auth with aider agent",
+			config: Config{
+				Cloud: CloudConfig{
+					Provider: "gcp",
+					Region:   "us-central1",
+				},
+				Session: SessionConfig{
+					Repository: "github.com/org/repo",
+					Tasks:      []string{"1"},
+					Agent:      "aider",
+				},
+				GitHub: GitHubConfig{
+					AppID:            123456,
+					InstallationID:   789012,
+					PrivateKeySecret: "projects/test/secrets/key",
+				},
+				Claude: ClaudeConfig{
+					AuthMode: "oauth",
+				},
+			},
+			wantErr: true,
+			errMsg:  "oauth auth_mode is only supported with the claude-code agent",
+		},
+		{
+			name: "oauth auth with claude-code agent",
+			config: Config{
+				Cloud: CloudConfig{
+					Provider: "gcp",
+					Region:   "us-central1",
+				},
+				Session: SessionConfig{
+					Repository: "github.com/org/repo",
+					Tasks:      []string{"1"},
+					Agent:      "claude-code",
+				},
+				GitHub: GitHubConfig{
+					AppID:            123456,
+					InstallationID:   789012,
+					PrivateKeySecret: "projects/test/secrets/key",
+				},
+				Claude: ClaudeConfig{
+					AuthMode: "oauth",
+				},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
