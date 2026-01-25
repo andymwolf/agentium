@@ -94,8 +94,7 @@ agentium/
 │   ├── provisioner/    # Cloud provisioners
 │   └── cloud/          # Cloud provider clients
 ├── terraform/modules/  # Terraform modules
-├── docker/             # Dockerfiles
-└── bootstrap/          # Bootstrap scripts (Phase 0)
+└── docker/             # Dockerfiles
 ```
 
 ## Testing

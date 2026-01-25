@@ -55,18 +55,6 @@ Agents never hold production credentials.
 - Hosting, deployment, and operation of applications produced by agents
 - Defined in a separate Application Runtime Platform PRD.
 
-### Bootstrap System (Phase 0)
-
-For users who want to run agent sessions without building the Go CLI, a standalone bootstrap system exists:
-
-- `bootstrap/run.sh` - Local launcher script
-- `bootstrap/main.tf` - GCP Terraform configuration
-- `bootstrap/cloud-init.yaml` - VM initialization
-- `bootstrap/session.sh` - Agent session orchestration
-- `bootstrap/SYSTEM.md` - Agent safety guardrails
-
-This system is GCP-only and represents the MVP implementation.
-
 ---
 
 ## 5. Core Design Principles
@@ -304,7 +292,7 @@ Agents must not:
 - Trigger deployments directly
 - Bypass branch protection rules
 
-**Implementation Status:** Fully implemented in both bootstrap system and Go controller. GitHub App JWT generation (#3), installation token exchange (#4), and controller integration (#5) are complete.
+**Implementation Status:** Fully implemented in the Go controller. GitHub App JWT generation (#3), installation token exchange (#4), and controller integration (#5) are complete.
 
 ---
 
@@ -590,16 +578,6 @@ The system is successful when:
 
 ## 13. Implementation Status
 
-### Phase 0: Bootstrap System (COMPLETE)
-
-A working bootstrap system exists for GCP-only deployments:
-- Local script-based session launching
-- Terraform-based VM provisioning
-- Cloud-init VM setup with all dependencies
-- GitHub App authentication (JWT + installation token)
-- Session lifecycle management
-- Pre-baked GCP machine images for reduced cold start (#52)
-
 ### Phase 1: Go CLI & Controller (COMPLETE)
 
 The Go-based CLI and controller are fully functional for GCP:
@@ -655,7 +633,6 @@ AWS and Azure provisioners are planned but not implemented.
 - Codex CLI agent adapter (#99)
 - GitHub Actions workflow trigger (#98)
 - Installation token refresh (#62)
-- Concurrent bootstrap sessions (#37)
 - Security audit and hardening (#25)
 - CI/CD pipeline (#23)
 - Guided setup wizard (#20)
