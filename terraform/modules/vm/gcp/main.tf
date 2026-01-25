@@ -141,22 +141,26 @@ locals {
   cloud_init = <<-EOF
 #cloud-config
 write_files:
+  # Session config is read by controller (runs as root)
   - path: /etc/agentium/session.json
     permissions: '0600'
     owner: 'root:root'
     content: |
       ${var.session_config}
+  # Auth files use UID 1000 to match the agentium user in agent containers.
+  # The 'agentium' user doesn't exist on the host (Container-Optimized OS),
+  # so we use numeric UID/GID. Files are mounted read-only into containers.
 %{ if var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ~}
   - path: /etc/agentium/claude-auth.json
     permissions: '0600'
-    owner: 'root:root'
+    owner: '1000:1000'
     encoding: b64
     content: ${var.claude_auth_json}
 %{ endif ~}
 %{ if var.codex_auth_json != "" ~}
   - path: /etc/agentium/codex-auth.json
     permissions: '0600'
-    owner: 'root:root'
+    owner: '1000:1000'
     encoding: b64
     content: ${var.codex_auth_json}
 %{ endif ~}

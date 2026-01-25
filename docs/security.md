@@ -34,13 +34,14 @@ Agentium uses GitHub App authentication for repository access:
 For OAuth-authenticated agents:
 
 1. **Local credentials**: OAuth tokens are stored in macOS Keychain locally
-2. **VM credentials**: Tokens are passed via cloud-init with 0600 permissions
+2. **VM credentials**: Tokens are passed via cloud-init with 0600 permissions, owned by UID 1000
 3. **Container access**: Auth files are mounted read-only into agent containers
 4. **Cleanup**: Credentials are cleared from memory during shutdown
 
 ### Credential Protection
 
 - **File permissions**: All credential files use 0600 (owner read/write only)
+- **File ownership**: Auth files owned by UID 1000 (matching container user); session config owned by root
 - **Memory clearing**: Sensitive data is zeroed during graceful shutdown
 - **No disk persistence**: Tokens are never written to logs or persistent storage
 - **URL sanitization**: Tokens are never embedded in URLs to prevent log leakage
