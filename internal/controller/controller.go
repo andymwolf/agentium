@@ -70,20 +70,20 @@ const (
 
 // TaskState tracks the current state of a task being worked on
 type TaskState struct {
-	ID               string
-	Type             string // "issue" or "pr"
-	Phase            TaskPhase
-	TestRetries      int
-	LastStatus       string
-	PRNumber         string // Linked PR number (for issues that create PRs)
-	PhaseIteration   int    // Current iteration within the active phase (phase loop)
-	MaxPhaseIter     int    // Max iterations for current phase (phase loop)
-	LastJudgeVerdict string // Last judge verdict (ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, REGRESS)
+	ID                string
+	Type              string // "issue" or "pr"
+	Phase             TaskPhase
+	TestRetries       int
+	LastStatus        string
+	PRNumber          string // Linked PR number (for issues that create PRs)
+	PhaseIteration    int    // Current iteration within the active phase (phase loop)
+	MaxPhaseIter      int    // Max iterations for current phase (phase loop)
+	LastJudgeVerdict  string // Last judge verdict (ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, REGRESS)
 	LastJudgeFeedback string // Last judge feedback text
-	ReviewDecided    bool   // Whether complexity decision has been made
-	ReviewActive     bool   // Whether review loop is active for this task (auto mode)
-	IsSimple         bool   // Whether task was marked as SIMPLE (skip REVIEW phase)
-	RegressionCount  int    // Number of times we've regressed from REVIEW to PLAN
+	ReviewDecided     bool   // Whether complexity decision has been made
+	ReviewActive      bool   // Whether review loop is active for this task (auto mode)
+	IsSimple          bool   // Whether task was marked as SIMPLE (skip REVIEW phase)
+	RegressionCount   int    // Number of times we've regressed from REVIEW to PLAN
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
