@@ -91,6 +91,9 @@ jobs:
           - name: aider
             context: docker/aider
             file: docker/aider/Dockerfile
+          - name: codex
+            context: docker/codex
+            file: docker/codex/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

@@ -65,7 +65,7 @@ jobs:
 
     strategy:
       matrix:
-        agent: [claudecode, aider]
+        agent: [claudecode, aider, codex]
 
     steps:
       - uses: actions/checkout@v4
