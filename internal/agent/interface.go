@@ -37,6 +37,7 @@ type Session struct {
 	ActiveTask       string            // The single issue number currently being worked on
 	ExistingWork     *ExistingWork     // Prior work detected on GitHub for the active task
 	IterationContext *IterationContext // Phase-aware skill context (nil = legacy mode)
+	Interactive      bool              // When true, omit auto-accept permission flags
 }
 
 // IterationResult represents the outcome of a single agent iteration

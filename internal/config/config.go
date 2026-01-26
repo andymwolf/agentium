@@ -252,3 +252,36 @@ func (c *Config) ValidateForRun() error {
 
 	return nil
 }
+
+// ValidateForLocalRun performs relaxed validation for local interactive mode.
+// It skips GitHub App requirements since authentication uses GITHUB_TOKEN env var.
+func (c *Config) ValidateForLocalRun() error {
+	if c.Session.Repository == "" {
+		return fmt.Errorf("repository is required")
+	}
+
+	if len(c.Session.Tasks) == 0 && len(c.Session.PRs) == 0 {
+		return fmt.Errorf("at least one issue or PR is required")
+	}
+
+	// Validate agent if specified
+	if c.Session.Agent != "" {
+		validAgents := map[string]bool{"claude-code": true, "aider": true, "codex": true}
+		if !validAgents[c.Session.Agent] {
+			return fmt.Errorf("invalid agent: %s (must be claude-code, aider, or codex)", c.Session.Agent)
+		}
+	}
+
+	// Validate max_duration format if specified
+	if c.Session.MaxDuration != "" {
+		if _, err := time.ParseDuration(c.Session.MaxDuration); err != nil {
+			return fmt.Errorf("invalid max_duration: %w", err)
+		}
+	}
+
+	if c.Claude.AuthMode == "oauth" && c.Session.Agent != "claude-code" {
+		return fmt.Errorf("oauth auth_mode is only supported with the claude-code agent")
+	}
+
+	return nil
+}
