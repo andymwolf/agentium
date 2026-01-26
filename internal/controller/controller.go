@@ -656,41 +656,31 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 }
 
 func (c *Controller) loadPrompts() error {
-	// Load system prompt from disk
-	systemPrompt, err := prompt.LoadSystemPrompt(c.workDir)
+	// Load skills manifest (required)
+	manifest, err := skills.LoadManifest()
 	if err != nil {
-		return fmt.Errorf("failed to load system prompt: %w", err)
+		return fmt.Errorf("failed to load skills manifest: %w", err)
 	}
-	c.systemPrompt = systemPrompt
-	c.logInfo("System prompt loaded successfully")
 
-	// Load project prompt from workspace (.agentium/AGENT.md)
+	loaded, err := skills.LoadSkills(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to load skills: %w", err)
+	}
+
+	c.skillSelector = skills.NewSelector(loaded)
+	names := make([]string, len(loaded))
+	for i, s := range loaded {
+		names[i] = s.Entry.Name
+	}
+	c.logInfo("Skills loaded: %v", names)
+
+	// Load project prompt from workspace (.agentium/AGENT.md) - optional
 	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
 	if err != nil {
 		c.logWarning("failed to load project prompt: %v", err)
 	} else if projectPrompt != "" {
 		c.projectPrompt = projectPrompt
 		c.logInfo("Project prompt loaded from .agentium/AGENT.md")
-	}
-
-	// Initialize phase-aware skills if enabled
-	if c.config.Skills.Enabled {
-		manifest, err := skills.LoadManifest()
-		if err != nil {
-			c.logWarning("failed to load skills manifest, falling back to monolithic prompt: %v", err)
-		} else {
-			loaded, err := skills.LoadSkills(manifest)
-			if err != nil {
-				c.logWarning("failed to load skills, falling back to monolithic prompt: %v", err)
-			} else {
-				c.skillSelector = skills.NewSelector(loaded)
-				names := make([]string, len(loaded))
-				for i, s := range loaded {
-					names[i] = s.Entry.Name
-				}
-				c.logInfo("Skills loaded: %v", names)
-			}
-		}
 	}
 
 	// Initialize persistent memory store if enabled
