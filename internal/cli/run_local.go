@@ -32,10 +32,7 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Verify GITHUB_TOKEN is set
-	if os.Getenv("GITHUB_TOKEN") == "" {
-		return fmt.Errorf("GITHUB_TOKEN environment variable is required for --local mode\n\nSet it with:\n  export GITHUB_TOKEN=<your-github-token>")
-	}
+	// Note: GITHUB_TOKEN is optional - if not set, auth happens inside the container via gh auth login
 
 	// Load and validate configuration
 	cfg, err := config.Load()
@@ -131,16 +128,17 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 
 	// Build controller session config
 	sessionConfig := controller.SessionConfig{
-		ID:            sessionID,
-		Repository:    cfg.Session.Repository,
-		Tasks:         cfg.Session.Tasks,
-		PRs:           cfg.Session.PRs,
-		Agent:         cfg.Session.Agent,
-		MaxIterations: cfg.Session.MaxIterations,
-		MaxDuration:   cfg.Session.MaxDuration,
-		Prompt:        cfg.Session.Prompt,
-		Interactive:   true, // Enable interactive mode
-		Verbose:       viper.GetBool("verbose"),
+		ID:                   sessionID,
+		Repository:           cfg.Session.Repository,
+		Tasks:                cfg.Session.Tasks,
+		PRs:                  cfg.Session.PRs,
+		Agent:                cfg.Session.Agent,
+		MaxIterations:        cfg.Session.MaxIterations,
+		MaxDuration:          cfg.Session.MaxDuration,
+		Prompt:               cfg.Session.Prompt,
+		Interactive:          true, // Enable interactive mode
+		CloneInsideContainer: true, // Clone inside Docker container for reliable auth
+		Verbose:              viper.GetBool("verbose"),
 	}
 
 	// Set Claude auth config

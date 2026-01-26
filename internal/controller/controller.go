@@ -108,8 +108,9 @@ type SessionConfig struct {
 	MaxIterations int      `json:"max_iterations"`
 	MaxDuration   string   `json:"max_duration"`
 	Prompt        string   `json:"prompt"`
-	Interactive   bool     `json:"interactive,omitempty"` // Local interactive mode (no cloud clients)
-	GitHub        struct {
+	Interactive          bool `json:"interactive,omitempty"`           // Local interactive mode (no cloud clients)
+	CloneInsideContainer bool `json:"clone_inside_container,omitempty"` // Clone repository inside Docker container
+	GitHub               struct {
 		AppID            int64  `json:"app_id"`
 		InstallationID   int64  `json:"installation_id"`
 		PrivateKeySecret string `json:"private_key_secret"`
@@ -440,9 +441,13 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch GitHub token: %w", err)
 	}
 
-	// Clone repository
-	if err := c.cloneRepository(ctx); err != nil {
-		return fmt.Errorf("failed to clone repository: %w", err)
+	// Clone repository (skip if cloning inside container)
+	if !c.config.CloneInsideContainer {
+		if err := c.cloneRepository(ctx); err != nil {
+			return fmt.Errorf("failed to clone repository: %w", err)
+		}
+	} else {
+		c.logInfo("Skipping host-side clone (will clone inside container)")
 	}
 
 	// Load system and project prompts
@@ -599,7 +604,13 @@ func (c *Controller) fetchGitHubToken(ctx context.Context) error {
 		return nil
 	}
 
-	// In interactive mode, GITHUB_TOKEN is required from environment
+	// In interactive mode with clone-inside-container, token is optional (auth happens in container)
+	if c.config.Interactive && c.config.CloneInsideContainer {
+		c.logInfo("No GITHUB_TOKEN found; authentication will happen inside container")
+		return nil
+	}
+
+	// In interactive mode without clone-inside-container, token is required
 	if c.config.Interactive {
 		return fmt.Errorf("GITHUB_TOKEN environment variable is required for local interactive mode")
 	}

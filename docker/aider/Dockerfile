@@ -38,6 +38,7 @@ RUN mkdir -p /workspace && chown agentium:agentium /workspace
 # Copy runtime installation scripts
 COPY docker/scripts/install-runtime.sh /runtime-scripts/install-runtime.sh
 COPY docker/scripts/agent-wrapper.sh /runtime-scripts/agent-wrapper.sh
+COPY docker/scripts/setup-workspace.sh /runtime-scripts/setup-workspace.sh
 RUN chmod +x /runtime-scripts/*.sh
 
 # Configure git for the user
