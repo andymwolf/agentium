@@ -1,4 +1,9 @@
 skills:
+  - name: scope
+    file: scope.md
+    priority: 5
+    phases: []
+
   - name: safety
     file: safety.md
     priority: 10

@@ -11,6 +11,9 @@ import (
 //go:embed manifest.yaml
 var embeddedManifest string
 
+//go:embed scope.md
+var embeddedScope string
+
 //go:embed safety.md
 var embeddedSafety string
 
@@ -55,6 +58,7 @@ var embeddedJudge string
 
 // skillFiles maps filenames to their embedded content.
 var skillFiles = map[string]string{
+	"scope.md":          embeddedScope,
 	"safety.md":         embeddedSafety,
 	"environment.md":    embeddedEnvironment,
 	"status_signals.md": embeddedStatusSignals,
