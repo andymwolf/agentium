@@ -119,10 +119,6 @@ type SessionConfig struct {
 	CodexAuth struct {
 		AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 	} `json:"codex_auth"`
-	Prompts struct {
-		SystemMDURL  string `json:"system_md_url,omitempty"`
-		FetchTimeout string `json:"fetch_timeout,omitempty"` // Duration string (e.g. "5s", "10s")
-	} `json:"prompts,omitempty"`
 	Skills struct {
 		Enabled bool `json:"enabled,omitempty"`
 	} `json:"skills,omitempty"`
@@ -660,19 +656,8 @@ func (c *Controller) generateInstallationToken(privateKey string) (string, error
 }
 
 func (c *Controller) loadPrompts() error {
-	// Parse configured fetch timeout
-	var fetchTimeout time.Duration
-	if c.config.Prompts.FetchTimeout != "" {
-		parsed, err := time.ParseDuration(c.config.Prompts.FetchTimeout)
-		if err != nil {
-			c.logger.Printf("Warning: invalid fetch_timeout %q, using default", c.config.Prompts.FetchTimeout)
-		} else {
-			fetchTimeout = parsed
-		}
-	}
-
-	// Load system prompt (hybrid fetch + embedded fallback)
-	systemPrompt, err := prompt.LoadSystemPrompt(c.config.Prompts.SystemMDURL, fetchTimeout)
+	// Load system prompt from disk
+	systemPrompt, err := prompt.LoadSystemPrompt(c.workDir)
 	if err != nil {
 		return fmt.Errorf("failed to load system prompt: %w", err)
 	}
