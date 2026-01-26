@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -45,24 +47,21 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 
 	// Mount Claude OAuth credentials if configured
 	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		// In local mode, mount from user's home directory
-		home, err := os.UserHomeDir()
-		if err == nil {
-			claudeAuthPath := home + "/.config/claude-code/auth.json"
-			if _, statErr := os.Stat(claudeAuthPath); statErr == nil {
-				args = append(args, "-v", claudeAuthPath+":/home/agentium/.claude/.credentials.json:ro")
-			}
+		authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
+		if err != nil {
+			c.logger.Printf("Warning: failed to write Claude auth file: %v", err)
+		} else if authPath != "" {
+			args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
 		}
 	}
 
 	// Mount Codex OAuth credentials if configured
 	if c.config.CodexAuth.AuthJSONBase64 != "" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			codexAuthPath := home + "/.codex/auth.json"
-			if _, statErr := os.Stat(codexAuthPath); statErr == nil {
-				args = append(args, "-v", codexAuthPath+":/home/agentium/.codex/auth.json:ro")
-			}
+		authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
+		if err != nil {
+			c.logger.Printf("Warning: failed to write Codex auth file: %v", err)
+		} else if authPath != "" {
+			args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
 		}
 	}
 
@@ -100,4 +99,33 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	}
 
 	return result, nil
+}
+
+// writeInteractiveAuthFile writes base64-encoded auth credentials to a temp file
+// in the workspace for mounting into containers. Returns the path to the written file,
+// or empty string if no credentials were provided.
+func (c *Controller) writeInteractiveAuthFile(filename, base64Data string) (string, error) {
+	if base64Data == "" {
+		return "", nil
+	}
+
+	// Decode base64 credentials
+	authData, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode auth data: %w", err)
+	}
+
+	// Create auth directory in workspace
+	authDir := filepath.Join(c.workDir, ".agentium-auth")
+	if err := os.MkdirAll(authDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create auth directory: %w", err)
+	}
+
+	// Write auth file
+	authPath := filepath.Join(authDir, filename)
+	if err := os.WriteFile(authPath, authData, 0600); err != nil {
+		return "", fmt.Errorf("failed to write auth file: %w", err)
+	}
+
+	return authPath, nil
 }

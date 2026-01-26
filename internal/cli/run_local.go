@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -185,19 +184,6 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 			for phase, spec := range cfg.Routing.Overrides {
 				sessionConfig.Routing.Overrides[phase] = spec
 			}
-		}
-	}
-
-	// Write Claude auth to temp file for container mount (if using oauth)
-	if claudeAuthBase64 != "" {
-		authDir := filepath.Join(workDir, ".agentium-auth")
-		if err := os.MkdirAll(authDir, 0700); err != nil {
-			return fmt.Errorf("failed to create auth directory: %w", err)
-		}
-		authPath := filepath.Join(authDir, "claude-auth.json")
-		authData, _ := base64.StdEncoding.DecodeString(claudeAuthBase64)
-		if err := os.WriteFile(authPath, authData, 0600); err != nil {
-			return fmt.Errorf("failed to write Claude auth file: %w", err)
 		}
 	}
 
