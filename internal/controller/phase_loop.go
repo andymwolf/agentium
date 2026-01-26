@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
@@ -112,6 +113,15 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+	// Initialize handoff context if enabled (sub-agents model)
+	if c.isHandoffEnabled() {
+		if err := c.initializeHandoffContext(taskID); err != nil {
+			c.logWarning("failed to initialize handoff context: %v (falling back to memory)", err)
+		} else {
+			c.logInfo("Handoff context initialized for task %s", taskID)
+		}
+	}
+
 phaseLoop:
 	for {
 		// Check context cancellation
@@ -175,6 +185,13 @@ phaseLoop:
 			phaseOutput := result.RawTextContent
 			if phaseOutput == "" {
 				phaseOutput = result.Summary
+			}
+
+			// Process handoff output if enabled (sub-agents model)
+			if c.isHandoffEnabled() {
+				if c.processHandoffOutput(taskID, string(currentPhase), phaseOutput) {
+					c.logInfo("Phase %s: handoff output processed", currentPhase)
+				}
 			}
 
 			// Post phase comment
@@ -319,6 +336,11 @@ phaseLoop:
 				c.logInfo("Phase %s: judge requested regression to PLAN (count: %d/%d, feedback: %s)",
 					currentPhase, state.RegressionCount, maxRegressionCount, judgeResult.Feedback)
 
+				// Clear handoff outputs for sub-agents model (forces fresh planning)
+				if c.isHandoffEnabled() {
+					c.handleHandoffRegression(taskID, string(currentPhase))
+				}
+
 				// Keep review feedback in memory for context
 				if c.memoryStore != nil && judgeResult.Feedback != "" {
 					c.memoryStore.Update([]memory.Signal{
@@ -393,4 +415,100 @@ func truncateForComment(s string) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+// initializeHandoffContext sets up the initial issue context in the handoff store.
+// This should be called at the start of the phase loop for each task.
+func (c *Controller) initializeHandoffContext(taskID string) error {
+	if c.handoffStore == nil {
+		return fmt.Errorf("handoff store not initialized")
+	}
+
+	// Find issue details
+	var issueNum, issueTitle, issueBody string
+	for _, issue := range c.issueDetails {
+		if fmt.Sprintf("%d", issue.Number) == c.activeTask {
+			issueNum = fmt.Sprintf("%d", issue.Number)
+			issueTitle = issue.Title
+			issueBody = issue.Body
+			break
+		}
+	}
+
+	if issueNum == "" {
+		return fmt.Errorf("issue details not found for task %s", taskID)
+	}
+
+	issueCtx := &handoff.IssueContext{
+		Number:     issueNum,
+		Title:      issueTitle,
+		Body:       issueBody,
+		Repository: c.config.Repository,
+	}
+
+	c.handoffStore.SetIssueContext(taskID, issueCtx)
+	return nil
+}
+
+// processHandoffOutput parses and stores the AGENTIUM_HANDOFF signal from agent output.
+// Returns true if a valid handoff was found and stored.
+func (c *Controller) processHandoffOutput(taskID string, phase string, output string) bool {
+	if c.handoffStore == nil || !handoff.HasHandoffSignal(output) {
+		return false
+	}
+
+	if err := handoff.ParseAndStorePhaseOutput(c.handoffStore, taskID, phase, output); err != nil {
+		c.logWarning("Failed to parse handoff output for phase %s: %v", phase, err)
+		return false
+	}
+
+	// Save to disk after each successful parse
+	if err := c.handoffStore.Save(); err != nil {
+		c.logWarning("Failed to save handoff store: %v", err)
+	}
+
+	c.logInfo("Handoff output stored for phase %s: %s", phase, c.handoffStore.Summary(taskID))
+	return true
+}
+
+// buildPhaseInputForHandoff builds the phase input using the handoff store.
+// This is used when the sub-agents model is enabled.
+func (c *Controller) buildPhaseInputForHandoff(taskID string, phase string) (string, error) {
+	if c.handoffStore == nil {
+		return "", fmt.Errorf("handoff store not initialized")
+	}
+
+	// Check if we can advance to this phase
+	canAdvance, reason := handoff.CanAdvanceToPhase(c.handoffStore, taskID, phase)
+	if !canAdvance {
+		return "", fmt.Errorf("cannot advance to phase %s: %s", phase, reason)
+	}
+
+	// Build existing work context if applicable
+	var existingWork *handoff.ExistingWorkContext
+	if c.activeTaskExistingWork != nil {
+		existingWork = &handoff.ExistingWorkContext{
+			Branch:   c.activeTaskExistingWork.Branch,
+			PRNumber: c.activeTaskExistingWork.PRNumber,
+			PRTitle:  c.activeTaskExistingWork.PRTitle,
+		}
+	}
+
+	return handoff.BuildInputForPhase(c.handoffStore, taskID, phase, existingWork)
+}
+
+// handleHandoffRegression clears handoff outputs when regression is needed.
+func (c *Controller) handleHandoffRegression(taskID string, fromPhase string) {
+	if c.handoffStore == nil {
+		return
+	}
+
+	// When regressing from REVIEW to PLAN, clear all outputs from PLAN onwards
+	// This forces fresh planning and implementation
+	c.handoffStore.ClearFromPhase(taskID, "PLAN")
+	c.logInfo("Handoff regression: cleared outputs from PLAN onwards for task %s", taskID)
+
+	if err := c.handoffStore.Save(); err != nil {
+		c.logWarning("Failed to save handoff store after regression: %v", err)
+	}
 }

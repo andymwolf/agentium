@@ -27,7 +27,30 @@ You are in the **REVIEW** phase. Your job is to review the implementation that w
 
 ### Completion
 
-When the review is complete and all issues are fixed, emit:
+When the review is complete, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "issues_found": [
+    {"file": "<file path>", "line": <line number>, "description": "<issue>", "severity": "<error|warning|suggestion>", "fixed": <true|false>}
+  ],
+  "fixes_applied": ["<description of each fix made>"],
+  "regression_needed": false,
+  "regression_reason": ""
+}
+```
+
+If the implementation has fundamental issues requiring a return to planning:
+```
+AGENTIUM_HANDOFF: {
+  "issues_found": [...],
+  "fixes_applied": [],
+  "regression_needed": true,
+  "regression_reason": "<why re-planning is needed>"
+}
+```
+
+Then emit the completion status:
 ```
 AGENTIUM_STATUS: COMPLETE
 ```

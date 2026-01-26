@@ -21,3 +21,19 @@ After creating the PR:
 - Review the PR diff one more time
 - If you find issues, push additional commits to fix them
 - Update the PR description if needed
+
+### Completion
+
+When the PR is created, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "pr_number": <the PR number>,
+  "pr_url": "<the full PR URL>"
+}
+```
+
+Then emit the completion status:
+```
+AGENTIUM_STATUS: PR_CREATED <PR URL>
+```

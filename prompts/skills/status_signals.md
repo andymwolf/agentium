@@ -119,3 +119,55 @@ AGENTIUM_EVAL: ITERATE Tests failed in auth/handler_test.go - fix the nil pointe
 # Cannot proceed
 AGENTIUM_EVAL: BLOCKED Issue requirements are ambiguous - need clarification on auth method
 ```
+
+## HANDOFF SIGNALING
+
+Emit handoff signals to pass structured data between phases. This enables minimal context injection
+where each phase receives only the curated output from previous phases.
+
+Format: `AGENTIUM_HANDOFF: <json>`
+
+The JSON content varies by phase:
+
+### PLAN Phase Output
+```json
+AGENTIUM_HANDOFF: {
+  "summary": "One-sentence description",
+  "files_to_modify": ["path/to/file.go"],
+  "files_to_create": ["path/to/new.go"],
+  "implementation_steps": [
+    {"number": 1, "description": "Add handler", "file": "handler.go"}
+  ],
+  "testing_approach": "Unit tests for handler"
+}
+```
+
+### IMPLEMENT Phase Output
+```json
+AGENTIUM_HANDOFF: {
+  "branch_name": "agentium/issue-42-add-feature",
+  "commits": [{"sha": "abc1234", "message": "Add feature"}],
+  "files_changed": ["handler.go", "handler_test.go"],
+  "tests_passed": true,
+  "test_output": "ok  ./..."
+}
+```
+
+### REVIEW Phase Output
+```json
+AGENTIUM_HANDOFF: {
+  "issues_found": [
+    {"file": "handler.go", "line": 42, "description": "Missing error check", "severity": "error", "fixed": true}
+  ],
+  "fixes_applied": ["Added error handling in handler.go"],
+  "regression_needed": false,
+  "regression_reason": ""
+}
+```
+
+### Tips
+
+1. **Emit once per phase** - Only one AGENTIUM_HANDOFF signal should be emitted per phase completion
+2. **Keep JSON valid** - The controller parses this JSON; invalid JSON will be ignored
+3. **Be specific** - Include concrete file paths, commit SHAs, and test results
+4. **Still emit STATUS** - Handoff signals complement status signals, don't replace them

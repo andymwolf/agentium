@@ -38,8 +38,23 @@ Your plan should include:
 
 ### Completion
 
-When your plan is ready, emit:
+When your plan is ready, emit a structured handoff signal with your plan:
+
 ```
-AGENTIUM_MEMORY: DECISION <one-line summary of your approach>
+AGENTIUM_HANDOFF: {
+  "summary": "<one-sentence description of what needs to be done>",
+  "files_to_modify": ["<list of existing files to change>"],
+  "files_to_create": ["<list of new files if any>"],
+  "implementation_steps": [
+    {"number": 1, "description": "<step description>", "file": "<primary file if applicable>"}
+  ],
+  "testing_approach": "<how changes will be verified>"
+}
+```
+
+Then emit the completion status:
+```
 AGENTIUM_STATUS: COMPLETE
 ```
+
+Note: The AGENTIUM_HANDOFF JSON should be on a single line or a properly formatted JSON block.

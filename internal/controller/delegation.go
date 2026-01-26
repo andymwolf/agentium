@@ -63,10 +63,25 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		},
 	}
 
-	// Inject memory context if store is available
-	if c.memoryStore != nil {
+	// Inject phase input context
+	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+
+	// Use handoff-based input if enabled (sub-agents model) - true isolation
+	if c.isHandoffEnabled() {
+		phaseInput, err := c.buildPhaseInputForHandoff(taskID, string(phase))
+		if err != nil {
+			c.logWarning("Failed to build handoff input for delegated phase %s: %v (falling back to memory)", phase, err)
+		} else if phaseInput != "" {
+			session.IterationContext.PhaseInput = phaseInput
+			// Explicitly clear MemoryContext for true isolation
+			session.IterationContext.MemoryContext = ""
+			c.logInfo("Delegated phase %s: using handoff input (%d chars), no inherited memory", phase, len(phaseInput))
+		}
+	}
+
+	// Inject memory context only if handoff is not providing input (legacy or fallback)
+	if c.memoryStore != nil && session.IterationContext.PhaseInput == "" {
 		// Build context scoped to the current task
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
 			session.IterationContext.MemoryContext = memCtx

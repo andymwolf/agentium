@@ -28,3 +28,35 @@ Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 - Make focused, minimal changes that address the issue
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
+
+### Step 6: Run Tests
+- Run the project's test suite to verify changes
+- Fix any failing tests before proceeding
+
+### Step 7: Commit Changes
+- Write clear, descriptive commit messages
+- Reference the issue number in commits
+
+### Completion
+
+When implementation is complete, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "branch_name": "<the branch you created or are working on>",
+  "commits": [{"sha": "<commit sha>", "message": "<commit message>"}],
+  "files_changed": ["<list of files you modified>"],
+  "tests_passed": true,
+  "test_output": "<brief test output summary>"
+}
+```
+
+Then emit the completion status:
+```
+AGENTIUM_STATUS: TESTS_PASSED
+```
+
+Or if tests failed:
+```
+AGENTIUM_STATUS: TESTS_FAILED <summary of failures>
+```
