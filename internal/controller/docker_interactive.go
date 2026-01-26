@@ -45,6 +45,12 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
+	// Pass clone-inside-container environment variables
+	if c.config.CloneInsideContainer {
+		args = append(args, "-e", "AGENTIUM_CLONE_INSIDE=true")
+		args = append(args, "-e", fmt.Sprintf("AGENTIUM_REPOSITORY=%s", c.config.Repository))
+	}
+
 	// Mount Claude OAuth credentials if configured
 	if c.config.ClaudeAuth.AuthMode == "oauth" {
 		authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)

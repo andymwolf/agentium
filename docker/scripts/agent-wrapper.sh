@@ -1,7 +1,12 @@
 #!/bin/bash
-# Wrapper script that installs language runtime before executing the agent
+# Wrapper script that sets up workspace and installs language runtime before executing the agent
 
 set -e
+
+# Clone repository inside container if requested
+if [ "${AGENTIUM_CLONE_INSIDE:-}" = "true" ]; then
+    /runtime-scripts/setup-workspace.sh
+fi
 
 # Install runtime based on project type
 /runtime-scripts/install-runtime.sh
