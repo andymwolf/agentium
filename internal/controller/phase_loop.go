@@ -189,8 +189,8 @@ phaseLoop:
 
 			// Parse and store handoff output if enabled
 			if c.isHandoffEnabled() && phaseOutput != "" {
-				if err := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); err != nil {
-					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, err)
+				if handoffErr := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); handoffErr != nil {
+					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, handoffErr)
 				}
 			}
 

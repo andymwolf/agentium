@@ -100,16 +100,16 @@ type PhaseLoopConfig struct {
 
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID            string   `json:"id"`
-	Repository    string   `json:"repository"`
-	Tasks         []string `json:"tasks"`
-	PRs           []string `json:"prs,omitempty"`
-	Agent         string   `json:"agent"`
-	MaxIterations int      `json:"max_iterations"`
-	MaxDuration   string   `json:"max_duration"`
-	Prompt        string   `json:"prompt"`
-	Interactive          bool `json:"interactive,omitempty"`           // Local interactive mode (no cloud clients)
-	CloneInsideContainer bool `json:"clone_inside_container,omitempty"` // Clone repository inside Docker container
+	ID                   string   `json:"id"`
+	Repository           string   `json:"repository"`
+	Tasks                []string `json:"tasks"`
+	PRs                  []string `json:"prs,omitempty"`
+	Agent                string   `json:"agent"`
+	MaxIterations        int      `json:"max_iterations"`
+	MaxDuration          string   `json:"max_duration"`
+	Prompt               string   `json:"prompt"`
+	Interactive          bool     `json:"interactive,omitempty"`            // Local interactive mode (no cloud clients)
+	CloneInsideContainer bool     `json:"clone_inside_container,omitempty"` // Clone repository inside Docker container
 	GitHub               struct {
 		AppID            int64  `json:"app_id"`
 		InstallationID   int64  `json:"installation_id"`

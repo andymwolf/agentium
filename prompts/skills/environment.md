@@ -9,21 +9,29 @@ Your execution environment:
 
 - **Working directory**: `/workspace` (the cloned repository)
 - **GitHub CLI**: `gh` is authenticated and ready to use
-- **Git**: Configured with appropriate user identity
+- **Git**: Configured with appropriate user identity and credential helper
 - **Session variables**:
   - `AGENTIUM_SESSION_ID`: Unique identifier for this session
   - `AGENTIUM_ITERATION`: Current iteration number
   - `AGENTIUM_REPOSITORY`: Target repository (owner/repo format)
 
+## GIT AUTHENTICATION
+
+Git is configured to use `gh` for GitHub authentication. For git operations:
+- Use `git push`, `git pull`, `git fetch` normally - credentials are handled automatically
+- If you encounter "could not read Username" errors, run: `git config credential.helper "!gh auth git-credential"`
+- Verify gh is authenticated with: `gh auth status`
+
 ## ERROR HANDLING
 
 If you encounter errors:
 
-1. **Test failures**: Fix the failing tests or explain why they fail in the PR
-2. **Build errors**: Debug and fix compilation/build issues
-3. **Merge conflicts**: Resolve conflicts by rebasing on main
-4. **Permission errors**: Report in PR description; do NOT attempt workarounds
-5. **Missing dependencies**: Document in PR; do NOT install system packages
+1. **Git auth failures**: Run `git config credential.helper "!gh auth git-credential"` then retry
+2. **Test failures**: Fix the failing tests or explain why they fail in the PR
+3. **Build errors**: Debug and fix compilation/build issues
+4. **Merge conflicts**: Resolve conflicts by rebasing on main
+5. **Permission errors**: Report in PR description; do NOT attempt workarounds
+6. **Missing dependencies**: Document in PR; do NOT install system packages
 
 ## ITERATION BEHAVIOR
 
