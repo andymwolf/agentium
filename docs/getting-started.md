@@ -171,6 +171,23 @@ agentium run --repo github.com/org/repo --issues 42 \
 agentium run --repo github.com/org/repo --issues 42 --dry-run
 ```
 
+### Local Interactive Mode (Debugging)
+
+Run the controller locally without provisioning a VM. The agent runs in interactive mode, prompting for permission approvals:
+
+```bash
+export GITHUB_TOKEN=<your-token>
+agentium run --local --repo github.com/org/repo --issues 42
+```
+
+This is useful for:
+- Debugging agent behavior and prompt issues
+- Testing changes to agent configuration
+- Watching tool calls and decisions in real-time
+- Interactively approving or denying agent actions
+
+**Note:** Local mode requires Docker and a `GITHUB_TOKEN` environment variable. No GitHub App configuration is needed.
+
 ## Session Lifecycle
 
 Each Agentium session follows this lifecycle:

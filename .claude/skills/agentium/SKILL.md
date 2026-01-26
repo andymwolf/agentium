@@ -51,7 +51,7 @@ Launch an ephemeral AI agent session to work on GitHub issues or PR feedback.
 | `--repo` | (required) | GitHub repository (e.g., `github.com/org/repo`) |
 | `--issues` | | Issue numbers to work on (comma-separated) |
 | `--prs` | | PR numbers to address review feedback (comma-separated) |
-| `--agent` | `claude-code` | Agent to use (`claude-code`, `aider`) |
+| `--agent` | `claude-code` | Agent to use (`claude-code`, `aider`, `codex`) |
 | `--max-iterations` | `30` | Maximum number of iterations |
 | `--max-duration` | `2h` | Maximum session duration |
 | `--provider` | from config | Cloud provider (`gcp`, `aws`, `azure`) |
@@ -61,6 +61,7 @@ Launch an ephemeral AI agent session to work on GitHub issues or PR feedback.
 | `--claude-auth-mode` | `api` | Claude auth mode: `api` or `oauth` |
 | `--model` | | Override model for all phases (format: `adapter:model`) |
 | `--phase-model` | | Per-phase model override (format: `PHASE=adapter:model`, repeatable) |
+| `--local` | `false` | Run locally for interactive debugging (no VM provisioning) |
 
 **Note:** At least one of `--issues` or `--prs` is required.
 
@@ -242,6 +243,25 @@ agentium run --repo github.com/org/repo --issues 42 \
 ```bash
 agentium destroy agentium-abc12345 --force
 ```
+
+### Local interactive mode (debugging)
+
+Run the controller locally without provisioning a VM. The agent runs in interactive mode, prompting for permission approvals so you can watch and interact with execution:
+
+```bash
+export GITHUB_TOKEN=<your-github-token>
+agentium run --local --repo github.com/org/repo --issues 42
+```
+
+**Requirements:**
+- `GITHUB_TOKEN` environment variable must be set (GitHub App not required)
+- Docker must be installed and running
+
+This is useful for:
+- Debugging agent behavior
+- Testing prompt changes
+- Watching tool calls in real-time
+- Interactively approving/denying agent actions
 
 ## Response Guidelines
 
