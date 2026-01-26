@@ -19,10 +19,10 @@ const (
 // IssueContext contains the minimal context about the issue being worked on.
 // This is the common input shared across all phases.
 type IssueContext struct {
-	Number     int    `json:"number"`
-	Title      string `json:"title"`
-	Body       string `json:"body"`
-	Repository string `json:"repository"`
+	Number     int      `json:"number"`
+	Title      string   `json:"title"`
+	Body       string   `json:"body"`
+	Repository string   `json:"repository"`
 	Labels     []string `json:"labels,omitempty"`
 }
 
@@ -59,8 +59,8 @@ type PlanOutput struct {
 
 // ImplementInput is the curated input for the IMPLEMENT phase.
 type ImplementInput struct {
-	Issue        IssueContext `json:"issue"`
-	Plan         PlanOutput   `json:"plan"`
+	Issue        IssueContext  `json:"issue"`
+	Plan         PlanOutput    `json:"plan"`
 	ExistingWork *ExistingWork `json:"existing_work,omitempty"`
 }
 
