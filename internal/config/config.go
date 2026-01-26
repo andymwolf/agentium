@@ -180,6 +180,19 @@ func applyDefaults(cfg *Config) {
 	if cfg.Codex.AuthJSONPath == "" {
 		cfg.Codex.AuthJSONPath = "~/.codex/auth.json"
 	}
+
+	// Enable phase loop by default for structured PLAN → IMPLEMENT → REVIEW → PR workflow
+	// This can be disabled in config with phase_loop.enabled: false
+	if !cfg.PhaseLoop.Enabled {
+		// Only set default if not explicitly configured
+		// Check if any phase loop fields are set to detect explicit configuration
+		if cfg.PhaseLoop.PlanMaxIterations == 0 &&
+			cfg.PhaseLoop.ImplementMaxIterations == 0 &&
+			cfg.PhaseLoop.ReviewMaxIterations == 0 &&
+			cfg.PhaseLoop.DocsMaxIterations == 0 {
+			cfg.PhaseLoop.Enabled = true
+		}
+	}
 }
 
 // Validate validates the configuration

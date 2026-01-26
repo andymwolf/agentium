@@ -20,9 +20,9 @@ type Store struct {
 
 // TaskHandoffs holds all handoff data for a single task.
 type TaskHandoffs struct {
-	TaskID    string        `json:"task_id"`
-	Issue     *IssueContext `json:"issue,omitempty"`
-	Handoffs  []*HandoffData `json:"handoffs"`
+	TaskID   string         `json:"task_id"`
+	Issue    *IssueContext  `json:"issue,omitempty"`
+	Handoffs []*HandoffData `json:"handoffs"`
 }
 
 // NewStore creates a new handoff store with persistence at the given path.

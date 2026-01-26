@@ -19,7 +19,7 @@ import (
 
 // runLocalSession runs the controller locally in interactive mode for debugging.
 // This bypasses VM provisioning and runs the agent directly on the local machine.
-func runLocalSession(cmd *cobra.Command, args []string) error {
+func runLocalSession(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -107,7 +107,8 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 	// Handle Claude OAuth authentication
 	var claudeAuthBase64 string
 	if cfg.Claude.AuthMode == "oauth" {
-		authJSON, err := readAuthJSON(cfg.Claude.AuthJSONPath)
+		var authJSON []byte
+		authJSON, err = readAuthJSON(cfg.Claude.AuthJSONPath)
 		if err != nil {
 			return fmt.Errorf("failed to read Claude auth.json: %w", err)
 		}
@@ -118,7 +119,8 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 	// Handle Codex OAuth authentication
 	var codexAuthBase64 string
 	if cfg.Session.Agent == "codex" {
-		authJSON, err := readCodexAuthJSON(cfg.Codex.AuthJSONPath)
+		var authJSON []byte
+		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
 		if err != nil {
 			return fmt.Errorf("failed to read Codex auth.json: %w", err)
 		}
@@ -147,6 +149,19 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 
 	// Set Codex auth config
 	sessionConfig.CodexAuth.AuthJSONBase64 = codexAuthBase64
+
+	// Enable phase loop (PLAN → IMPLEMENT → REVIEW → PR workflow)
+	if cfg.PhaseLoop.Enabled {
+		sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
+			Enabled:                cfg.PhaseLoop.Enabled,
+			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+			ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
+			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+			JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
+			JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
+		}
+	}
 
 	// Handle --model (overrides default for all phases)
 	if model, _ := cmd.Flags().GetString("model"); model != "" {

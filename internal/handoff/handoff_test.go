@@ -89,8 +89,8 @@ func TestStore(t *testing.T) {
 		planOut1 := &PlanOutput{Summary: "First plan"}
 		planOut2 := &PlanOutput{Summary: "Second plan"}
 
-		store.StorePhaseOutput(taskID, PhasePlan, 1, planOut1)
-		store.StorePhaseOutput(taskID, PhasePlan, 2, planOut2)
+		_ = store.StorePhaseOutput(taskID, PhasePlan, 1, planOut1)
+		_ = store.StorePhaseOutput(taskID, PhasePlan, 2, planOut2)
 
 		retrieved := store.GetPlanOutput(taskID)
 		if retrieved.Summary != "Second plan" {
@@ -102,9 +102,9 @@ func TestStore(t *testing.T) {
 		store, _ := NewStore(tmpDir)
 		taskID := "issue:101"
 
-		store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Plan"})
-		store.StorePhaseOutput(taskID, PhaseImplement, 1, &ImplementOutput{BranchName: "feature/test"})
-		store.StorePhaseOutput(taskID, PhaseReview, 1, &ReviewOutput{})
+		_ = store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Plan"})
+		_ = store.StorePhaseOutput(taskID, PhaseImplement, 1, &ImplementOutput{BranchName: "feature/test"})
+		_ = store.StorePhaseOutput(taskID, PhaseReview, 1, &ReviewOutput{})
 
 		store.ClearFromPhase(taskID, PhaseImplement)
 
@@ -124,8 +124,8 @@ func TestStore(t *testing.T) {
 		taskID := "issue:persist"
 
 		store1.SetIssueContext(taskID, &IssueContext{Number: 999, Title: "Persist Test"})
-		store1.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Persisted plan"})
-		store1.Save()
+		_ = store1.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Persisted plan"})
+		_ = store1.Save()
 
 		// Create new store instance - should load persisted data
 		store2, _ := NewStore(tmpDir)
@@ -177,7 +177,7 @@ func TestBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildInputForPhase IMPLEMENT with plan", func(t *testing.T) {
-		store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{
+		_ = store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{
 			Summary:         "Test plan",
 			FilesToModify:   []string{"file.go"},
 			TestingApproach: "unit tests",
@@ -475,7 +475,7 @@ func TestValidator(t *testing.T) {
 		}
 
 		// Add plan output
-		store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Plan"})
+		_ = store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Plan"})
 
 		// IMPLEMENT should now pass
 		errs = validator.ValidatePhaseInput(store, taskID, PhaseImplement)

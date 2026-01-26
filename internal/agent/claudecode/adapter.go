@@ -64,13 +64,20 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	prompt := a.BuildPrompt(session, iteration)
 
-	args := []string{
-		"--print",
-		"--verbose",
-		"--output-format", "stream-json",
-	}
-	if !session.Interactive {
-		args = append(args, "--dangerously-skip-permissions")
+	var args []string
+	if session.Interactive {
+		// Interactive mode: run without --print to show TUI for permission approvals
+		args = []string{
+			"--verbose",
+		}
+	} else {
+		// Non-interactive mode: use --print for structured output and skip permissions
+		args = []string{
+			"--print",
+			"--verbose",
+			"--output-format", "stream-json",
+			"--dangerously-skip-permissions",
+		}
 	}
 
 	// Prefer phase-aware skills prompt over monolithic system prompt
