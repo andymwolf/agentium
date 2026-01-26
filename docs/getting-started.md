@@ -2,14 +2,31 @@
 
 Agentium implements the Ralph Wiggum loop pattern for autonomous software development: a controller-as-judge architecture where AI agents plan, implement, test, and self-review code in iterative loops on disposable cloud VMs. Create a GitHub issue, get a pull request.
 
+## Who Is This For?
+
+Agentium is intended for people comfortable using agentic coding tools from the command line. If you've used Claude Code, Aider, or similar CLI-based AI tools, you'll feel at home. That said, the workflow is designed to be accessible to non-coders too: create a well-described GitHub issue, and Agentium handles the rest.
+
 ## How It Works
 
-1. You point Agentium at a GitHub issue
-2. Agentium provisions an ephemeral cloud VM
-3. The agent enters a phase loop (`PLAN → IMPLEMENT → TEST → REVIEW → PR_CREATION`), with an LLM evaluator judging each phase before advancing
-4. The agent creates a pull request with the changes
-5. The VM self-destructs after the session completes
-6. You review and merge the PR
+Agentium's core workflow mirrors how a developer works on a ticket:
+
+1. You create a GitHub issue describing what you want
+2. Agentium spins up an ephemeral VM
+3. The agent enters a phase loop:
+
+```
+PLAN --> [EVALUATE] --> IMPLEMENT --> [EVALUATE] --> TEST --> [EVALUATE] --> REVIEW --> [EVALUATE] --> PR_CREATION --> COMPLETE
+```
+
+Each phase runs in a clean context window. After each phase, an LLM evaluator (the "judge") decides:
+- **ADVANCE** — Work is sufficient, proceed to next phase
+- **ITERATE** — Work needs improvement, loop back with feedback
+- **BLOCKED** — Cannot proceed, needs human intervention
+
+This means the agent can iterate on its own implementation multiple times before moving on—catching bugs, improving code quality, and fixing test failures without human involvement.
+
+4. The agent creates a pull request for your review
+5. The VM self-destructs
 
 ## Prerequisites
 
@@ -201,7 +218,17 @@ Within the phase loop, an LLM evaluator judges each phase's output and decides:
 - **ITERATE** — Work needs improvement, re-run the phase with feedback
 - **BLOCKED** — Cannot proceed, needs human intervention
 
-Each phase has configurable iteration limits (e.g., PLAN: 3, IMPLEMENT: 5, TEST: 5, REVIEW: 3) to prevent runaway loops. Phase verdicts are posted as comments on the GitHub issue.
+Each phase has configurable iteration limits to prevent runaway loops:
+
+```yaml
+phase_loop:
+  enabled: true
+  plan_max_iterations: 3
+  build_max_iterations: 5
+  review_max_iterations: 3
+```
+
+Every phase iteration and evaluator verdict is posted as a comment on the GitHub issue, giving you full visibility into the agent's reasoning.
 
 Sessions automatically terminate when:
 - All assigned issues have PRs created
@@ -227,6 +254,62 @@ Common things to include:
 - Off-limits areas (files the agent should not modify)
 
 See the [Configuration Reference](configuration.md#project-specific-agent-instructions) for a detailed example.
+
+## Claude Code Authorization
+
+Agentium supports two authentication modes for the Claude Code agent:
+
+### API Mode (Recommended)
+Uses a standard Anthropic API key. Set via environment variable or config. Straightforward and cross-platform.
+
+### OAuth Mode (MacOS Only)
+Uses stored credentials from `~/.config/claude-code/auth.json`. This allows the agent to use your existing Claude Code subscription rather than a separate API key.
+
+**Important considerations:**
+- Copying OAuth credentials from your local Keychain to a remote VM may violate the [Claude Code Terms of Service](https://www.anthropic.com/terms), which generally prohibit credential sharing or automated access outside approved channels.
+- OAuth tokens are scoped to your personal account—usage on remote VMs counts against your subscription.
+- This feature exists for convenience during development but should be used with awareness of the TOS implications.
+- API mode with a dedicated API key is the recommended production approach.
+
+## Architecture Overview
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────────────────────────┐
+│  Agentium   │────>│ Provisioner │────>│         Ephemeral Cloud VM       │
+│    CLI      │     │ (Terraform) │     │                                   │
+└─────────────┘     └─────────────┘     │  ┌─────────────────────────────┐ │
+                                        │  │    Session Controller        │ │
+                                        │  │  ┌───────────────────────┐  │ │
+                                        │  │  │ Phase Loop (Judge)    │  │ │
+                                        │  │  │ PLAN→IMPL→TEST→REVIEW │  │ │
+                                        │  │  └───────────────────────┘  │ │
+                                        │  └──────────────┬──────────────┘ │
+                                        │                 │                 │
+                                        │  ┌──────────────v──────────────┐ │
+                                        │  │     Agent Container         │ │
+                                        │  │   (Claude Code / Aider)     │ │
+                                        │  └──────────────┬──────────────┘ │
+                                        └─────────────────┼─────────────────┘
+                                                          │
+                                                          v
+                                                  ┌───────────────┐
+                                                  │  GitHub API   │
+                                                  │  (PRs/Issues) │
+                                                  └───────────────┘
+```
+
+### Component Breakdown
+
+| Component | Purpose |
+|-----------|---------|
+| **CLI** (`cmd/agentium/`) | User interface for launching and monitoring sessions |
+| **Controller** (`cmd/controller/`) | Orchestrates agent execution on the VM |
+| **Phase Loop** (`internal/controller/phase_loop.go`) | Implements the Ralph Wiggum loop with evaluator |
+| **Agent Adapters** (`internal/agent/`) | Pluggable adapters for Claude Code, Aider, etc. |
+| **Provisioner** (`internal/provisioner/`) | Creates and manages cloud VMs |
+| **Memory Store** (`internal/memory/`) | Persistent context between phase iterations |
+| **Skills** (`internal/skills/`) | Phase-aware prompt selection |
+| **Model Routing** (`internal/routing/`) | Per-phase model assignment |
 
 ## What's Next?
 
