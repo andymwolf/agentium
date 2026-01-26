@@ -49,6 +49,10 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	if c.config.CloneInsideContainer {
 		args = append(args, "-e", "AGENTIUM_CLONE_INSIDE=true")
 		args = append(args, "-e", fmt.Sprintf("AGENTIUM_REPOSITORY=%s", c.config.Repository))
+		// Explicitly pass GITHUB_TOKEN if available (for automated auth inside container)
+		if c.gitHubToken != "" {
+			args = append(args, "-e", fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		}
 	}
 
 	// Mount Claude OAuth credentials if configured

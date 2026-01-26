@@ -9,6 +9,12 @@ log() {
     echo "[setup-workspace] $1" >&2
 }
 
+# Debug: show environment
+log "AGENTIUM_CLONE_INSIDE=${AGENTIUM_CLONE_INSIDE:-unset}"
+log "AGENTIUM_REPOSITORY=${AGENTIUM_REPOSITORY:-unset}"
+log "GITHUB_TOKEN=${GITHUB_TOKEN:+set (hidden)}"
+log "TTY check: $([ -t 0 ] && echo 'TTY available' || echo 'No TTY')"
+
 # Check if workspace already has content (repo already cloned)
 check_workspace() {
     if [ -d "/workspace/.git" ]; then
@@ -65,18 +71,34 @@ clone_repository() {
     # Clone to a temp directory first, then move contents to /workspace
     # This handles the case where /workspace already exists but is empty
     TEMP_DIR=$(mktemp -d)
+    log "Using temp directory: $TEMP_DIR"
 
     if gh repo clone "$AGENTIUM_REPOSITORY" "$TEMP_DIR" -- --depth 1; then
+        log "Clone succeeded, moving files to /workspace"
         # Move all contents (including hidden files) to workspace
         shopt -s dotglob
-        mv "$TEMP_DIR"/* /workspace/ 2>/dev/null || true
+        if mv "$TEMP_DIR"/* /workspace/; then
+            log "Files moved successfully"
+        else
+            log "Warning: mv command had issues (may be ok if temp dir is empty)"
+        fi
         shopt -u dotglob
         rm -rf "$TEMP_DIR"
         log "Repository cloned successfully"
+        # Verify clone worked
+        if [ -d "/workspace/.git" ]; then
+            log "Verified: .git directory exists"
+        else
+            log "ERROR: .git directory not found after clone"
+            return 1
+        fi
         return 0
     else
+        CLONE_EXIT=$?
         rm -rf "$TEMP_DIR"
-        log "ERROR: Failed to clone repository"
+        log "ERROR: Failed to clone repository (exit code: $CLONE_EXIT)"
+        log "Checking gh auth status..."
+        gh auth status || true
         return 1
     fi
 }
@@ -109,5 +131,37 @@ main() {
     log "Workspace setup complete"
 }
 
+# Check and setup Claude Code authentication
+setup_claude_auth() {
+    # Check if claude command exists
+    if ! command -v claude &> /dev/null; then
+        log "Claude CLI not found, skipping auth check"
+        return 0
+    fi
+
+    # Check if already authenticated
+    if claude auth status &> /dev/null; then
+        log "Claude Code is already authenticated"
+        return 0
+    fi
+
+    log "Claude Code is not authenticated"
+
+    # Check if we have a TTY for interactive login
+    if [ -t 0 ]; then
+        log "Starting Claude Code authentication (device code flow)..."
+        log "You'll get a URL and code to enter on any browser."
+        echo
+        claude auth login
+        return $?
+    else
+        log "WARNING: No TTY available for Claude auth. Run with -it flag."
+        return 1
+    fi
+}
+
 # Run main function
 main
+
+# Setup Claude auth after workspace is ready
+setup_claude_auth

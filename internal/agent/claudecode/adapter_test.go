@@ -66,36 +66,64 @@ func TestAdapter_BuildEnv(t *testing.T) {
 
 func TestAdapter_BuildCommand(t *testing.T) {
 	a := New()
-	session := &agent.Session{
-		Repository: "github.com/org/repo",
-		Tasks:      []string{"1", "2"},
-	}
 
-	cmd := a.BuildCommand(session, 1)
+	t.Run("non-interactive mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1", "2"},
+			Interactive: false,
+		}
 
-	if len(cmd) < 6 {
-		t.Fatalf("BuildCommand() returned %d args, want at least 6", len(cmd))
-	}
+		cmd := a.BuildCommand(session, 1)
 
-	if cmd[0] != "--print" {
-		t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--print")
-	}
+		if len(cmd) < 6 {
+			t.Fatalf("BuildCommand() returned %d args, want at least 6", len(cmd))
+		}
 
-	if cmd[1] != "--verbose" {
-		t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--verbose")
-	}
+		if cmd[0] != "--print" {
+			t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--print")
+		}
 
-	if cmd[2] != "--output-format" {
-		t.Errorf("BuildCommand()[2] = %q, want %q", cmd[2], "--output-format")
-	}
+		if cmd[1] != "--verbose" {
+			t.Errorf("BuildCommand()[1] = %q, want %q", cmd[1], "--verbose")
+		}
 
-	if cmd[3] != "stream-json" {
-		t.Errorf("BuildCommand()[3] = %q, want %q", cmd[3], "stream-json")
-	}
+		if cmd[2] != "--output-format" {
+			t.Errorf("BuildCommand()[2] = %q, want %q", cmd[2], "--output-format")
+		}
 
-	if cmd[4] != "--dangerously-skip-permissions" {
-		t.Errorf("BuildCommand()[4] = %q, want %q", cmd[4], "--dangerously-skip-permissions")
-	}
+		if cmd[3] != "stream-json" {
+			t.Errorf("BuildCommand()[3] = %q, want %q", cmd[3], "stream-json")
+		}
+
+		if cmd[4] != "--dangerously-skip-permissions" {
+			t.Errorf("BuildCommand()[4] = %q, want %q", cmd[4], "--dangerously-skip-permissions")
+		}
+	})
+
+	t.Run("interactive mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: true,
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		// Interactive mode should have --verbose but NOT --print or --dangerously-skip-permissions
+		if cmd[0] != "--verbose" {
+			t.Errorf("BuildCommand()[0] = %q, want %q", cmd[0], "--verbose")
+		}
+
+		for _, arg := range cmd {
+			if arg == "--print" {
+				t.Error("Interactive mode should not have --print flag")
+			}
+			if arg == "--dangerously-skip-permissions" {
+				t.Error("Interactive mode should not have --dangerously-skip-permissions flag")
+			}
+		}
+	})
 }
 
 func TestAdapter_BuildPrompt(t *testing.T) {
