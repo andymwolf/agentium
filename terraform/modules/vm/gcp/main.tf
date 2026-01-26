@@ -150,26 +150,53 @@ write_files:
   # Auth files use UID 1000 to match the agentium user in agent containers.
   # The 'agentium' user doesn't exist on the host (Container-Optimized OS),
   # so we use numeric UID/GID. Files are mounted read-only into containers.
-%{ if var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ~}
+%{if var.claude_auth_mode == "oauth" && var.claude_auth_json != ""~}
   - path: /etc/agentium/claude-auth.json
     permissions: '0600'
     owner: '1000:1000'
     encoding: b64
     content: ${var.claude_auth_json}
-%{ endif ~}
-%{ if var.codex_auth_json != "" ~}
+%{endif~}
+%{if var.codex_auth_json != ""~}
   - path: /etc/agentium/codex-auth.json
     permissions: '0600'
     owner: '1000:1000'
     encoding: b64
     content: ${var.codex_auth_json}
-%{ endif ~}
+%{endif~}
 
 runcmd:
   - |
-    # Pull and run controller
+    set -e  # Exit on first error
+
+    # Log startup progress to serial console for debugging
+    log() { echo "[agentium-startup] $(date -Iseconds) $*" | tee /dev/ttyS0 || true; }
+
+    log "Starting agentium controller setup"
+
+    # Create workspace directory
     mkdir -p /home/workspace
-    docker pull ${var.controller_image}
+    log "Created /home/workspace"
+
+    # Pull controller image with retry
+    log "Pulling controller image: ${var.controller_image}"
+    for i in 1 2 3; do
+      if docker pull ${var.controller_image}; then
+        log "Image pull successful"
+        break
+      fi
+      log "Image pull attempt $i failed, retrying in 5s..."
+      sleep 5
+    done
+
+    # Verify image was pulled
+    if ! docker image inspect ${var.controller_image} >/dev/null 2>&1; then
+      log "ERROR: Failed to pull controller image after 3 attempts"
+      exit 1
+    fi
+
+    # Run controller
+    log "Starting controller container"
     docker run --rm \
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v /etc/agentium:/etc/agentium:ro \
@@ -179,8 +206,11 @@ runcmd:
       -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
       -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
       -e AGENTIUM_WORKDIR=/home/workspace \
+      -e GOOGLE_CLOUD_PROJECT=${var.project_id} \
       --name agentium-controller \
       ${var.controller_image}
+
+    log "Controller exited"
 EOF
 }
 
