@@ -148,6 +148,19 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 	// Set Codex auth config
 	sessionConfig.CodexAuth.AuthJSONBase64 = codexAuthBase64
 
+	// Enable phase loop (PLAN → IMPLEMENT → REVIEW → PR workflow)
+	if cfg.PhaseLoop.Enabled {
+		sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
+			Enabled:                cfg.PhaseLoop.Enabled,
+			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+			ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
+			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+			JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
+			JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
+		}
+	}
+
 	// Handle --model (overrides default for all phases)
 	if model, _ := cmd.Flags().GetString("model"); model != "" {
 		spec := routing.ParseModelSpec(model)
