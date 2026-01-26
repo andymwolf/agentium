@@ -101,8 +101,13 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	// existing work detection, and appropriate instructions.
 	if session.ActiveTask != "" && session.Prompt != "" {
 		prompt := session.Prompt
-		if session.IterationContext != nil && session.IterationContext.MemoryContext != "" {
-			prompt += "\n\n" + session.IterationContext.MemoryContext
+		if session.IterationContext != nil {
+			// Prefer structured handoff input over accumulated memory context
+			if session.IterationContext.PhaseInput != "" {
+				prompt += "\n\n" + session.IterationContext.PhaseInput
+			} else if session.IterationContext.MemoryContext != "" {
+				prompt += "\n\n" + session.IterationContext.MemoryContext
+			}
 		}
 		return prompt
 	}

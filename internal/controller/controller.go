@@ -22,6 +22,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/codex"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
+	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
@@ -127,7 +128,10 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
+	Handoff struct {
+		Enabled bool `json:"enabled,omitempty"`
+	} `json:"handoff,omitempty"`
+	Routing *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
 }
@@ -210,6 +214,10 @@ type Controller struct {
 	activeTaskExistingWork *agent.ExistingWork    // Existing work detected for active task (issues only)
 	skillSelector          *skills.Selector       // Phase-aware skill selector (nil = legacy mode)
 	memoryStore            *memory.Store          // Persistent memory store (nil = disabled)
+	handoffStore           *handoff.Store         // Structured handoff store (nil = disabled)
+	handoffBuilder         *handoff.Builder       // Phase input builder (nil = disabled)
+	handoffParser          *handoff.Parser        // Handoff signal parser (nil = disabled)
+	handoffValidator       *handoff.Validator     // Handoff validation (nil = disabled)
 	modelRouter            *routing.Router        // Phase-to-model routing (nil = no routing)
 	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
 	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
@@ -694,6 +702,20 @@ func (c *Controller) loadPrompts() error {
 			c.logWarning("failed to load memory store: %v", err)
 		} else {
 			c.logInfo("Memory store initialized (%d entries)", len(c.memoryStore.Entries()))
+		}
+	}
+
+	// Initialize structured handoff store if enabled
+	if c.config.Handoff.Enabled {
+		store, err := handoff.NewStore(c.workDir)
+		if err != nil {
+			c.logWarning("failed to initialize handoff store: %v", err)
+		} else {
+			c.handoffStore = store
+			c.handoffBuilder = handoff.NewBuilder(store)
+			c.handoffParser = handoff.NewParser()
+			c.handoffValidator = handoff.NewValidator()
+			c.logInfo("Handoff store initialized")
 		}
 	}
 
@@ -1306,6 +1328,31 @@ func (c *Controller) isPhaseLoopEnabled() bool {
 	return c.config.PhaseLoop != nil && c.config.PhaseLoop.Enabled
 }
 
+// isHandoffEnabled returns true if structured handoff is configured and enabled.
+func (c *Controller) isHandoffEnabled() bool {
+	return c.config.Handoff.Enabled && c.handoffStore != nil
+}
+
+// buildIssueContext creates a handoff.IssueContext from the active issue details.
+func (c *Controller) buildIssueContext() *handoff.IssueContext {
+	if c.activeTask == "" || c.activeTaskType != "issue" {
+		return nil
+	}
+
+	// Find the issue in issueDetails
+	for _, issue := range c.issueDetails {
+		if fmt.Sprintf("%d", issue.Number) == c.activeTask {
+			return &handoff.IssueContext{
+				Number:     issue.Number,
+				Title:      issue.Title,
+				Body:       issue.Body,
+				Repository: c.config.Repository,
+			}
+		}
+	}
+	return nil
+}
+
 // determineActivePhase returns the current phase for the active task.
 // When no task state exists yet (first iteration), defaults are:
 // - "ANALYZE" for PR tasks (agent starts by reading review comments)
@@ -1358,9 +1405,27 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phase))
 	}
 
-	// Inject memory context if store is available
-	if c.memoryStore != nil {
-		// Build context scoped to the current task
+	// Inject structured handoff context if enabled
+	handoffInjected := false
+	if c.isHandoffEnabled() {
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		phase := handoff.Phase(c.determineActivePhase())
+		phaseInput, err := c.handoffBuilder.BuildMarkdownContext(taskID, phase)
+		if err != nil {
+			c.logWarning("Failed to build handoff context for phase %s: %v (falling back to memory)", phase, err)
+		} else if phaseInput != "" {
+			if session.IterationContext == nil {
+				session.IterationContext = &agent.IterationContext{}
+			}
+			session.IterationContext.PhaseInput = phaseInput
+			handoffInjected = true
+			c.logInfo("Injected handoff context for phase %s (%d chars)", phase, len(phaseInput))
+		}
+	}
+
+	// Inject memory context as fallback if handoff wasn't injected
+	// This ensures PR tasks and unsupported phases still get context
+	if c.memoryStore != nil && !handoffInjected {
 		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {

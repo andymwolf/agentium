@@ -28,3 +28,30 @@ Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 - Make focused, minimal changes that address the issue
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
+
+### Step 6: Completion
+
+When implementation is complete and tests pass, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "branch_name": "agentium/issue-<number>-<description>",
+  "commits": [
+    {"hash": "abc1234", "message": "Add feature X"},
+    {"hash": "def5678", "message": "Add tests for feature X"}
+  ],
+  "files_changed": ["path/to/file1.go", "path/to/file2.go"],
+  "tests_passed": true,
+  "test_output": "Summary of test results (optional)"
+}
+```
+
+Then emit the appropriate status signal:
+```
+AGENTIUM_STATUS: TESTS_PASSED
+```
+
+Or if tests fail:
+```
+AGENTIUM_STATUS: TESTS_FAILED <brief description of failure>
+```
