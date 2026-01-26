@@ -50,12 +50,36 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
+	// Mount Claude OAuth credentials
 	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
+		if c.config.Interactive {
+			// In local mode, write credentials to temp file and mount from there
+			authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
+			if err != nil {
+				c.logWarning("Failed to write Claude auth file: %v", err)
+			} else if authPath != "" {
+				args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
+			}
+		} else {
+			// In cloud mode, mount from VM path set up by provisioner
+			args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
+		}
 	}
 
+	// Mount Codex OAuth credentials
 	if c.config.CodexAuth.AuthJSONBase64 != "" {
-		args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
+		if c.config.Interactive {
+			// In local mode, write credentials to temp file and mount from there
+			authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
+			if err != nil {
+				c.logWarning("Failed to write Codex auth file: %v", err)
+			} else if authPath != "" {
+				args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
+			}
+		} else {
+			// In cloud mode, mount from VM path set up by provisioner
+			args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
+		}
 	}
 
 	args = append(args, params.Agent.ContainerImage())
