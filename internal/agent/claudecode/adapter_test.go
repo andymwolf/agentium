@@ -76,8 +76,10 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 		cmd := a.BuildCommand(session, 1)
 
-		if len(cmd) < 6 {
-			t.Fatalf("BuildCommand() returned %d args, want at least 6", len(cmd))
+		// Non-interactive mode: prompt is delivered via stdin, not as positional arg
+		// Should have exactly 5 args: --print, --verbose, --output-format, stream-json, --dangerously-skip-permissions
+		if len(cmd) != 5 {
+			t.Fatalf("BuildCommand() returned %d args, want 5", len(cmd))
 		}
 
 		if cmd[0] != "--print" {
@@ -737,4 +739,44 @@ func TestAdapter_Registration(t *testing.T) {
 	if a.Name() != "claude-code" {
 		t.Errorf("Registered agent Name() = %q, want %q", a.Name(), "claude-code")
 	}
+}
+
+func TestAdapter_GetStdinPrompt(t *testing.T) {
+	a := New()
+
+	t.Run("non-interactive mode returns prompt for stdin", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: false,
+		}
+
+		prompt := a.GetStdinPrompt(session, 1)
+
+		if prompt == "" {
+			t.Error("GetStdinPrompt() returned empty string for non-interactive mode")
+		}
+
+		if !strings.Contains(prompt, "github.com/org/repo") {
+			t.Errorf("GetStdinPrompt() missing repository in prompt: %q", prompt)
+		}
+	})
+
+	t.Run("interactive mode returns empty string", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: true,
+		}
+
+		prompt := a.GetStdinPrompt(session, 1)
+
+		if prompt != "" {
+			t.Errorf("GetStdinPrompt() = %q, want empty string for interactive mode", prompt)
+		}
+	})
+
+	t.Run("implements StdinPromptProvider interface", func(t *testing.T) {
+		var _ agent.StdinPromptProvider = a
+	})
 }

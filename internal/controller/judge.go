@@ -138,14 +138,21 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	env := activeAgent.BuildEnv(session, 0)
 	command := activeAgent.BuildCommand(session, 0)
 
+	// Check if agent supports stdin-based prompt delivery
+	stdinPrompt := ""
+	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
+		stdinPrompt = provider.GetStdinPrompt(session, 0)
+	}
+
 	c.logInfo("Running judge for phase %s (iteration %d/%d)", params.CompletedPhase, params.Iteration, params.MaxIterations)
 
 	result, err := c.runAgentContainer(ctx, containerRunParams{
-		Agent:   activeAgent,
-		Session: session,
-		Env:     env,
-		Command: command,
-		LogTag:  "Judge",
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         env,
+		Command:     command,
+		LogTag:      "Judge",
+		StdinPrompt: stdinPrompt,
 	})
 	if err != nil {
 		return JudgeResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)

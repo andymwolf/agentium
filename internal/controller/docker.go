@@ -16,11 +16,12 @@ import (
 
 // containerRunParams holds the parameters for running an agent container.
 type containerRunParams struct {
-	Agent   agent.Agent
-	Session *agent.Session
-	Env     map[string]string
-	Command []string
-	LogTag  string // Prefix for log messages (e.g. "Agent", "Delegated agent")
+	Agent       agent.Agent
+	Session     *agent.Session
+	Env         map[string]string
+	Command     []string
+	LogTag      string // Prefix for log messages (e.g. "Agent", "Delegated agent")
+	StdinPrompt string // Prompt to pipe via stdin (if non-empty)
 }
 
 // runAgentContainer executes a Docker container for the given agent and returns the parsed result.
@@ -44,6 +45,11 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		"run", "--rm",
 		"-v", fmt.Sprintf("%s:/workspace", c.workDir),
 		"-w", "/workspace",
+	}
+
+	// Add -i flag when piping stdin (keeps stdin open for prompt delivery)
+	if params.StdinPrompt != "" {
+		args = append(args, "-i")
 	}
 
 	for k, v := range params.Env {
@@ -86,6 +92,11 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	args = append(args, params.Command...)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
+
+	// Pipe prompt via stdin if provided (for non-interactive mode)
+	if params.StdinPrompt != "" {
+		cmd.Stdin = strings.NewReader(params.StdinPrompt)
+	}
 
 	stdoutBytes, stderrBytes, exitCode, err := c.executeAndCollect(cmd, params.LogTag)
 	if err != nil {
