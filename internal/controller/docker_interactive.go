@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,10 +82,13 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 
-	// Attach stdin/stdout/stderr to the terminal for interactive use
+	// Create buffers to capture output while still displaying to terminal
+	// This allows us to parse signals (AGENTIUM_STATUS, AGENTIUM_HANDOFF) for phase loop
+	var stdoutBuf, stderrBuf bytes.Buffer
+
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 
 	if c.config.Verbose {
 		c.logger.Printf("Running interactive agent: docker %s", strings.Join(args, " "))
@@ -92,21 +97,25 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	// Run the container and wait for completion
 	err := cmd.Run()
 
-	// Build a basic result based on exit code
-	result := &agent.IterationResult{
-		ExitCode: 0,
-		Success:  true,
-		Summary:  "Interactive session completed",
-	}
-
+	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-			result.Success = false
-			result.Error = fmt.Sprintf("agent exited with code %d", result.ExitCode)
-			result.Summary = fmt.Sprintf("Interactive session failed (exit code %d)", result.ExitCode)
+			exitCode = exitErr.ExitCode()
 		} else {
 			return nil, fmt.Errorf("%s failed to run: %w", params.LogTag, err)
+		}
+	}
+
+	// Parse the captured output using the adapter (same as non-interactive)
+	// This extracts AGENTIUM_STATUS, AGENTIUM_HANDOFF, and other signals for phase loop
+	result, parseErr := params.Agent.ParseOutput(exitCode, stdoutBuf.String(), stderrBuf.String())
+	if parseErr != nil {
+		c.logWarning("Failed to parse interactive output: %v", parseErr)
+		// Fall back to basic result
+		result = &agent.IterationResult{
+			ExitCode: exitCode,
+			Success:  exitCode == 0,
+			Summary:  "Interactive session completed",
 		}
 	}
 
