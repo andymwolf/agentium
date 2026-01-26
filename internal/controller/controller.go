@@ -751,8 +751,14 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 	// Parse repository URL
 	repo := c.config.Repository
 	if !strings.HasPrefix(repo, "https://") && !strings.HasPrefix(repo, "git@") {
-		// Handle owner/repo shorthand format (e.g., "andymwolf/agentium")
-		repo = "https://github.com/" + repo
+		// Handle various shorthand formats:
+		// - "owner/repo" -> "https://github.com/owner/repo"
+		// - "github.com/owner/repo" -> "https://github.com/owner/repo"
+		if strings.HasPrefix(repo, "github.com/") {
+			repo = "https://" + repo
+		} else {
+			repo = "https://github.com/" + repo
+		}
 	}
 
 	// Clone with token authentication
