@@ -25,7 +25,7 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
-	"github.com/andywolf/agentium/internal/skills"
+	"github.com/andywolf/agentium/prompts/skills"
 )
 
 const (
