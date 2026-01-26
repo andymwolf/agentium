@@ -140,6 +140,7 @@ func runLocalSession(cmd *cobra.Command, args []string) error {
 		MaxDuration:   cfg.Session.MaxDuration,
 		Prompt:        cfg.Session.Prompt,
 		Interactive:   true, // Enable interactive mode
+		Verbose:       viper.GetBool("verbose"),
 	}
 
 	// Set Claude auth config

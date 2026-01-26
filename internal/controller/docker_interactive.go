@@ -75,7 +75,9 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	c.logger.Printf("Running interactive agent: docker %s", strings.Join(args, " "))
+	if c.config.Verbose {
+		c.logger.Printf("Running interactive agent: docker %s", strings.Join(args, " "))
+	}
 
 	// Run the container and wait for completion
 	err := cmd.Run()
