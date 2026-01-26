@@ -21,3 +21,19 @@ After creating the PR:
 - Review the PR diff one more time
 - If you find issues, push additional commits to fix them
 - Update the PR description if needed
+
+### Step 9: Completion
+
+After the PR is successfully created, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "pr_number": 123,
+  "pr_url": "https://github.com/owner/repo/pull/123"
+}
+```
+
+Then emit:
+```
+AGENTIUM_STATUS: PR_CREATED
+```

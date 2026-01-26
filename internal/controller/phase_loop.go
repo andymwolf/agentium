@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
@@ -112,6 +113,15 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+	// Initialize handoff store with issue context if enabled
+	if c.isHandoffEnabled() {
+		issueCtx := c.buildIssueContext()
+		if issueCtx != nil {
+			c.handoffStore.SetIssueContext(taskID, issueCtx)
+			c.logInfo("Handoff store initialized with issue context for task %s", taskID)
+		}
+	}
+
 phaseLoop:
 	for {
 		// Check context cancellation
@@ -175,6 +185,13 @@ phaseLoop:
 			phaseOutput := result.RawTextContent
 			if phaseOutput == "" {
 				phaseOutput = result.Summary
+			}
+
+			// Parse and store handoff output if enabled
+			if c.isHandoffEnabled() && phaseOutput != "" {
+				if err := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); err != nil {
+					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, err)
+				}
 			}
 
 			// Post phase comment
@@ -326,6 +343,15 @@ phaseLoop:
 					}, c.iteration, taskID)
 				}
 
+				// Clear handoff data from PLAN onwards (need fresh plan after regression)
+				if c.isHandoffEnabled() {
+					c.handoffStore.ClearFromPhase(taskID, handoff.PhasePlan)
+					if err := c.handoffStore.Save(); err != nil {
+						c.logWarning("Failed to persist handoff store after regression: %v", err)
+					}
+					c.logInfo("Cleared handoff data from PLAN onwards due to regression")
+				}
+
 				// Reset to PLAN phase with fresh iterations
 				state.Phase = PhasePlan
 				state.PhaseIteration = 0
@@ -393,4 +419,49 @@ func truncateForComment(s string) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+// processHandoffOutput parses and stores structured handoff output from phase iteration.
+func (c *Controller) processHandoffOutput(taskID string, phase TaskPhase, iteration int, output string) error {
+	if c.handoffParser == nil || c.handoffStore == nil {
+		return nil
+	}
+
+	// Check if output contains a handoff signal
+	if !c.handoffParser.HasHandoffSignal(output) {
+		c.logInfo("Phase %s iteration %d: no handoff signal found", phase, iteration)
+		return nil
+	}
+
+	// Convert TaskPhase to handoff.Phase
+	handoffPhase := handoff.Phase(phase)
+
+	// Parse the handoff output
+	parsedOutput, err := c.handoffParser.ParseOutput(output, handoffPhase)
+	if err != nil {
+		return fmt.Errorf("failed to parse handoff output: %w", err)
+	}
+
+	// Validate the parsed output
+	if c.handoffValidator != nil {
+		errs := c.handoffValidator.ValidatePhaseOutput(handoffPhase, parsedOutput)
+		if errs.HasErrors() {
+			c.logWarning("Phase %s handoff validation warnings: %v", phase, errs)
+			// Continue despite validation warnings - don't fail the phase
+		}
+	}
+
+	// Store the handoff output
+	if err := c.handoffStore.StorePhaseOutput(taskID, handoffPhase, iteration, parsedOutput); err != nil {
+		return fmt.Errorf("failed to store handoff output: %w", err)
+	}
+
+	c.logInfo("Phase %s iteration %d: handoff output stored", phase, iteration)
+
+	// Save to disk
+	if err := c.handoffStore.Save(); err != nil {
+		c.logWarning("Failed to persist handoff store: %v", err)
+	}
+
+	return nil
 }

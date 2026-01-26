@@ -26,7 +26,24 @@ You are in the **DOCS** phase. Your job is to make MINIMAL documentation updates
 
 ### Completion
 
-When documentation is updated (or no updates needed), emit:
+When documentation is updated (or no updates needed), emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "docs_updated": ["README.md", "docs/api.md"],
+  "readme_changed": true
+}
+```
+
+If no documentation updates were needed:
+```
+AGENTIUM_HANDOFF: {
+  "docs_updated": [],
+  "readme_changed": false
+}
+```
+
+Then emit:
 ```
 AGENTIUM_STATUS: COMPLETE
 ```

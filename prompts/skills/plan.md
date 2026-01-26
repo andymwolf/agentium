@@ -38,8 +38,28 @@ Your plan should include:
 
 ### Completion
 
-When your plan is ready, emit:
+When your plan is ready, emit a structured handoff signal with your plan:
+
+```
+AGENTIUM_HANDOFF: {
+  "summary": "One-sentence description of what needs to be done",
+  "files_to_modify": ["path/to/file1.go", "path/to/file2.go"],
+  "files_to_create": ["path/to/new_file.go"],
+  "implementation_steps": [
+    {"order": 1, "description": "Step 1 description", "file": "path/to/file.go"},
+    {"order": 2, "description": "Step 2 description", "file": "path/to/file.go"}
+  ],
+  "testing_approach": "How the changes will be verified",
+  "complexity": "SIMPLE or COMPLEX"
+}
+```
+
+Then emit the status signal:
+```
+AGENTIUM_STATUS: COMPLETE
+```
+
+For backward compatibility, you may also emit:
 ```
 AGENTIUM_MEMORY: DECISION <one-line summary of your approach>
-AGENTIUM_STATUS: COMPLETE
 ```

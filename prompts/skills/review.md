@@ -27,7 +27,23 @@ You are in the **REVIEW** phase. Your job is to review the implementation that w
 
 ### Completion
 
-When the review is complete and all issues are fixed, emit:
+When the review is complete, emit a structured handoff signal:
+
+```
+AGENTIUM_HANDOFF: {
+  "issues_found": [
+    {"severity": "ERROR", "file": "path/to/file.go", "line": 42, "description": "Missing error handling", "suggestion": "Add error check"},
+    {"severity": "WARNING", "file": "path/to/file.go", "description": "Unused import"}
+  ],
+  "fixes_applied": ["Fixed error handling in file.go:42", "Removed unused import"],
+  "regression_needed": false,
+  "regression_reason": "Optional: reason if regression is needed"
+}
+```
+
+severity values: ERROR, WARNING, SUGGESTION
+
+Then emit the appropriate status signal:
 ```
 AGENTIUM_STATUS: COMPLETE
 ```

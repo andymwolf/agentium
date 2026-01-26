@@ -12,7 +12,8 @@ type ExistingWork struct {
 type IterationContext struct {
 	Phase         string // e.g., "IMPLEMENT", "TEST"
 	SkillsPrompt  string // Composed from phase-relevant skills
-	MemoryContext string // Summarized memory from previous iterations
+	MemoryContext string // Summarized memory from previous iterations (legacy mode)
+	PhaseInput    string // Structured handoff input for this phase (handoff mode)
 	ModelOverride string // Model ID to pass as --model flag to the agent CLI
 	Iteration     int    // Current iteration number
 	SubTaskID     string // Unique ID for delegation tracking
@@ -52,6 +53,7 @@ type IterationResult struct {
 	TokensUsed     int
 	Events         []interface{} `json:"-"` // Structured events (type-assert per adapter)
 	RawTextContent string        `json:"-"` // Aggregated text from structured output
+	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present
 }
 
 // Agent defines the interface that all agent adapters must implement
