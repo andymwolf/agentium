@@ -108,9 +108,15 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	// use it directly — it already contains repository context and instructions.
 	if session.ActiveTask != "" && session.Prompt != "" {
 		sb.WriteString(session.Prompt)
-		if session.IterationContext != nil && session.IterationContext.MemoryContext != "" {
-			sb.WriteString("\n\n")
-			sb.WriteString(session.IterationContext.MemoryContext)
+		if session.IterationContext != nil {
+			// Prefer structured handoff input over accumulated memory context
+			if session.IterationContext.PhaseInput != "" {
+				sb.WriteString("\n\n")
+				sb.WriteString(session.IterationContext.PhaseInput)
+			} else if session.IterationContext.MemoryContext != "" {
+				sb.WriteString("\n\n")
+				sb.WriteString(session.IterationContext.MemoryContext)
+			}
 		}
 		return sb.String()
 	}

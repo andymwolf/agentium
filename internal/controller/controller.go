@@ -1405,9 +1405,27 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phase))
 	}
 
-	// Inject memory context if store is available (legacy mode)
-	if c.memoryStore != nil && !c.isHandoffEnabled() {
-		// Build context scoped to the current task
+	// Inject structured handoff context if enabled
+	handoffInjected := false
+	if c.isHandoffEnabled() {
+		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		phase := handoff.Phase(c.determineActivePhase())
+		phaseInput, err := c.handoffBuilder.BuildMarkdownContext(taskID, phase)
+		if err != nil {
+			c.logWarning("Failed to build handoff context for phase %s: %v (falling back to memory)", phase, err)
+		} else if phaseInput != "" {
+			if session.IterationContext == nil {
+				session.IterationContext = &agent.IterationContext{}
+			}
+			session.IterationContext.PhaseInput = phaseInput
+			handoffInjected = true
+			c.logInfo("Injected handoff context for phase %s (%d chars)", phase, len(phaseInput))
+		}
+	}
+
+	// Inject memory context as fallback if handoff wasn't injected
+	// This ensures PR tasks and unsupported phases still get context
+	if c.memoryStore != nil && !handoffInjected {
 		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
@@ -1415,22 +1433,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 				session.IterationContext = &agent.IterationContext{}
 			}
 			session.IterationContext.MemoryContext = memCtx
-		}
-	}
-
-	// Inject structured handoff context if enabled (replaces memory context)
-	if c.isHandoffEnabled() {
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
-		phase := handoff.Phase(c.determineActivePhase())
-		phaseInput, err := c.handoffBuilder.BuildMarkdownContext(taskID, phase)
-		if err != nil {
-			c.logWarning("Failed to build handoff context for phase %s: %v", phase, err)
-		} else if phaseInput != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
-			session.IterationContext.PhaseInput = phaseInput
-			c.logInfo("Injected handoff context for phase %s (%d chars)", phase, len(phaseInput))
 		}
 	}
 
