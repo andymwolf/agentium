@@ -48,7 +48,6 @@ type Config struct {
 	Controller ControllerConfig     `mapstructure:"controller"`
 	Claude     ClaudeConfig         `mapstructure:"claude"`
 	Codex      CodexConfig          `mapstructure:"codex"`
-	Prompts    PromptsConfig        `mapstructure:"prompts"`
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
 	Delegation DelegationConfigYAML `mapstructure:"delegation"`
 	PhaseLoop  PhaseLoopConfig      `mapstructure:"phase_loop"`
@@ -58,12 +57,6 @@ type Config struct {
 type ClaudeConfig struct {
 	AuthMode     string `mapstructure:"auth_mode"`      // "api" (default) or "oauth"
 	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json
-}
-
-// PromptsConfig contains settings for system and project prompt loading
-type PromptsConfig struct {
-	SystemMDURL  string `mapstructure:"system_md_url"` // URL to fetch SYSTEM.md (overrides default)
-	FetchTimeout string `mapstructure:"fetch_timeout"` // Timeout for fetching remote prompts (default: 5s)
 }
 
 // ProjectConfig contains project-level settings

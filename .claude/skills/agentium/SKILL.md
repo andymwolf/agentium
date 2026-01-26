@@ -165,11 +165,6 @@ delegation:
         adapter: claude-code
         model: claude-sonnet-4-20250514
       skills: [testing]
-
-# Prompt overrides
-prompts:
-  system_md_url: ""                # URL to fetch custom SYSTEM.md
-  fetch_timeout: 5s
 ```
 
 ## Phase Routing

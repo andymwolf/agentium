@@ -64,11 +64,6 @@ controller:
   image: "ghcr.io/andymwolf/agentium-controller:latest"
                                     # Controller container image
 
-# Prompts configuration
-prompts:
-  system_md_url: ""                 # Override URL for SYSTEM.md prompt
-  fetch_timeout: "5s"               # Timeout for fetching remote prompts
-
 # Phase loop (controller-as-judge)
 phase_loop:
   enabled: true                     # Enable evaluator-driven phase loop
@@ -183,13 +178,6 @@ codex:
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `image` | string | No | `ghcr.io/andymwolf/agentium-controller:latest` | Session controller container image |
-
-### prompts
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `system_md_url` | string | No | Auto-fetched from repo | Override URL for the SYSTEM.md agent prompt |
-| `fetch_timeout` | string | No | `5s` | Timeout for fetching remote prompt files |
 
 ### routing
 
