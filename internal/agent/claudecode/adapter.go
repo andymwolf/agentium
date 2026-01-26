@@ -62,8 +62,6 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 
 // BuildCommand constructs the command to run Claude Code
 func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
-	prompt := a.BuildPrompt(session, iteration)
-
 	var args []string
 	if session.Interactive {
 		// Interactive mode: run without --print to show TUI for permission approvals
@@ -99,8 +97,23 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = append(args, "--model", session.IterationContext.ModelOverride)
 	}
 
-	args = append(args, prompt)
+	// In interactive mode, append prompt as positional argument.
+	// In non-interactive mode, prompt is delivered via stdin (see GetStdinPrompt).
+	if session.Interactive {
+		prompt := a.BuildPrompt(session, iteration)
+		args = append(args, prompt)
+	}
 	return args
+}
+
+// GetStdinPrompt implements StdinPromptProvider for stdin-based prompt delivery.
+// In non-interactive mode with --print, the prompt is piped via stdin to avoid
+// TTY-related issues that can cause the CLI to exit without processing the prompt.
+func (a *Adapter) GetStdinPrompt(session *agent.Session, iteration int) string {
+	if session.Interactive {
+		return "" // Interactive mode uses positional arg
+	}
+	return a.BuildPrompt(session, iteration)
 }
 
 // BuildPrompt constructs the prompt for Claude Code

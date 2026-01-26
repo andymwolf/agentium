@@ -78,14 +78,21 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	env := activeAgent.BuildEnv(session, 0)
 	command := activeAgent.BuildCommand(session, 0)
 
+	// Check if agent supports stdin-based prompt delivery
+	stdinPrompt := ""
+	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
+		stdinPrompt = provider.GetStdinPrompt(session, 0)
+	}
+
 	c.logInfo("Running reviewer for phase %s (iteration %d/%d)", params.CompletedPhase, params.Iteration, params.MaxIterations)
 
 	result, err := c.runAgentContainer(ctx, containerRunParams{
-		Agent:   activeAgent,
-		Session: session,
-		Env:     env,
-		Command: command,
-		LogTag:  "Reviewer",
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         env,
+		Command:     command,
+		LogTag:      "Reviewer",
+		StdinPrompt: stdinPrompt,
 	})
 	if err != nil {
 		return ReviewResult{}, fmt.Errorf("reviewer failed: %w", err)

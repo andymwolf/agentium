@@ -1487,12 +1487,21 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
 
+	// Check if agent supports stdin-based prompt delivery (for non-interactive mode)
+	stdinPrompt := ""
+	if !c.config.Interactive {
+		if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
+			stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+		}
+	}
+
 	params := containerRunParams{
-		Agent:   activeAgent,
-		Session: session,
-		Env:     env,
-		Command: command,
-		LogTag:  "Agent",
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         env,
+		Command:     command,
+		LogTag:      "Agent",
+		StdinPrompt: stdinPrompt,
 	}
 
 	// Use interactive Docker execution in local mode

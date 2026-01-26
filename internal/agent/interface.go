@@ -80,3 +80,13 @@ type Agent interface {
 	// Validate checks if the agent configuration is valid
 	Validate() error
 }
+
+// StdinPromptProvider is an optional interface for agents that need stdin-based prompt delivery.
+// Agents can implement this to provide the prompt via stdin rather than command-line args.
+// This is useful for non-interactive mode with --print flag where TTY issues may prevent
+// prompt delivery via positional arguments.
+type StdinPromptProvider interface {
+	// GetStdinPrompt returns the prompt to pipe via stdin.
+	// Returns empty string if prompt should be passed via command-line args.
+	GetStdinPrompt(session *Session, iteration int) string
+}

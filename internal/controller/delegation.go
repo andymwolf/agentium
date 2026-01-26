@@ -79,11 +79,18 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 	env := activeAgent.BuildEnv(session, c.iteration)
 	command := activeAgent.BuildCommand(session, c.iteration)
 
+	// Check if agent supports stdin-based prompt delivery
+	stdinPrompt := ""
+	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
+		stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+	}
+
 	return c.runAgentContainer(ctx, containerRunParams{
-		Agent:   activeAgent,
-		Session: session,
-		Env:     env,
-		Command: command,
-		LogTag:  "Delegated agent",
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         env,
+		Command:     command,
+		LogTag:      "Delegated agent",
+		StdinPrompt: stdinPrompt,
 	})
 }
