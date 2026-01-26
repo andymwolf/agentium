@@ -246,15 +246,17 @@ agentium destroy agentium-abc12345 --force
 
 ### Local interactive mode (debugging)
 
-Run the controller locally without provisioning a VM. The agent runs in interactive mode, prompting for permission approvals so you can watch and interact with execution:
+Run the controller locally without provisioning a VM. The agent runs in interactive mode, prompting for permission approvals so you can watch and interact with execution.
+
+**IMPORTANT:** Local mode requires a TTY for interactive permission prompts. When the user asks to run locally, **do NOT execute the command directly**. Instead, output a copyable bash command for them to run in Terminal:
 
 ```bash
-export GITHUB_TOKEN=<your-github-token>
-agentium run --local --repo github.com/org/repo --issues 42
+GITHUB_TOKEN=$(gh auth token) ./agentium run --local --repo github.com/org/repo --issues 42 --max-iterations 1
 ```
 
 **Requirements:**
-- `GITHUB_TOKEN` environment variable must be set (GitHub App not required)
+- Must be run in a real terminal (not from within Claude Code)
+- `gh` CLI must be authenticated (`gh auth status`)
 - Docker must be installed and running
 
 This is useful for:
@@ -280,3 +282,9 @@ When the user invokes `/agentium`, follow these rules:
 6. **Use dry-run for uncertainty**: If the user seems unsure or is exploring, suggest `--dry-run` first.
 
 7. **Show next steps**: After running a command, suggest relevant follow-up commands (e.g., after `run`, suggest `status` and `logs`).
+
+8. **Local mode - output command only**: When the user wants to run with `--local`, **do NOT execute the command**. Instead, output a copyable bash command for them to run in Terminal. Local mode requires a TTY for interactive permission prompts which isn't available when running from within Claude Code. Format:
+   ```bash
+   GITHUB_TOKEN=$(gh auth token) ./agentium run --local --repo <repo> --issues <issues> --max-iterations 1
+   ```
+   Adjust `--issues`/`--prs` and other flags as needed based on what the user requested.
