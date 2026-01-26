@@ -123,6 +123,11 @@ main() {
         fi
     fi
 
+    # Configure git to use gh for authentication
+    # This ensures git push/pull/fetch work with GitHub without additional auth prompts
+    log "Configuring git credential helper to use gh..."
+    git config --global credential.helper "!gh auth git-credential"
+
     # Clone the repository
     if ! clone_repository; then
         exit 1
