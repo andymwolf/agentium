@@ -132,9 +132,10 @@ type SessionConfig struct {
 	Handoff struct {
 		Enabled bool `json:"enabled,omitempty"`
 	} `json:"handoff,omitempty"`
-	Routing *routing.PhaseRouting `json:"routing,omitempty"`
+	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
+	Verbose    bool                  `json:"verbose,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
