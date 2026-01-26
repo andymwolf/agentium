@@ -72,12 +72,17 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		model = session.IterationContext.ModelOverride
 	}
 
-	return []string{
+	args := []string{
 		"--model", model,
-		"--yes-always",
+	}
+	if !session.Interactive {
+		args = append(args, "--yes-always")
+	}
+	args = append(args,
 		"--no-git",
 		"--message", prompt,
-	}
+	)
+	return args
 }
 
 // BuildPrompt constructs the prompt for Aider

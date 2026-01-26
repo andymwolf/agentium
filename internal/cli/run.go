@@ -51,6 +51,7 @@ func init() {
 	runCmd.Flags().String("claude-auth-mode", "", "Claude auth mode: api (default) or oauth")
 	runCmd.Flags().String("model", "", "Override model for all phases (format: adapter:model)")
 	runCmd.Flags().StringSlice("phase-model", nil, "Per-phase model override (format: PHASE=adapter:model)")
+	runCmd.Flags().Bool("local", false, "Run locally for interactive debugging (no VM provisioning)")
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -64,6 +65,12 @@ func init() {
 }
 
 func runSession(cmd *cobra.Command, args []string) error {
+	// Check if --local flag is set
+	local, _ := cmd.Flags().GetBool("local")
+	if local {
+		return runLocalSession(cmd, args)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -71,10 +71,14 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	args := []string{
 		"exec",
 		"--json",
-		"--yolo",
+	}
+	if !session.Interactive {
+		args = append(args, "--yolo")
+	}
+	args = append(args,
 		"--skip-git-repo-check",
 		"--cd", "/workspace",
-	}
+	)
 
 	// Model override: prefer IterationContext, then metadata
 	model := ""

@@ -92,6 +92,7 @@ agentium run [flags]
 | `--phase-model` | string | - | Per-phase model override (repeatable, format: `PHASE=adapter:model`) |
 | `--claude-auth-mode` | string | `api` | Claude authentication: `api`, `oauth` |
 | `--dry-run` | bool | `false` | Show what would be provisioned without creating resources |
+| `--local` | bool | `false` | Run locally for interactive debugging (no VM provisioning) |
 
 **Examples:**
 
@@ -127,7 +128,22 @@ agentium run --repo github.com/org/repo --issues 42,43 --max-iterations 100 --ma
 
 # Preview without provisioning
 agentium run --repo github.com/org/repo --issues 42 --dry-run
+
+# Run locally for interactive debugging (no VM)
+export GITHUB_TOKEN=<your-token>
+agentium run --local --repo github.com/org/repo --issues 42
 ```
+
+**Local Mode:**
+
+The `--local` flag runs the controller directly on your machine instead of provisioning a cloud VM. The agent runs in interactive mode, prompting for permission approvals so you can watch and interact with execution in real-time.
+
+Requirements:
+- `GITHUB_TOKEN` environment variable must be set
+- Docker must be installed and running
+- No GitHub App configuration required
+
+This is useful for debugging agent behavior, testing prompt changes, and watching tool calls in real-time.
 
 **Output:**
 

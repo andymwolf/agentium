@@ -60,6 +60,7 @@ Every phase iteration and evaluator verdict is posted as a comment on the GitHub
 - **Memory System** — Persistent memory carries context (key facts, decisions, evaluator feedback) between phase iterations
 - **Model Routing** — Assign different models to different phases (e.g., Opus for planning, Haiku for implementation)
 - **Language Runtime Auto-Detection** — Automatically installs Go, Rust, Java, Ruby, or .NET runtimes based on project type
+- **Local Interactive Mode** — Run locally with `--local` flag for debugging; agent prompts for permission approvals
 
 ## Safety and Security
 
@@ -169,6 +170,17 @@ agentium status agentium-abc12345 --watch    # Real-time status
 agentium logs agentium-abc12345 --follow     # Stream logs
 agentium destroy agentium-abc12345           # Terminate a session
 ```
+
+### Local Debugging
+
+Run locally without provisioning a VM (useful for debugging):
+
+```bash
+export GITHUB_TOKEN=<your-token>
+agentium run --local --repo your-org/your-repo --issues 42
+```
+
+The agent runs interactively, prompting for permission approvals so you can watch and interact with execution.
 
 ## Documentation
 
@@ -318,12 +330,13 @@ Based on open issues, here's what's planned:
 | `--repo` | Target GitHub repository | From config |
 | `--issues` | Issue numbers (comma-separated) | - |
 | `--prs` | PR numbers for review sessions | - |
-| `--agent` | Agent to use (`claude-code`, `aider`) | `claude-code` |
+| `--agent` | Agent to use (`claude-code`, `aider`, `codex`) | `claude-code` |
 | `--max-iterations` | Maximum iteration count | 30 |
 | `--max-duration` | Session timeout | 2h |
 | `--provider` | Cloud provider | From config |
 | `--region` | Cloud region | From config |
 | `--dry-run` | Preview without creating resources | false |
+| `--local` | Run locally for interactive debugging | false |
 | `--prompt` | Custom prompt for agent | - |
 
 ## Development

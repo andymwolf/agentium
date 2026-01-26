@@ -68,7 +68,9 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		"--print",
 		"--verbose",
 		"--output-format", "stream-json",
-		"--dangerously-skip-permissions",
+	}
+	if !session.Interactive {
+		args = append(args, "--dangerously-skip-permissions")
 	}
 
 	// Prefer phase-aware skills prompt over monolithic system prompt

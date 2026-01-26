@@ -108,6 +108,7 @@ type SessionConfig struct {
 	MaxIterations int      `json:"max_iterations"`
 	MaxDuration   string   `json:"max_duration"`
 	Prompt        string   `json:"prompt"`
+	Interactive   bool     `json:"interactive,omitempty"` // Local interactive mode (no cloud clients)
 	GitHub        struct {
 		AppID            int64  `json:"app_id"`
 		InstallationID   int64  `json:"installation_id"`
@@ -248,38 +249,43 @@ func New(config SessionConfig) (*Controller, error) {
 		maxDuration = 2 * time.Hour
 	}
 
-	// Initialize Secret Manager client
-	secretManager, err := gcp.NewSecretManagerClient(context.Background())
-	if err != nil {
-		// Log warning but don't fail - allow fallback to gcloud CLI
-		log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
-	}
-
 	workDir := os.Getenv("AGENTIUM_WORKDIR")
 	if workDir == "" {
 		workDir = "/workspace"
 	}
 
-	// Initialize Cloud Logging (non-fatal if unavailable)
+	// In interactive mode, skip cloud client initialization
+	var secretManager gcp.SecretFetcher
 	var cloudLogger *gcp.CloudLogger
-	cloudLoggerInstance, err := gcp.NewCloudLogger(context.Background(), gcp.CloudLoggerConfig{
-		SessionID:  config.ID,
-		Repository: config.Repository,
-	})
-	if err != nil {
-		log.Printf("[controller] Warning: Cloud Logging unavailable, using local logs only: %v", err)
-	} else {
-		cloudLogger = cloudLoggerInstance
-	}
-
-	// Initialize metadata updater (only on GCP instances)
 	var metadataUpdater gcp.MetadataUpdater
-	if gcp.IsRunningOnGCP() {
-		metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
+
+	if !config.Interactive {
+		// Initialize Secret Manager client
+		secretManager, err = gcp.NewSecretManagerClient(context.Background())
 		if err != nil {
-			log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
+			// Log warning but don't fail - allow fallback to gcloud CLI
+			log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
+		}
+
+		// Initialize Cloud Logging (non-fatal if unavailable)
+		cloudLoggerInstance, err := gcp.NewCloudLogger(context.Background(), gcp.CloudLoggerConfig{
+			SessionID:  config.ID,
+			Repository: config.Repository,
+		})
+		if err != nil {
+			log.Printf("[controller] Warning: Cloud Logging unavailable, using local logs only: %v", err)
 		} else {
-			metadataUpdater = metadataUpdaterInstance
+			cloudLogger = cloudLoggerInstance
+		}
+
+		// Initialize metadata updater (only on GCP instances)
+		if gcp.IsRunningOnGCP() {
+			metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
+			if err != nil {
+				log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
+			} else {
+				metadataUpdater = metadataUpdaterInstance
+			}
 		}
 	}
 
@@ -586,10 +592,15 @@ func (c *Controller) initializeWorkspace(ctx context.Context) error {
 func (c *Controller) fetchGitHubToken(ctx context.Context) error {
 	c.logInfo("Fetching GitHub token")
 
-	// Try to get token from environment first (for local testing)
+	// Try to get token from environment first (for local testing or interactive mode)
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		c.gitHubToken = token
 		return nil
+	}
+
+	// In interactive mode, GITHUB_TOKEN is required from environment
+	if c.config.Interactive {
+		return fmt.Errorf("GITHUB_TOKEN environment variable is required for local interactive mode")
 	}
 
 	// Fetch from cloud secret manager
@@ -1393,6 +1404,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		ProjectPrompt:  c.projectPrompt,
 		ActiveTask:     c.activeTask,
 		ExistingWork:   c.activeTaskExistingWork,
+		Interactive:    c.config.Interactive,
 	}
 
 	// Compose phase-aware skills if selector is available
@@ -1463,13 +1475,20 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
 
-	return c.runAgentContainer(ctx, containerRunParams{
+	params := containerRunParams{
 		Agent:   activeAgent,
 		Session: session,
 		Env:     env,
 		Command: command,
 		LogTag:  "Agent",
-	})
+	}
+
+	// Use interactive Docker execution in local mode
+	if c.config.Interactive {
+		return c.runAgentContainerInteractive(ctx, params)
+	}
+
+	return c.runAgentContainer(ctx, params)
 }
 
 func (c *Controller) emitFinalLogs() {
@@ -1656,6 +1675,12 @@ func (c *Controller) execCommand(ctx context.Context, name string, args ...strin
 }
 
 func (c *Controller) terminateVM() {
+	// Skip VM termination in interactive mode (no VM to terminate)
+	if c.config.Interactive {
+		c.logger.Println("Skipping VM termination (interactive mode)")
+		return
+	}
+
 	c.logger.Println("Initiating VM termination")
 
 	ctx, cancel := context.WithTimeout(context.Background(), VMTerminationTimeout)
