@@ -45,7 +45,7 @@ func TestLoadManifest_Phases(t *testing.T) {
 		name       string
 		wantPhases []string
 	}{
-		{"safety", nil},
+		{"safety", []string{"PLAN", "IMPLEMENT", "REVIEW", "DOCS", "PR_CREATION", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW"}},
 		{"environment", nil},
 		{"status_signals", nil},
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
