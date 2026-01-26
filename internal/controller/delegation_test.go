@@ -5,7 +5,7 @@ import (
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/routing"
-	"github.com/andywolf/agentium/internal/skills"
+	"github.com/andywolf/agentium/prompts/skills"
 )
 
 func TestDelegation_AdapterSelection_Default(t *testing.T) {

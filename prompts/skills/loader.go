@@ -1,21 +1,5 @@
 package skills
 
-//go:generate cp ../../prompts/skills/manifest.yaml manifest.yaml
-//go:generate cp ../../prompts/skills/safety.md safety.md
-//go:generate cp ../../prompts/skills/environment.md environment.md
-//go:generate cp ../../prompts/skills/status_signals.md status_signals.md
-//go:generate cp ../../prompts/skills/planning.md planning.md
-//go:generate cp ../../prompts/skills/plan.md plan.md
-//go:generate cp ../../prompts/skills/implement.md implement.md
-//go:generate cp ../../prompts/skills/test.md test.md
-//go:generate cp ../../prompts/skills/pr_creation.md pr_creation.md
-//go:generate cp ../../prompts/skills/review.md review.md
-//go:generate cp ../../prompts/skills/docs.md docs.md
-//go:generate cp ../../prompts/skills/pr_review.md pr_review.md
-//go:generate cp ../../prompts/skills/plan_reviewer.md plan_reviewer.md
-//go:generate cp ../../prompts/skills/code_reviewer.md code_reviewer.md
-//go:generate cp ../../prompts/skills/judge.md judge.md
-
 import (
 	_ "embed"
 	"fmt"
