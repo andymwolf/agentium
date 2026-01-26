@@ -304,6 +304,36 @@ func runSession(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// tryAutoDetectOAuth attempts to find OAuth credentials from Keychain (macOS)
+// Returns nil if no credentials found (allows fallback to interactive auth)
+func tryAutoDetectOAuth() []byte {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+
+	data, err := readAuthFromKeychain()
+	if err != nil {
+		return nil // Not an error - just means no cached credentials
+	}
+
+	return data
+}
+
+// tryAutoDetectCodexOAuth attempts to find Codex OAuth credentials from Keychain (macOS)
+// Returns nil if no credentials found (allows fallback to interactive auth)
+func tryAutoDetectCodexOAuth() []byte {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+
+	data, err := readCodexAuthFromKeychain()
+	if err != nil {
+		return nil // Not an error - just means no cached credentials
+	}
+
+	return data
+}
+
 // readAuthJSON reads Claude OAuth credentials from file or macOS Keychain
 func readAuthJSON(path string) ([]byte, error) {
 	// Expand ~ to home directory

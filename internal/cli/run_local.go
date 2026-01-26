@@ -106,7 +106,16 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 
 	// Handle Claude OAuth authentication
 	var claudeAuthBase64 string
-	if cfg.Claude.AuthMode == "oauth" {
+	if cfg.Claude.AuthMode == "" {
+		// Auto-detect OAuth credentials if auth mode not explicitly set
+		if autoAuth := tryAutoDetectOAuth(); autoAuth != nil {
+			claudeAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
+			fmt.Println("Auto-detected Claude OAuth credentials from macOS Keychain")
+		} else {
+			fmt.Println("No OAuth credentials found - will use interactive browser auth in container")
+		}
+	} else if cfg.Claude.AuthMode == "oauth" {
+		// Explicit oauth mode - error if credentials not found
 		var authJSON []byte
 		authJSON, err = readAuthJSON(cfg.Claude.AuthJSONPath)
 		if err != nil {
@@ -119,13 +128,13 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Handle Codex OAuth authentication
 	var codexAuthBase64 string
 	if cfg.Session.Agent == "codex" {
-		var authJSON []byte
-		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
-		if err != nil {
-			return fmt.Errorf("failed to read Codex auth.json: %w", err)
+		// Try auto-detect from Keychain first
+		if autoAuth := tryAutoDetectCodexOAuth(); autoAuth != nil {
+			codexAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
+			fmt.Println("Auto-detected Codex OAuth credentials from macOS Keychain")
+		} else {
+			fmt.Println("No Codex OAuth credentials found - will use interactive auth in container")
 		}
-		codexAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
-		fmt.Println("Using Codex OAuth authentication")
 	}
 
 	// Build controller session config
