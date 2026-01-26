@@ -118,11 +118,19 @@ resource "google_project_iam_member" "logging_writer" {
   member  = "serviceAccount:${google_service_account.agentium.email}"
 }
 
-# Grant compute instance admin (for self-deletion)
+# Grant compute instance admin (for self-deletion only)
+# The IAM condition restricts this role to the session's own VM instance,
+# preventing the service account from modifying or deleting other instances.
 resource "google_project_iam_member" "compute_admin" {
   project = var.project_id
   role    = "roles/compute.instanceAdmin.v1"
   member  = "serviceAccount:${google_service_account.agentium.email}"
+
+  condition {
+    title       = "self-deletion-only"
+    description = "Restrict instance admin to this session's VM only"
+    expression  = "resource.name == 'projects/${var.project_id}/zones/${local.zone}/instances/${var.session_id}'"
+  }
 }
 
 # Cloud-init script
@@ -133,19 +141,26 @@ locals {
   cloud_init = <<-EOF
 #cloud-config
 write_files:
+  # Session config is read by controller (runs as root)
   - path: /etc/agentium/session.json
     permissions: '0600'
+    owner: 'root:root'
     content: |
       ${var.session_config}
+  # Auth files use UID 1000 to match the agentium user in agent containers.
+  # The 'agentium' user doesn't exist on the host (Container-Optimized OS),
+  # so we use numeric UID/GID. Files are mounted read-only into containers.
 %{ if var.claude_auth_mode == "oauth" && var.claude_auth_json != "" ~}
   - path: /etc/agentium/claude-auth.json
-    permissions: '0644'
+    permissions: '0600'
+    owner: '1000:1000'
     encoding: b64
     content: ${var.claude_auth_json}
 %{ endif ~}
 %{ if var.codex_auth_json != "" ~}
   - path: /etc/agentium/codex-auth.json
     permissions: '0600'
+    owner: '1000:1000'
     encoding: b64
     content: ${var.codex_auth_json}
 %{ endif ~}
@@ -194,7 +209,10 @@ resource "google_compute_instance" "agentium" {
   }
 
   service_account {
-    email  = google_service_account.agentium.email
+    email = google_service_account.agentium.email
+    # cloud-platform scope is required because Secret Manager has no specific OAuth scope.
+    # Access control is enforced via IAM roles (secretmanager.secretAccessor, logging.logWriter,
+    # compute.instanceAdmin.v1 with self-deletion condition) rather than OAuth scopes.
     scopes = ["cloud-platform"]
   }
 

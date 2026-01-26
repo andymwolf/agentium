@@ -735,13 +735,18 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 	}
 
 	// Clone with token authentication
-	cloneURL := repo
+	// SECURITY: Avoid embedding tokens in URLs as they can leak in error messages and logs.
+	// Instead, use git credential helper via http.extraHeader config option.
+	var cmd *exec.Cmd
 	if c.gitHubToken != "" && strings.HasPrefix(repo, "https://") {
-		// Insert token for authentication
-		cloneURL = strings.Replace(repo, "https://", fmt.Sprintf("https://x-access-token:%s@", c.gitHubToken), 1)
+		// Use http.extraHeader to pass token without embedding in URL
+		authHeader := fmt.Sprintf("Authorization: Bearer %s", c.gitHubToken)
+		cmd = exec.CommandContext(ctx, "git",
+			"-c", fmt.Sprintf("http.extraHeader=%s", authHeader),
+			"clone", repo, c.workDir)
+	} else {
+		cmd = exec.CommandContext(ctx, "git", "clone", repo, c.workDir)
 	}
-
-	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, c.workDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -757,7 +762,8 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 			}
 			return nil
 		}
-		return err
+		// Sanitize error to ensure no tokens leak in error messages
+		return sanitizeGitError(err, c.gitHubToken)
 	}
 
 	// Fix ownership after clone so agent containers can access (only when running as root)
@@ -768,6 +774,20 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// sanitizeGitError removes sensitive tokens from error messages to prevent credential leaks.
+// This is a defense-in-depth measure for cases where tokens might appear in git error output.
+func sanitizeGitError(err error, token string) error {
+	if err == nil || token == "" {
+		return err
+	}
+	msg := err.Error()
+	if strings.Contains(msg, token) {
+		msg = strings.ReplaceAll(msg, token, "[REDACTED]")
+		return fmt.Errorf("%s", msg)
+	}
+	return err
 }
 
 // ensureWorkspaceOwnership recursively changes ownership of the workspace
