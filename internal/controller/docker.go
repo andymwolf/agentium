@@ -47,6 +47,11 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		"-w", "/workspace",
 	}
 
+	// Add -i flag when piping stdin (keeps stdin open for prompt delivery)
+	if params.StdinPrompt != "" {
+		args = append(args, "-i")
+	}
+
 	for k, v := range params.Env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
