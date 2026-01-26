@@ -128,18 +128,12 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Handle Codex OAuth authentication
 	var codexAuthBase64 string
 	if cfg.Session.Agent == "codex" {
-		// Try auto-detect first, then fall back to explicit path
+		// Try auto-detect from Keychain first
 		if autoAuth := tryAutoDetectCodexOAuth(); autoAuth != nil {
 			codexAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
 			fmt.Println("Auto-detected Codex OAuth credentials from macOS Keychain")
 		} else {
-			var authJSON []byte
-			authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
-			if err != nil {
-				return fmt.Errorf("failed to read Codex auth.json: %w", err)
-			}
-			codexAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
-			fmt.Println("Using Codex OAuth authentication from file")
+			fmt.Println("No Codex OAuth credentials found - will use interactive auth in container")
 		}
 	}
 
