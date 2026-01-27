@@ -65,6 +65,58 @@ func defaultMaxIter(phase TaskPhase) int {
 	}
 }
 
+// existingPlanIndicators are strings that indicate an issue already contains
+// a complete implementation plan. When any of these are found in the issue body,
+// the PLAN phase agent iteration can be skipped.
+var existingPlanIndicators = []string{
+	"Files to Create/Modify",
+	"Files to Modify",
+	"Implementation Steps",
+	"## Implementation Plan",
+}
+
+// hasExistingPlan checks if the active issue body contains indicators
+// of a pre-existing implementation plan.
+func (c *Controller) hasExistingPlan() bool {
+	issueBody := c.getActiveIssueBody()
+	if issueBody == "" {
+		return false
+	}
+	for _, indicator := range existingPlanIndicators {
+		if strings.Contains(issueBody, indicator) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractExistingPlan returns the issue body as the plan content if
+// an existing plan is detected, otherwise returns an empty string.
+func (c *Controller) extractExistingPlan() string {
+	if !c.hasExistingPlan() {
+		return ""
+	}
+	return c.getActiveIssueBody()
+}
+
+// getActiveIssueBody returns the body of the currently active issue.
+func (c *Controller) getActiveIssueBody() string {
+	for _, issue := range c.issueDetails {
+		if fmt.Sprintf("%d", issue.Number) == c.activeTask {
+			return issue.Body
+		}
+	}
+	return ""
+}
+
+// isPlanSkipEnabled returns true if plan skipping is configured and enabled.
+func (c *Controller) isPlanSkipEnabled() bool {
+	if c.config.PhaseLoop == nil {
+		return false
+	}
+	return c.config.PhaseLoop.Enabled && c.config.PhaseLoop.SkipPlanIfExists
+}
+
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
 func advancePhase(current TaskPhase) TaskPhase {
@@ -152,21 +204,35 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Update the phase in state so skills/routing pick it up
 			state.Phase = currentPhase
 
-			// Run an agent iteration for this phase
-			c.iteration++
-			if c.cloudLogger != nil {
-				c.cloudLogger.SetIteration(c.iteration)
+			// Check for pre-existing plan (PLAN phase, iteration 1 only)
+			var phaseOutput string
+			var skipIteration bool
+			if currentPhase == PhasePlan && iter == 1 && c.isPlanSkipEnabled() {
+				if planContent := c.extractExistingPlan(); planContent != "" {
+					c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", currentPhase)
+					phaseOutput = planContent
+					skipIteration = true
+					c.postPhaseComment(ctx, currentPhase, iter, "Pre-existing plan detected in issue body (skipped planning agent)")
+				}
 			}
 
-			result, err := c.runIteration(ctx)
-			if err != nil {
-				c.logError("Phase %s iteration %d failed: %v", currentPhase, iter, err)
-				continue
-			}
+			if !skipIteration {
+				// Run an agent iteration for this phase
+				c.iteration++
+				if c.cloudLogger != nil {
+					c.cloudLogger.SetIteration(c.iteration)
+				}
 
-			phaseOutput := result.RawTextContent
-			if phaseOutput == "" {
-				phaseOutput = result.Summary
+				result, err := c.runIteration(ctx)
+				if err != nil {
+					c.logError("Phase %s iteration %d failed: %v", currentPhase, iter, err)
+					continue
+				}
+
+				phaseOutput = result.RawTextContent
+				if phaseOutput == "" {
+					phaseOutput = result.Summary
+				}
 			}
 
 			// Parse and store handoff output if enabled

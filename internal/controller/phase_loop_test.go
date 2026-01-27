@@ -328,3 +328,134 @@ func TestBuildWorkerHandoffSummary_SkipsStaleIteration(t *testing.T) {
 		t.Errorf("unexpected result: %q", result)
 	}
 }
+
+func TestHasExistingPlan(t *testing.T) {
+	tests := []struct {
+		name      string
+		issueBody string
+		want      bool
+	}{
+		{"empty body", "", false},
+		{"no indicators", "This is a simple issue description.", false},
+		{"has Files to Create/Modify", "## Plan\n\n| File | Action |\n|------|--------|\nFiles to Create/Modify\n| foo.go | Add |", true},
+		{"has Files to Modify", "Some text\n\nFiles to Modify:\n- foo.go", true},
+		{"has Implementation Steps", "## Implementation Steps\n1. Do this\n2. Do that", true},
+		{"has Implementation Plan header", "## Implementation Plan\nDetailed plan here...", true},
+		{"case sensitive - lowercase", "files to modify", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTask: "123",
+				issueDetails: []issueDetail{
+					{Number: 123, Title: "Test Issue", Body: tt.issueBody},
+				},
+			}
+			got := c.hasExistingPlan()
+			if got != tt.want {
+				t.Errorf("hasExistingPlan() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractExistingPlan(t *testing.T) {
+	tests := []struct {
+		name      string
+		issueBody string
+		wantEmpty bool
+	}{
+		{"no plan", "Simple issue", true},
+		{"has plan", "## Implementation Plan\nDo stuff", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTask: "456",
+				issueDetails: []issueDetail{
+					{Number: 456, Title: "Test", Body: tt.issueBody},
+				},
+			}
+			got := c.extractExistingPlan()
+			if tt.wantEmpty && got != "" {
+				t.Errorf("extractExistingPlan() = %q, want empty", got)
+			}
+			if !tt.wantEmpty && got != tt.issueBody {
+				t.Errorf("extractExistingPlan() = %q, want %q", got, tt.issueBody)
+			}
+		})
+	}
+}
+
+func TestGetActiveIssueBody(t *testing.T) {
+	c := &Controller{
+		activeTask: "789",
+		issueDetails: []issueDetail{
+			{Number: 123, Title: "Other Issue", Body: "Other body"},
+			{Number: 789, Title: "Active Issue", Body: "Active body"},
+		},
+	}
+
+	got := c.getActiveIssueBody()
+	if got != "Active body" {
+		t.Errorf("getActiveIssueBody() = %q, want %q", got, "Active body")
+	}
+
+	// Test with non-matching active task
+	c.activeTask = "999"
+	got = c.getActiveIssueBody()
+	if got != "" {
+		t.Errorf("getActiveIssueBody() for non-existent task = %q, want empty", got)
+	}
+}
+
+func TestIsPlanSkipEnabled(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *PhaseLoopConfig
+		want   bool
+	}{
+		{"nil config", nil, false},
+		{"disabled phase loop", &PhaseLoopConfig{Enabled: false, SkipPlanIfExists: true}, false},
+		{"enabled but skip disabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: false}, false},
+		{"both enabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{config: SessionConfig{PhaseLoop: tt.config}}
+			if got := c.isPlanSkipEnabled(); got != tt.want {
+				t.Errorf("isPlanSkipEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExistingPlanIndicators(t *testing.T) {
+	// Verify all expected indicators are present
+	expectedIndicators := []string{
+		"Files to Create/Modify",
+		"Files to Modify",
+		"Implementation Steps",
+		"## Implementation Plan",
+	}
+
+	if len(existingPlanIndicators) != len(expectedIndicators) {
+		t.Errorf("existingPlanIndicators has %d items, want %d", len(existingPlanIndicators), len(expectedIndicators))
+	}
+
+	for _, expected := range expectedIndicators {
+		found := false
+		for _, actual := range existingPlanIndicators {
+			if actual == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing expected indicator: %q", expected)
+		}
+	}
+}

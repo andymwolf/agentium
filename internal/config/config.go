@@ -25,6 +25,7 @@ type DelegationConfigYAML struct {
 // PhaseLoopConfig contains phase loop configuration in YAML config.
 type PhaseLoopConfig struct {
 	Enabled                bool `mapstructure:"enabled"`
+	SkipPlanIfExists       bool `mapstructure:"skip_plan_if_exists"`
 	PlanMaxIterations      int  `mapstructure:"plan_max_iterations"`
 	ImplementMaxIterations int  `mapstructure:"implement_max_iterations"`
 	ReviewMaxIterations    int  `mapstructure:"review_max_iterations"`
