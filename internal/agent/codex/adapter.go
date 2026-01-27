@@ -195,17 +195,19 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 	return sb.String()
 }
 
-// codexEvent represents a JSONL event from Codex CLI --json output
-type codexEvent struct {
+// CodexEvent represents a JSONL event from Codex CLI --json output.
+// This type is exported for use by the audit package.
+type CodexEvent struct {
 	Type  string      `json:"type"`
-	Item  *eventItem  `json:"item,omitempty"`
+	Item  *EventItem  `json:"item,omitempty"`
 	Delta *eventDelta `json:"delta,omitempty"`
 	Usage *usage      `json:"usage,omitempty"`
 	Error *eventError `json:"error,omitempty"`
 }
 
-// eventItem represents an item within a Codex event
-type eventItem struct {
+// EventItem represents an item within a Codex event.
+// This type is exported for use by the audit package.
+type EventItem struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
 	Command  string `json:"command,omitempty"`
@@ -244,6 +246,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	var errors []string
 	var totalInput, totalOutput int
 	var parsedEvents int
+	var events []interface{} // Collect events for audit logging
 
 	lines := strings.Split(stdout, "\n")
 	for _, line := range lines {
@@ -252,12 +255,17 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 			continue
 		}
 
-		var event codexEvent
+		var event CodexEvent
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			// Skip malformed JSON lines
 			continue
 		}
 		parsedEvents++
+
+		// Store completed events for audit logging
+		if event.Type == "item.completed" && event.Item != nil {
+			events = append(events, event)
+		}
 
 		switch event.Type {
 		case "item.completed":
@@ -299,6 +307,9 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 			}
 		}
 	}
+
+	// Store events for audit logging
+	result.Events = events
 
 	// Set token usage
 	result.TokensUsed = totalInput + totalOutput
