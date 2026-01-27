@@ -42,28 +42,6 @@ var languageMapping = map[string]string{
 	".svelte": "Svelte",
 }
 
-// extensionGroups maps languages to all their related extensions.
-var extensionGroups = map[string][]string{
-	"Go":         {".go"},
-	"Python":     {".py"},
-	"JavaScript": {".js", ".jsx", ".mjs", ".cjs"},
-	"TypeScript": {".ts", ".tsx", ".mts", ".cts"},
-	"Java":       {".java"},
-	"Kotlin":     {".kt", ".kts"},
-	"Rust":       {".rs"},
-	"Ruby":       {".rb", ".rake"},
-	"PHP":        {".php"},
-	"C":          {".c"},
-	"C++":        {".cpp", ".cc", ".cxx"},
-	"C#":         {".cs"},
-	"Swift":      {".swift"},
-	"Scala":      {".scala"},
-	"Elixir":     {".ex", ".exs"},
-	"Shell":      {".sh", ".bash", ".zsh"},
-	"Vue":        {".vue"},
-	"Svelte":     {".svelte"},
-}
-
 // detectLanguages analyzes extension counts to determine primary languages.
 func detectLanguages(extCounts map[string]int) []LanguageInfo {
 	// Aggregate by language
