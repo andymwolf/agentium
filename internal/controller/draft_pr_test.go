@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 )
 
@@ -117,7 +118,7 @@ func TestMaybeCreateDraftPR_SkipsWhenAlreadyCreated(t *testing.T) {
 	}
 
 	// Should return nil without doing anything
-	err := c.maybeCreateDraftPR(nil, "issue:123")
+	err := c.maybeCreateDraftPR(context.TODO(), "issue:123")
 	if err != nil {
 		t.Errorf("expected nil error when draft PR already created, got %v", err)
 	}
@@ -128,7 +129,7 @@ func TestMaybeCreateDraftPR_ErrorsOnMissingState(t *testing.T) {
 		taskStates: map[string]*TaskState{},
 	}
 
-	err := c.maybeCreateDraftPR(nil, "issue:999")
+	err := c.maybeCreateDraftPR(context.TODO(), "issue:999")
 	if err == nil {
 		t.Error("expected error when task state not found")
 	}
@@ -147,7 +148,7 @@ func TestFinalizeDraftPR_SkipsWhenNoPRNumber(t *testing.T) {
 	}
 
 	// Should return nil without doing anything
-	err := c.finalizeDraftPR(nil, "issue:123")
+	err := c.finalizeDraftPR(context.TODO(), "issue:123")
 	if err != nil {
 		t.Errorf("expected nil error when no PR number, got %v", err)
 	}
@@ -158,7 +159,7 @@ func TestFinalizeDraftPR_ErrorsOnMissingState(t *testing.T) {
 		taskStates: map[string]*TaskState{},
 	}
 
-	err := c.finalizeDraftPR(nil, "issue:999")
+	err := c.finalizeDraftPR(context.TODO(), "issue:999")
 	if err == nil {
 		t.Error("expected error when task state not found")
 	}

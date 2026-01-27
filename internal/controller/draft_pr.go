@@ -51,9 +51,9 @@ func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) erro
 	}
 
 	// Check if a PR already exists for this branch (from worker, previous run, etc.)
-	existingPR, err := c.findExistingPRForBranch(ctx, branchName)
-	if err != nil {
-		c.logWarning("Failed to check for existing PR: %v", err)
+	existingPR, findErr := c.findExistingPRForBranch(ctx, branchName)
+	if findErr != nil {
+		c.logWarning("Failed to check for existing PR: %v", findErr)
 		// Continue to try creating one
 	}
 	if existingPR != nil {
@@ -66,8 +66,8 @@ func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) erro
 
 	// No existing PR - push branch if needed and create draft PR
 	// Push the branch (handles both unpushed commits and already-pushed branches)
-	if err := c.ensureBranchPushed(ctx, branchName); err != nil {
-		return fmt.Errorf("failed to push branch: %w", err)
+	if pushErr := c.ensureBranchPushed(ctx, branchName); pushErr != nil {
+		return fmt.Errorf("failed to push branch: %w", pushErr)
 	}
 
 	// Extract issue number from branch name (agentium/issue-123-description)
@@ -109,26 +109,26 @@ This is a draft PR - implementation is in progress.
 	createCmd.Dir = c.workDir
 	createCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
 
-	output, err := createCmd.CombinedOutput()
-	if err != nil {
+	createOutput, createErr := createCmd.CombinedOutput()
+	if createErr != nil {
 		// Check if error is due to PR already existing (race condition or worker created it)
-		if strings.Contains(string(output), "already exists") {
+		if strings.Contains(string(createOutput), "already exists") {
 			c.logInfo("PR already exists for branch (created concurrently), checking again")
-			existingPR, findErr := c.findExistingPRForBranch(ctx, branchName)
-			if findErr == nil && existingPR != nil {
+			existingPR, retryErr := c.findExistingPRForBranch(ctx, branchName)
+			if retryErr == nil && existingPR != nil {
 				state.DraftPRCreated = true
 				state.PRNumber = existingPR.Number
 				c.updateHandoffWithPRInfo(taskID, existingPR.Number, existingPR.URL, state.PhaseIteration)
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to create draft PR: %w (output: %s)", err, string(output))
+		return fmt.Errorf("failed to create draft PR: %w (output: %s)", createErr, string(createOutput))
 	}
 
 	// Parse PR number from output (gh pr create outputs the PR URL)
-	prNumber, prURL := parsePRCreateOutput(string(output))
+	prNumber, prURL := parsePRCreateOutput(string(createOutput))
 	if prNumber == "" {
-		c.logWarning("Could not parse PR number from gh output: %s", string(output))
+		c.logWarning("Could not parse PR number from gh output: %s", string(createOutput))
 		// Still mark as created since the command succeeded
 	}
 
@@ -157,8 +157,8 @@ func (c *Controller) findExistingPRForBranch(ctx context.Context, branchName str
 	cmd.Dir = c.workDir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
 
-	output, err := cmd.Output()
-	if err != nil {
+	output, cmdErr := cmd.Output()
+	if cmdErr != nil {
 		// No PR exists for this branch (gh pr view exits non-zero)
 		return nil, nil
 	}
@@ -167,8 +167,8 @@ func (c *Controller) findExistingPRForBranch(ctx context.Context, branchName str
 		Number int    `json:"number"`
 		URL    string `json:"url"`
 	}
-	if err := json.Unmarshal(output, &prInfo); err != nil {
-		return nil, fmt.Errorf("failed to parse PR info: %w", err)
+	if unmarshalErr := json.Unmarshal(output, &prInfo); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse PR info: %w", unmarshalErr)
 	}
 
 	return &existingPRInfo{
@@ -183,19 +183,20 @@ func (c *Controller) ensureBranchPushed(ctx context.Context, branchName string) 
 	// Check if remote branch exists
 	checkCmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", "origin", branchName)
 	checkCmd.Dir = c.workDir
-	output, err := checkCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check remote branch: %w", err)
+	checkOutput, checkErr := checkCmd.Output()
+	if checkErr != nil {
+		return fmt.Errorf("failed to check remote branch: %w", checkErr)
 	}
 
-	remoteExists := strings.TrimSpace(string(output)) != ""
+	remoteExists := strings.TrimSpace(string(checkOutput)) != ""
 
 	// Check for unpushed commits if remote exists
 	hasUnpushed := false
 	if remoteExists {
-		hasUnpushed, err = c.branchHasUnpushedCommits(ctx, branchName)
-		if err != nil {
-			c.logWarning("Failed to check for unpushed commits: %v", err)
+		var unpushedErr error
+		hasUnpushed, unpushedErr = c.branchHasUnpushedCommits(ctx, branchName)
+		if unpushedErr != nil {
+			c.logWarning("Failed to check for unpushed commits: %v", unpushedErr)
 		}
 	}
 
@@ -205,8 +206,9 @@ func (c *Controller) ensureBranchPushed(ctx context.Context, branchName string) 
 		pushCmd := exec.CommandContext(ctx, "git", "push", "-u", "origin", branchName)
 		pushCmd.Dir = c.workDir
 		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
-		if output, err := pushCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("push failed: %w (output: %s)", err, string(output))
+		pushOutput, pushErr := pushCmd.CombinedOutput()
+		if pushErr != nil {
+			return fmt.Errorf("push failed: %w (output: %s)", pushErr, string(pushOutput))
 		}
 	} else {
 		c.logInfo("Branch %s already pushed and up to date", branchName)
