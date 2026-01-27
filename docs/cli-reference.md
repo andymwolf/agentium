@@ -80,8 +80,8 @@ agentium run [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--repo` | string | **Required** | GitHub repository (e.g., `github.com/org/repo`) |
-| `--issues` | string | - | Issue numbers to work on (comma-separated) |
-| `--prs` | string | - | PR numbers for review sessions (comma-separated) |
+| `--issues` | string | - | Issue numbers to work on (comma-separated, supports ranges like `1-5`) |
+| `--prs` | string | - | PR numbers for review sessions (comma-separated, supports ranges like `1-5`) |
 | `--agent` | string | `claude-code` | Agent to use: `claude-code`, `aider`, `codex` |
 | `--max-iterations` | int | `30` | Maximum iterations before termination |
 | `--max-duration` | string | `2h` | Maximum session duration |
@@ -100,8 +100,14 @@ agentium run [flags]
 # Work on a single issue
 agentium run --repo github.com/org/repo --issues 42
 
-# Work on multiple issues
+# Work on multiple issues (comma-separated)
 agentium run --repo github.com/org/repo --issues 42,43,44 --max-iterations 50
+
+# Work on a range of issues
+agentium run --repo github.com/org/repo --issues 42-50
+
+# Mixed syntax (ranges and individual numbers)
+agentium run --repo github.com/org/repo --issues 42-45,48,50-52
 
 # PR review session
 agentium run --repo github.com/org/repo --prs 50

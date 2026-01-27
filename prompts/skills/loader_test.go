@@ -51,7 +51,7 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
-		{"test", []string{"IMPLEMENT"}},                                      // TEST merged into IMPLEMENT
+		{"test", []string{"IMPLEMENT"}},                                              // TEST merged into IMPLEMENT
 		{"pr_update", []string{"DOCS", "PUSH", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // For phases after draft PR creation
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
