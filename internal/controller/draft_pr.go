@@ -12,16 +12,17 @@ import (
 	"github.com/andywolf/agentium/internal/handoff"
 )
 
-// maybeCreateDraftPR creates a draft PR if this is the first iteration with commits.
-// It checks if a draft PR has already been created for this task and skips if so.
-// Returns nil if no action needed or PR creation succeeds.
+// maybeCreateDraftPR ensures a draft PR exists for the current branch.
+// It first checks if a PR already exists (from worker, previous run, etc.),
+// and if so, updates state to track it. Otherwise, it creates a new draft PR.
+// Returns nil if no action needed or PR exists/creation succeeds.
 func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) error {
 	state := c.taskStates[taskID]
 	if state == nil {
 		return fmt.Errorf("no task state for %s", taskID)
 	}
 
-	// Skip if draft PR already created
+	// Skip if draft PR already tracked in state
 	if state.DraftPRCreated {
 		return nil
 	}
@@ -49,24 +50,24 @@ func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) erro
 		branchName = detected
 	}
 
-	// Check if branch has any commits to push
-	hasCommits, err := c.branchHasUnpushedCommits(ctx, branchName)
+	// Check if a PR already exists for this branch (from worker, previous run, etc.)
+	existingPR, err := c.findExistingPRForBranch(ctx, branchName)
 	if err != nil {
-		c.logWarning("Failed to check for unpushed commits: %v", err)
-		// Continue anyway - push will fail if there's nothing to push
+		c.logWarning("Failed to check for existing PR: %v", err)
+		// Continue to try creating one
 	}
-	if !hasCommits {
-		c.logInfo("Skipping draft PR creation: no unpushed commits on branch %q", branchName)
+	if existingPR != nil {
+		c.logInfo("Found existing PR #%s for branch %s", existingPR.Number, branchName)
+		state.DraftPRCreated = true
+		state.PRNumber = existingPR.Number
+		c.updateHandoffWithPRInfo(taskID, existingPR.Number, existingPR.URL, state.PhaseIteration)
 		return nil
 	}
 
-	// Push the branch
-	c.logInfo("Pushing branch %s for draft PR", branchName)
-	pushCmd := exec.CommandContext(ctx, "git", "push", "-u", "origin", branchName)
-	pushCmd.Dir = c.workDir
-	pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
-	if output, err := pushCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to push branch: %w (output: %s)", err, string(output))
+	// No existing PR - push branch if needed and create draft PR
+	// Push the branch (handles both unpushed commits and already-pushed branches)
+	if err := c.ensureBranchPushed(ctx, branchName); err != nil {
+		return fmt.Errorf("failed to push branch: %w", err)
 	}
 
 	// Extract issue number from branch name (agentium/issue-123-description)
@@ -110,6 +111,17 @@ This is a draft PR - implementation is in progress.
 
 	output, err := createCmd.CombinedOutput()
 	if err != nil {
+		// Check if error is due to PR already existing (race condition or worker created it)
+		if strings.Contains(string(output), "already exists") {
+			c.logInfo("PR already exists for branch (created concurrently), checking again")
+			existingPR, findErr := c.findExistingPRForBranch(ctx, branchName)
+			if findErr == nil && existingPR != nil {
+				state.DraftPRCreated = true
+				state.PRNumber = existingPR.Number
+				c.updateHandoffWithPRInfo(taskID, existingPR.Number, existingPR.URL, state.PhaseIteration)
+				return nil
+			}
+		}
 		return fmt.Errorf("failed to create draft PR: %w (output: %s)", err, string(output))
 	}
 
@@ -123,22 +135,100 @@ This is a draft PR - implementation is in progress.
 	// Update state
 	state.DraftPRCreated = true
 	state.PRNumber = prNumber
-
-	// Store draft PR info in handoff store if available
-	if c.isHandoffEnabled() && prNumber != "" {
-		// Update the implement output with draft PR info
-		implOutput := c.handoffStore.GetImplementOutput(taskID)
-		if implOutput != nil {
-			implOutput.DraftPRNumber = parseIntOrZero(prNumber)
-			implOutput.DraftPRUrl = prURL
-			if err := c.handoffStore.StorePhaseOutput(taskID, handoff.PhaseImplement, state.PhaseIteration, implOutput); err != nil {
-				c.logWarning("Failed to update handoff store with draft PR info: %v", err)
-			}
-		}
-	}
+	c.updateHandoffWithPRInfo(taskID, prNumber, prURL, state.PhaseIteration)
 
 	c.logInfo("Draft PR #%s created successfully: %s", prNumber, prURL)
 	return nil
+}
+
+// existingPRInfo holds information about an existing PR.
+type existingPRInfo struct {
+	Number string
+	URL    string
+}
+
+// findExistingPRForBranch checks if a PR already exists for the given branch.
+func (c *Controller) findExistingPRForBranch(ctx context.Context, branchName string) (*existingPRInfo, error) {
+	// Use gh pr view to check for existing PR on this branch
+	cmd := exec.CommandContext(ctx, "gh", "pr", "view", branchName,
+		"--repo", c.config.Repository,
+		"--json", "number,url",
+	)
+	cmd.Dir = c.workDir
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+
+	output, err := cmd.Output()
+	if err != nil {
+		// No PR exists for this branch (gh pr view exits non-zero)
+		return nil, nil
+	}
+
+	var prInfo struct {
+		Number int    `json:"number"`
+		URL    string `json:"url"`
+	}
+	if err := json.Unmarshal(output, &prInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse PR info: %w", err)
+	}
+
+	return &existingPRInfo{
+		Number: fmt.Sprintf("%d", prInfo.Number),
+		URL:    prInfo.URL,
+	}, nil
+}
+
+// ensureBranchPushed pushes the branch to origin if it has unpushed commits,
+// or if the remote branch doesn't exist yet.
+func (c *Controller) ensureBranchPushed(ctx context.Context, branchName string) error {
+	// Check if remote branch exists
+	checkCmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", "origin", branchName)
+	checkCmd.Dir = c.workDir
+	output, err := checkCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check remote branch: %w", err)
+	}
+
+	remoteExists := strings.TrimSpace(string(output)) != ""
+
+	// Check for unpushed commits if remote exists
+	hasUnpushed := false
+	if remoteExists {
+		hasUnpushed, err = c.branchHasUnpushedCommits(ctx, branchName)
+		if err != nil {
+			c.logWarning("Failed to check for unpushed commits: %v", err)
+		}
+	}
+
+	// Push if remote doesn't exist or we have unpushed commits
+	if !remoteExists || hasUnpushed {
+		c.logInfo("Pushing branch %s to origin", branchName)
+		pushCmd := exec.CommandContext(ctx, "git", "push", "-u", "origin", branchName)
+		pushCmd.Dir = c.workDir
+		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		if output, err := pushCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("push failed: %w (output: %s)", err, string(output))
+		}
+	} else {
+		c.logInfo("Branch %s already pushed and up to date", branchName)
+	}
+
+	return nil
+}
+
+// updateHandoffWithPRInfo updates the handoff store with PR information.
+func (c *Controller) updateHandoffWithPRInfo(taskID, prNumber, prURL string, iteration int) {
+	if !c.isHandoffEnabled() || prNumber == "" {
+		return
+	}
+
+	implOutput := c.handoffStore.GetImplementOutput(taskID)
+	if implOutput != nil {
+		implOutput.DraftPRNumber = parseIntOrZero(prNumber)
+		implOutput.DraftPRUrl = prURL
+		if err := c.handoffStore.StorePhaseOutput(taskID, handoff.PhaseImplement, iteration, implOutput); err != nil {
+			c.logWarning("Failed to update handoff store with PR info: %v", err)
+		}
+	}
 }
 
 // finalizeDraftPR marks the draft PR as ready for review.
