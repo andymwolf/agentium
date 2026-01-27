@@ -106,11 +106,13 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 
 	// Handle Claude OAuth authentication
 	var claudeAuthBase64 string
+	var claudeAuthMode string
 	if cfg.Claude.AuthMode == "" {
 		// Auto-detect OAuth credentials if auth mode not explicitly set
 		if autoAuth := tryAutoDetectOAuth(); autoAuth != nil {
 			claudeAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
-			fmt.Println("Auto-detected Claude OAuth credentials from macOS Keychain")
+			claudeAuthMode = "oauth" // Set mode so Docker mount happens
+			fmt.Printf("Auto-detected Claude OAuth credentials from macOS Keychain (%d bytes)\n", len(autoAuth))
 		} else {
 			fmt.Println("No OAuth credentials found - will use interactive browser auth in container")
 		}
@@ -122,7 +124,8 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("failed to read Claude auth.json: %w", err)
 		}
 		claudeAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
-		fmt.Println("Using Claude Max OAuth authentication")
+		claudeAuthMode = "oauth"
+		fmt.Printf("Using Claude Max OAuth authentication (%d bytes)\n", len(authJSON))
 	}
 
 	// Handle Codex OAuth authentication
@@ -153,7 +156,8 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Set Claude auth config
-	sessionConfig.ClaudeAuth.AuthMode = cfg.Claude.AuthMode
+	// Use claudeAuthMode which is set to "oauth" when auto-detect succeeds
+	sessionConfig.ClaudeAuth.AuthMode = claudeAuthMode
 	sessionConfig.ClaudeAuth.AuthJSONBase64 = claudeAuthBase64
 
 	// Set Codex auth config

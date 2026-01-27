@@ -135,7 +135,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to read Claude auth.json: %w", err)
 		}
 		claudeAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
-		fmt.Println("Using Claude Max OAuth authentication")
+		fmt.Printf("Using Claude Max OAuth authentication (%d bytes from %s)\n", len(authJSON), cfg.Claude.AuthJSONPath)
+	} else {
+		fmt.Printf("Claude auth mode: %q (no OAuth credentials will be mounted)\n", cfg.Claude.AuthMode)
 	}
 
 	// Handle Codex OAuth authentication
