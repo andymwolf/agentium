@@ -78,11 +78,13 @@ type Commit struct {
 
 // ImplementOutput is the structured output from the IMPLEMENT phase.
 type ImplementOutput struct {
-	BranchName   string   `json:"branch_name"`
-	Commits      []Commit `json:"commits"`
-	FilesChanged []string `json:"files_changed"`
-	TestsPassed  bool     `json:"tests_passed"`
-	TestOutput   string   `json:"test_output,omitempty"`
+	BranchName     string   `json:"branch_name"`
+	Commits        []Commit `json:"commits"`
+	FilesChanged   []string `json:"files_changed"`
+	TestsPassed    bool     `json:"tests_passed"`
+	TestOutput     string   `json:"test_output,omitempty"`
+	DraftPRNumber  int      `json:"draft_pr_number,omitempty"`
+	DraftPRUrl     string   `json:"draft_pr_url,omitempty"`
 }
 
 // -----------------------------------------------------------------------------

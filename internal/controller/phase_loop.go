@@ -10,13 +10,12 @@ import (
 )
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
-// TEST is merged into IMPLEMENT. REVIEW phase has been removed as IMPLEMENT
-// already runs Worker → Reviewer → Judge per iteration.
+// TEST is merged into IMPLEMENT. REVIEW and PR_CREATION phases have been removed.
+// Draft PRs are created during IMPLEMENT phase and finalized at PhaseComplete.
 var issuePhaseOrder = []TaskPhase{
 	PhasePlan,
 	PhaseImplement,
 	PhaseDocs,
-	PhasePRCreation,
 }
 
 // Default max iterations per phase when not configured.
@@ -24,7 +23,6 @@ const (
 	defaultPlanMaxIter      = 3
 	defaultImplementMaxIter = 5
 	defaultDocsMaxIter      = 2
-	defaultPRMaxIter        = 1
 )
 
 // defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
@@ -62,8 +60,6 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultImplementMaxIter
 	case PhaseDocs:
 		return defaultDocsMaxIter
-	case PhasePRCreation:
-		return defaultPRMaxIter
 	default:
 		return 1
 	}
@@ -121,6 +117,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		// Terminal phases end the loop
 		if currentPhase == PhaseComplete || currentPhase == PhaseBlocked || currentPhase == PhaseNothingToDo {
+			// Finalize draft PR when completing successfully
+			if currentPhase == PhaseComplete && state.PRNumber != "" {
+				if err := c.finalizeDraftPR(ctx, taskID); err != nil {
+					c.logWarning("Failed to finalize draft PR: %v", err)
+				}
+			}
 			c.logInfo("Phase loop: reached terminal phase %s", currentPhase)
 			return nil
 		}
@@ -177,19 +179,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Post phase comment
 			c.postPhaseComment(ctx, currentPhase, iter, truncateForComment(phaseOutput))
 
-			// Skip judge for PR_CREATION (terminal action)
-			if currentPhase == PhasePRCreation {
-				// Check if PR was actually created
-				if result.AgentStatus == "PR_CREATED" || len(result.PRsCreated) > 0 {
-					state.Phase = PhaseComplete
-					if len(result.PRsCreated) > 0 {
-						state.PRNumber = result.PRsCreated[0]
-					}
-				} else {
-					state.Phase = PhaseBlocked
-					state.LastJudgeFeedback = "PR creation did not produce a PR"
+			// Create draft PR after first IMPLEMENT iteration with commits
+			if currentPhase == PhaseImplement && !state.DraftPRCreated {
+				if err := c.maybeCreateDraftPR(ctx, taskID); err != nil {
+					c.logWarning("Failed to create draft PR: %v", err)
 				}
-				return nil
 			}
 
 			// Gather previous iteration feedback for reviewer context
@@ -313,10 +307,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		}
 
 		if !advanced {
-			// Exhausted max iterations without ADVANCE — force advance
-			c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance", currentPhase, maxIter)
-			c.postPhaseComment(ctx, currentPhase, maxIter,
-				fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE", maxIter))
+			// Exhausted max iterations without ADVANCE
+			if currentPhase == PhaseDocs {
+				// DOCS phase auto-succeeds - documentation should not block PR finalization
+				c.logInfo("Phase %s: exhausted %d iterations, auto-advancing (non-blocking)", currentPhase, maxIter)
+				c.postPhaseComment(ctx, currentPhase, maxIter,
+					fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", maxIter))
+			} else {
+				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance", currentPhase, maxIter)
+				c.postPhaseComment(ctx, currentPhase, maxIter,
+					fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE", maxIter))
+			}
 			if c.memoryStore != nil {
 				c.memoryStore.ClearByType(memory.EvalFeedback)
 			}

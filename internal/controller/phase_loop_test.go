@@ -14,8 +14,7 @@ func TestAdvancePhase(t *testing.T) {
 	}{
 		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
 		{"IMPLEMENT advances to DOCS", PhaseImplement, PhaseDocs},
-		{"DOCS advances to PR_CREATION", PhaseDocs, PhasePRCreation},
-		{"PR_CREATION advances to COMPLETE", PhasePRCreation, PhaseComplete},
+		{"DOCS advances to COMPLETE", PhaseDocs, PhaseComplete},
 		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
 		{"COMPLETE stays COMPLETE", PhaseComplete, PhaseComplete},
 	}
@@ -44,7 +43,6 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 		{PhasePlan, defaultPlanMaxIter},
 		{PhaseImplement, defaultImplementMaxIter},
 		{PhaseDocs, defaultDocsMaxIter},
-		{PhasePRCreation, defaultPRMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
 
@@ -77,7 +75,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 		{PhasePlan, 2},
 		{PhaseImplement, 10},
 		{PhaseDocs, 4},
-		{PhasePRCreation, defaultPRMaxIter}, // No custom config for PR_CREATION
 	}
 
 	for _, tt := range tests {
@@ -125,8 +122,9 @@ func TestIsPhaseLoopEnabled(t *testing.T) {
 }
 
 func TestIssuePhaseOrder(t *testing.T) {
-	// Verify the expected phase order (REVIEW phase removed)
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhasePRCreation}
+	// Verify the expected phase order (REVIEW and PR_CREATION phases removed)
+	// Draft PRs are created during IMPLEMENT and finalized at PhaseComplete
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs}
 	if len(issuePhaseOrder) != len(expected) {
 		t.Fatalf("issuePhaseOrder length = %d, want %d", len(issuePhaseOrder), len(expected))
 	}

@@ -11,7 +11,6 @@ skills:
       - PLAN
       - IMPLEMENT
       - DOCS
-      - PR_CREATION
       - ANALYZE
       - PUSH
       - PLAN_REVIEW
@@ -56,8 +55,7 @@ skills:
   - name: pr_creation
     file: pr_creation.md
     priority: 70
-    phases:
-      - PR_CREATION
+    phases: []  # PR_CREATION phase removed - draft PRs created during IMPLEMENT
 
   - name: docs
     file: docs.md
