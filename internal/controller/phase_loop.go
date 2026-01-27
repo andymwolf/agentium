@@ -117,6 +117,29 @@ func (c *Controller) isPlanSkipEnabled() bool {
 	return c.config.PhaseLoop.Enabled && c.config.PhaseLoop.SkipPlanIfExists
 }
 
+// shouldSkipPlanIteration returns true if the planning agent iteration should
+// be skipped because a pre-existing plan was detected in the issue body.
+// This ONLY returns true when:
+// 1. The current phase is PLAN
+// 2. This is iteration 1 (first iteration of the phase)
+// 3. The skip_plan_if_exists config option is enabled
+// 4. The issue body contains plan indicators
+//
+// Subsequent iterations (2, 3, etc.) will NEVER be skipped, even if the issue
+// contains a plan. This ensures that if the reviewer requests iteration (ITERATE
+// verdict), the agent will run normally on iteration 2+.
+func (c *Controller) shouldSkipPlanIteration(phase TaskPhase, iter int) bool {
+	// Only skip on iteration 1 of PLAN phase
+	if phase != PhasePlan || iter != 1 {
+		return false
+	}
+	// Check if skip is enabled and plan exists
+	if !c.isPlanSkipEnabled() {
+		return false
+	}
+	return c.hasExistingPlan()
+}
+
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
 func advancePhase(current TaskPhase) TaskPhase {
@@ -207,13 +230,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Check for pre-existing plan (PLAN phase, iteration 1 only)
 			var phaseOutput string
 			var skipIteration bool
-			if currentPhase == PhasePlan && iter == 1 && c.isPlanSkipEnabled() {
-				if planContent := c.extractExistingPlan(); planContent != "" {
-					c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", currentPhase)
-					phaseOutput = planContent
-					skipIteration = true
-					c.postPhaseComment(ctx, currentPhase, iter, "Pre-existing plan detected in issue body (skipped planning agent)")
-				}
+			if c.shouldSkipPlanIteration(currentPhase, iter) {
+				planContent := c.extractExistingPlan()
+				c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", currentPhase)
+				phaseOutput = planContent
+				skipIteration = true
+				c.postPhaseComment(ctx, currentPhase, iter, "Pre-existing plan detected in issue body (skipped planning agent)")
 			}
 
 			if !skipIteration {
