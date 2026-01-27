@@ -89,30 +89,6 @@ func (b *Builder) buildImplementInput(taskID string) (*ImplementInput, error) {
 	return input, nil
 }
 
-// buildReviewInput constructs input for the REVIEW phase.
-func (b *Builder) buildReviewInput(taskID string) (*ReviewInput, error) {
-	issue := b.store.GetIssueContext(taskID)
-	if issue == nil {
-		return nil, fmt.Errorf("no issue context found for task %s", taskID)
-	}
-
-	plan := b.store.GetPlanOutput(taskID)
-	if plan == nil {
-		return nil, fmt.Errorf("no plan output found for task %s", taskID)
-	}
-
-	impl := b.store.GetImplementOutput(taskID)
-	if impl == nil {
-		return nil, fmt.Errorf("no implementation output found for task %s", taskID)
-	}
-
-	return &ReviewInput{
-		Issue:          *issue,
-		PlanSummary:    plan.Summary,
-		Implementation: *impl,
-	}, nil
-}
-
 // buildDocsInput constructs input for the DOCS phase.
 func (b *Builder) buildDocsInput(taskID string) (*DocsInput, error) {
 	issue := b.store.GetIssueContext(taskID)

@@ -130,15 +130,6 @@ func (p *Parser) parseImplementOutput(jsonStr string) (*ImplementOutput, error) 
 	return &output, nil
 }
 
-// parseReviewOutput parses REVIEW phase output.
-func (p *Parser) parseReviewOutput(jsonStr string) (*ReviewOutput, error) {
-	var output ReviewOutput
-	if err := json.Unmarshal([]byte(jsonStr), &output); err != nil {
-		return nil, fmt.Errorf("failed to parse ReviewOutput: %w", err)
-	}
-	return &output, nil
-}
-
 // parseDocsOutput parses DOCS phase output.
 func (p *Parser) parseDocsOutput(jsonStr string) (*DocsOutput, error) {
 	var output DocsOutput
