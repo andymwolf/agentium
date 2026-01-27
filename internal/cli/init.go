@@ -3,8 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
+	"github.com/andywolf/agentium/internal/agentmd"
+	"github.com/andywolf/agentium/internal/cli/wizard"
+	"github.com/andywolf/agentium/internal/scanner"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -14,11 +20,14 @@ var initCmd = &cobra.Command{
 	Short: "Initialize project configuration",
 	Long: `Initialize Agentium configuration for the current project.
 
-This creates a .agentium.yaml file with sensible defaults that you can customize.
+This creates a .agentium.yaml file and generates .agentium/AGENT.md with
+auto-detected project information to help AI agents understand your codebase.
 
 Example:
   agentium init
-  agentium init --provider gcp --repo github.com/org/myapp`,
+  agentium init --provider gcp --repo github.com/org/myapp
+  agentium init --greenfield
+  agentium init --non-interactive`,
 	RunE: initProject,
 }
 
@@ -32,6 +41,11 @@ func init() {
 	initCmd.Flags().Int64("app-id", 0, "GitHub App ID")
 	initCmd.Flags().Int64("installation-id", 0, "GitHub App Installation ID")
 	initCmd.Flags().Bool("force", false, "Overwrite existing config")
+
+	// New flags for AGENT.md generation
+	initCmd.Flags().Bool("greenfield", false, "Skip scanning, create minimal AGENT.md for new project")
+	initCmd.Flags().Bool("skip-agent-md", false, "Skip AGENT.md generation")
+	initCmd.Flags().Bool("non-interactive", false, "Use detected values without prompting")
 }
 
 type projectConfig struct {
@@ -57,12 +71,46 @@ type projectConfig struct {
 
 func initProject(cmd *cobra.Command, args []string) error {
 	configPath := filepath.Join(".", ".agentium.yaml")
+	cwd, _ := os.Getwd()
 
 	force, _ := cmd.Flags().GetBool("force")
-	if _, err := os.Stat(configPath); err == nil && !force {
-		return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
+	greenfield, _ := cmd.Flags().GetBool("greenfield")
+	skipAgentMD, _ := cmd.Flags().GetBool("skip-agent-md")
+	nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+
+	// Check for existing config
+	configExists := false
+	if _, err := os.Stat(configPath); err == nil {
+		configExists = true
+		if !force {
+			return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
+		}
 	}
 
+	// Generate .agentium.yaml
+	if !configExists || force {
+		if err := writeConfig(cmd, configPath, cwd); err != nil {
+			return err
+		}
+		fmt.Printf("Created %s\n", configPath)
+	}
+
+	// Generate AGENT.md
+	if !skipAgentMD {
+		if err := generateAgentMD(cwd, greenfield, nonInteractive); err != nil {
+			return fmt.Errorf("failed to generate AGENT.md: %w", err)
+		}
+	}
+
+	// Check CLI availability
+	checkCLIAvailability()
+
+	printNextSteps(configExists, skipAgentMD)
+
+	return nil
+}
+
+func writeConfig(cmd *cobra.Command, configPath, cwd string) error {
 	cfg := projectConfig{}
 
 	// Get values from flags or defaults
@@ -75,7 +123,6 @@ func initProject(cmd *cobra.Command, args []string) error {
 
 	// Set default values
 	if cfg.Project.Name == "" {
-		cwd, _ := os.Getwd()
 		cfg.Project.Name = filepath.Base(cwd)
 	}
 
@@ -95,16 +142,147 @@ func initProject(cmd *cobra.Command, args []string) error {
 
 `
 
-	if err := os.WriteFile(configPath, append([]byte(header), data...), 0644); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
+	return os.WriteFile(configPath, append([]byte(header), data...), 0644)
+}
+
+func generateAgentMD(rootDir string, greenfield, nonInteractive bool) error {
+	gen, err := agentmd.NewGenerator()
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("Created %s\n\n", configPath)
+	var info *scanner.ProjectInfo
+
+	if greenfield {
+		// Greenfield mode: prompt for or use minimal defaults
+		if nonInteractive {
+			info = &scanner.ProjectInfo{
+				Name: filepath.Base(rootDir),
+			}
+		} else {
+			info, err = wizard.PromptGreenfield()
+			if err != nil {
+				return err
+			}
+		}
+
+		// Write greenfield AGENT.md
+		agentiumDir := filepath.Join(rootDir, agentmd.AgentiumDir)
+		if err := os.MkdirAll(agentiumDir, 0755); err != nil {
+			return err
+		}
+
+		content := gen.GenerateGreenfield(info.Name)
+		agentMDPath := filepath.Join(agentiumDir, agentmd.AgentMDFile)
+		if err := os.WriteFile(agentMDPath, []byte(content), 0644); err != nil {
+			return err
+		}
+
+		fmt.Printf("Created %s/%s (greenfield template)\n", agentmd.AgentiumDir, agentmd.AgentMDFile)
+		fmt.Println("Run 'agentium refresh' after adding code to auto-detect project details.")
+		return nil
+	}
+
+	// Scan project
+	s := scanner.New(rootDir)
+	info, err = s.Scan()
+	if err != nil {
+		return fmt.Errorf("failed to scan project: %w", err)
+	}
+
+	// Interactive confirmation
+	if !nonInteractive {
+		info, err = wizard.ConfirmProjectInfo(info)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Write AGENT.md
+	if err := gen.WriteToProject(rootDir, info); err != nil {
+		return err
+	}
+
+	fmt.Printf("Created %s/%s\n", agentmd.AgentiumDir, agentmd.AgentMDFile)
+	return nil
+}
+
+func checkCLIAvailability() {
+	// Check if agentium is in PATH
+	_, err := exec.LookPath("agentium")
+	if err == nil {
+		return // Already available
+	}
+
+	fmt.Println()
+	fmt.Println("Note: 'agentium' is not in your PATH.")
+
+	// Check if it was installed via go install
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = filepath.Join(os.Getenv("HOME"), "go")
+	}
+	gobin := os.Getenv("GOBIN")
+	if gobin == "" {
+		gobin = filepath.Join(gopath, "bin")
+	}
+
+	agentiumBin := filepath.Join(gobin, "agentium")
+	if _, err := os.Stat(agentiumBin); err == nil {
+		// Binary exists but not in PATH
+		shell := detectShell()
+		shellConfig := getShellConfig(shell)
+
+		fmt.Printf("Found agentium at: %s\n", agentiumBin)
+		fmt.Println()
+		fmt.Println("To add it to your PATH, add this to your shell config:")
+		fmt.Printf("  echo 'export PATH=\"%s:$PATH\"' >> %s\n", gobin, shellConfig)
+		fmt.Println()
+		fmt.Println("Or create a symlink (may require sudo):")
+		fmt.Printf("  sudo ln -sf %s /usr/local/bin/agentium\n", agentiumBin)
+	} else {
+		fmt.Println("Install agentium globally with:")
+		fmt.Println("  go install github.com/andywolf/agentium/cmd/agentium@latest")
+	}
+}
+
+func detectShell() string {
+	shell := os.Getenv("SHELL")
+	if strings.Contains(shell, "zsh") {
+		return "zsh"
+	}
+	if strings.Contains(shell, "fish") {
+		return "fish"
+	}
+	return "bash"
+}
+
+func getShellConfig(shell string) string {
+	home := os.Getenv("HOME")
+	switch shell {
+	case "zsh":
+		return filepath.Join(home, ".zshrc")
+	case "fish":
+		return filepath.Join(home, ".config", "fish", "config.fish")
+	default:
+		// Check for .bashrc vs .bash_profile
+		if runtime.GOOS == "darwin" {
+			return filepath.Join(home, ".bash_profile")
+		}
+		return filepath.Join(home, ".bashrc")
+	}
+}
+
+func printNextSteps(configExisted, skippedAgentMD bool) {
+	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Update the repository URL")
+	fmt.Println("  1. Update the repository URL in .agentium.yaml")
 	fmt.Println("  2. Set your GitHub App credentials")
 	fmt.Println("  3. Configure your cloud provider credentials")
-	fmt.Println("  4. Run 'agentium run --issues 1,2,3' to start a session")
-
-	return nil
+	if skippedAgentMD {
+		fmt.Println("  4. Create .agentium/AGENT.md with project instructions")
+	} else {
+		fmt.Println("  4. Review and customize .agentium/AGENT.md")
+	}
+	fmt.Println("  5. Run 'agentium run --issues 1,2,3' to start a session")
 }
