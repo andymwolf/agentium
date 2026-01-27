@@ -763,14 +763,16 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 
 	// Clone with token authentication
 	// SECURITY: Avoid embedding tokens in URLs as they can leak in error messages and logs.
-	// Instead, use git credential helper via http.extraHeader config option.
+	// Use a credential helper that reads from environment variable for safety.
 	var cmd *exec.Cmd
 	if c.gitHubToken != "" && strings.HasPrefix(repo, "https://") {
-		// Use http.extraHeader to pass token without embedding in URL
-		authHeader := fmt.Sprintf("Authorization: Bearer %s", c.gitHubToken)
+		// Use credential helper to pass token securely via environment variable
+		// GitHub App installation tokens require x-access-token username format
+		credentialHelper := "!f() { echo username=x-access-token; echo \"password=$GIT_TOKEN\"; }; f"
 		cmd = exec.CommandContext(ctx, "git",
-			"-c", fmt.Sprintf("http.extraHeader=%s", authHeader),
+			"-c", fmt.Sprintf("credential.helper=%s", credentialHelper),
 			"clone", repo, c.workDir)
+		cmd.Env = append(os.Environ(), "GIT_TOKEN="+c.gitHubToken)
 	} else {
 		cmd = exec.CommandContext(ctx, "git", "clone", repo, c.workDir)
 	}
