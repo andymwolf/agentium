@@ -9,7 +9,7 @@ import (
 var sensitivePathPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\.env($|\.)`),                        // .env, .env.local, etc.
 	regexp.MustCompile(`(?i)\.(pem|key|crt|cer|p12|pfx)$`),       // Certificates and keys
-	regexp.MustCompile(`(?i)credentials`),                        // credentials*, *credentials*
+	regexp.MustCompile(`(?i)credentials?`),                       // credential*, credentials*, *credential*
 	regexp.MustCompile(`(?i)secrets?\.`),                         // secret.yaml, secrets.json, etc.
 	regexp.MustCompile(`(?i)\.github/workflows/`),                // GitHub Actions workflows
 	regexp.MustCompile(`(?i)\.gitlab-ci\.ya?ml$`),                // GitLab CI config

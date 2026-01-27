@@ -8,8 +8,8 @@ import (
 	"github.com/andywolf/agentium/internal/agent"
 )
 
-// makeJSONL builds a JSONL string from codexEvent structs
-func makeJSONL(events ...codexEvent) string {
+// makeJSONL builds a JSONL string from CodexEvent structs
+func makeJSONL(events ...CodexEvent) string {
 	var lines []string
 	for _, e := range events {
 		b, _ := json.Marshal(e)
@@ -497,9 +497,9 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("agent message extraction", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "I fixed the bug"},
+				Item: &EventItem{Type: "agent_message", Text: "I fixed the bug"},
 			},
 		)
 
@@ -515,9 +515,9 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("command execution output", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "command_execution", Command: "git push", Output: "Everything up-to-date"},
+				Item: &EventItem{Type: "command_execution", Command: "git push", Output: "Everything up-to-date"},
 			},
 		)
 
@@ -533,13 +533,13 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("file change detection", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "file_change", FilePath: "src/main.go", Action: "modified"},
+				Item: &EventItem{Type: "file_change", FilePath: "src/main.go", Action: "modified"},
 			},
-			codexEvent{
+			CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "file_change", FilePath: "src/util.go", Action: "created"},
+				Item: &EventItem{Type: "file_change", FilePath: "src/util.go", Action: "created"},
 			},
 		)
 
@@ -555,11 +555,11 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("token usage from turn.completed", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type:  "turn.completed",
 				Usage: &usage{InputTokens: 1000, OutputTokens: 500, CachedInputTokens: 200},
 			},
-			codexEvent{
+			CodexEvent{
 				Type:  "turn.completed",
 				Usage: &usage{InputTokens: 800, OutputTokens: 300, CachedInputTokens: 100},
 			},
@@ -578,11 +578,11 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("item.delta event with delta field", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type:  "item.delta",
 				Delta: &eventDelta{Text: "Hello "},
 			},
-			codexEvent{
+			CodexEvent{
 				Type:  "item.delta",
 				Delta: &eventDelta{Text: "world"},
 			},
@@ -600,7 +600,7 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("response.output_text.delta event", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type:  "response.output_text.delta",
 				Delta: &eventDelta{Text: "streaming text here"},
 			},
@@ -618,9 +618,9 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("delta event with item text fallback", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type: "item.delta",
-				Item: &eventItem{Type: "agent_message", Text: "fallback text"},
+				Item: &EventItem{Type: "agent_message", Text: "fallback text"},
 			},
 		)
 
@@ -636,7 +636,7 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 
 	t.Run("status signals detected from delta events", func(t *testing.T) {
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type:  "item.delta",
 				Delta: &eventDelta{Text: "Working on it...\nAGENTIUM_STATUS: COMPLETE"},
 			},
@@ -672,9 +672,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "TESTS_PASSED status",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "Running tests...\nAGENTIUM_STATUS: TESTS_PASSED\nAll tests passed"},
+				Item: &EventItem{Type: "agent_message", Text: "Running tests...\nAGENTIUM_STATUS: TESTS_PASSED\nAll tests passed"},
 			}),
 			wantAgentStatus:   "TESTS_PASSED",
 			wantPushedChanges: false,
@@ -683,9 +683,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "TESTS_FAILED with message",
 			exitCode: 1,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_FAILED 3 tests failed in auth module"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_FAILED 3 tests failed in auth module"},
 			}),
 			wantAgentStatus:   "TESTS_FAILED",
 			wantStatusMessage: "3 tests failed in auth module",
@@ -695,9 +695,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "PR_CREATED with URL",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/42"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/42"},
 			}),
 			wantAgentStatus:   "PR_CREATED",
 			wantStatusMessage: "https://github.com/org/repo/pull/42",
@@ -707,9 +707,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "PUSHED status",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: PUSHED"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: PUSHED"},
 			}),
 			wantAgentStatus:   "PUSHED",
 			wantPushedChanges: true,
@@ -718,9 +718,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "COMPLETE status",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: COMPLETE"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: COMPLETE"},
 			}),
 			wantAgentStatus:   "COMPLETE",
 			wantPushedChanges: true,
@@ -729,9 +729,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "NOTHING_TO_DO status",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: NOTHING_TO_DO"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: NOTHING_TO_DO"},
 			}),
 			wantAgentStatus:   "NOTHING_TO_DO",
 			wantPushedChanges: false,
@@ -740,9 +740,9 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 		{
 			name:     "BLOCKED with reason",
 			exitCode: 0,
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: BLOCKED need clarification on requirements"},
+				Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: BLOCKED need clarification on requirements"},
 			}),
 			wantAgentStatus:   "BLOCKED",
 			wantStatusMessage: "need clarification on requirements",
@@ -753,13 +753,13 @@ func TestAdapter_ParseOutput_StatusSignals(t *testing.T) {
 			name:     "multiple statuses takes last one",
 			exitCode: 0,
 			stdout: makeJSONL(
-				codexEvent{
+				CodexEvent{
 					Type: "item.completed",
-					Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_RUNNING"},
+					Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_RUNNING"},
 				},
-				codexEvent{
+				CodexEvent{
 					Type: "item.completed",
-					Item: &eventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_PASSED"},
+					Item: &EventItem{Type: "agent_message", Text: "AGENTIUM_STATUS: TESTS_PASSED"},
 				},
 			),
 			wantAgentStatus:   "TESTS_PASSED",
@@ -811,41 +811,41 @@ func TestAdapter_ParseOutput_PRDetection(t *testing.T) {
 	}{
 		{
 			name: "PR URL in agent message",
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "Done! See https://github.com/org/repo/pull/99"},
+				Item: &EventItem{Type: "agent_message", Text: "Done! See https://github.com/org/repo/pull/99"},
 			}),
 			wantPRs: []string{"99"},
 		},
 		{
 			name: "Created pull request text",
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "Created pull request #42"},
+				Item: &EventItem{Type: "agent_message", Text: "Created pull request #42"},
 			}),
 			wantPRs: []string{"42"},
 		},
 		{
 			name: "Opened PR text",
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "Opened PR #55"},
+				Item: &EventItem{Type: "agent_message", Text: "Opened PR #55"},
 			}),
 			wantPRs: []string{"55"},
 		},
 		{
 			name: "bare PR reference not detected",
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "This PR closes #24"},
+				Item: &EventItem{Type: "agent_message", Text: "This PR closes #24"},
 			}),
 			wantPRs: nil,
 		},
 		{
 			name: "duplicate PRs deduplicated",
-			stdout: makeJSONL(codexEvent{
+			stdout: makeJSONL(CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "agent_message", Text: "Created PR #110\nhttps://github.com/org/repo/pull/110"},
+				Item: &EventItem{Type: "agent_message", Text: "Created PR #110\nhttps://github.com/org/repo/pull/110"},
 			}),
 			wantPRs: []string{"110"},
 		},
@@ -881,7 +881,7 @@ func TestAdapter_ParseOutput_Errors(t *testing.T) {
 	a := New()
 
 	t.Run("turn.failed event", func(t *testing.T) {
-		stdout := makeJSONL(codexEvent{
+		stdout := makeJSONL(CodexEvent{
 			Type:  "turn.failed",
 			Error: &eventError{Message: "API rate limit exceeded"},
 		})
@@ -900,7 +900,7 @@ func TestAdapter_ParseOutput_Errors(t *testing.T) {
 	})
 
 	t.Run("error event", func(t *testing.T) {
-		stdout := makeJSONL(codexEvent{
+		stdout := makeJSONL(CodexEvent{
 			Type:  "error",
 			Error: &eventError{Message: "Connection timeout"},
 		})
@@ -942,9 +942,9 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 	a := New()
 
 	t.Run("malformed JSON lines skipped", func(t *testing.T) {
-		stdout := "not json at all\n" + makeJSONL(codexEvent{
+		stdout := "not json at all\n" + makeJSONL(CodexEvent{
 			Type: "item.completed",
-			Item: &eventItem{Type: "agent_message", Text: "valid output"},
+			Item: &EventItem{Type: "agent_message", Text: "valid output"},
 		}) + "another bad line\n"
 
 		result, err := a.ParseOutput(0, stdout, "")
@@ -975,9 +975,9 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("task completion detection", func(t *testing.T) {
-		stdout := makeJSONL(codexEvent{
+		stdout := makeJSONL(CodexEvent{
 			Type: "item.completed",
-			Item: &eventItem{Type: "agent_message", Text: "Fixes #12\nCloses #17"},
+			Item: &EventItem{Type: "agent_message", Text: "Fixes #12\nCloses #17"},
 		})
 
 		result, err := a.ParseOutput(0, stdout, "")
@@ -991,9 +991,9 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("git push detection", func(t *testing.T) {
-		stdout := makeJSONL(codexEvent{
+		stdout := makeJSONL(CodexEvent{
 			Type: "item.completed",
-			Item: &eventItem{
+			Item: &EventItem{
 				Type:   "command_execution",
 				Output: "To github.com:org/repo.git\n   abc1234..def5678  main -> main",
 			},
@@ -1034,9 +1034,9 @@ func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 	t.Run("raw stdout fallback when JSONL parsed but no text extracted", func(t *testing.T) {
 		// Simulate events that don't produce text (e.g., only file_change events)
 		stdout := makeJSONL(
-			codexEvent{
+			CodexEvent{
 				Type: "item.completed",
-				Item: &eventItem{Type: "file_change", FilePath: "main.go", Action: "modified"},
+				Item: &EventItem{Type: "file_change", FilePath: "main.go", Action: "modified"},
 			},
 		) + "AGENTIUM_STATUS: PUSHED\n"
 
