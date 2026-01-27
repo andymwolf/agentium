@@ -96,9 +96,9 @@ type PhaseLoopConfig struct {
 
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID            string `json:"id"`
-	CloudProvider string `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
-	Repository    string `json:"repository"`
+	ID                   string   `json:"id"`
+	CloudProvider        string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
+	Repository           string   `json:"repository"`
 	Tasks                []string `json:"tasks"`
 	PRs                  []string `json:"prs,omitempty"`
 	Agent                string   `json:"agent"`
