@@ -65,11 +65,15 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 				c.logWarning("Failed to write Claude auth file: %v", err)
 			} else if authPath != "" {
 				args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
+				c.logInfo("Mounting Claude OAuth credentials from %s", authPath)
 			}
 		} else {
 			// In cloud mode, mount from VM path set up by provisioner
 			args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
+			c.logInfo("Mounting Claude OAuth credentials from /etc/agentium/claude-auth.json")
 		}
+	} else if c.config.ClaudeAuth.AuthMode != "" {
+		c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
 	}
 
 	// Mount Codex OAuth credentials
