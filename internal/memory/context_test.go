@@ -255,3 +255,87 @@ func TestBuildEvalContext_FiltersByTaskID(t *testing.T) {
 		t.Error("should not contain task2 result")
 	}
 }
+
+func TestBuildCurrentIterationEvalContext_Empty(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	ctx := s.BuildCurrentIterationEvalContext("", 1)
+	if ctx != "" {
+		t.Errorf("expected empty context for empty store, got %q", ctx)
+	}
+}
+
+func TestBuildCurrentIterationEvalContext_FiltersToCurrentIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "iter1 feedback", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "iter2 feedback", Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "iter3 feedback", Iteration: 3, PhaseIteration: 3, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "phase done", Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	// Request only iteration 2's feedback
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 2)
+
+	// Should contain only iteration 2 EvalFeedback
+	if !strings.Contains(ctx, "iter2 feedback") {
+		t.Error("missing iter2 feedback")
+	}
+
+	// Should NOT contain other iterations or PhaseResult
+	if strings.Contains(ctx, "iter1 feedback") {
+		t.Error("should not contain iter1 feedback")
+	}
+	if strings.Contains(ctx, "iter3 feedback") {
+		t.Error("should not contain iter3 feedback")
+	}
+	if strings.Contains(ctx, "phase done") {
+		t.Error("should not contain PhaseResult entries")
+	}
+}
+
+func TestBuildCurrentIterationEvalContext_FiltersByTaskID(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "task1 feedback", Iteration: 1, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "task2 feedback", Iteration: 1, PhaseIteration: 2, TaskID: "issue:456", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 2)
+
+	if !strings.Contains(ctx, "task1 feedback") {
+		t.Error("missing task1 feedback")
+	}
+	if strings.Contains(ctx, "task2 feedback") {
+		t.Error("should not contain task2 feedback")
+	}
+}
+
+func TestBuildCurrentIterationEvalContext_NoMatchingIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "iter1 feedback", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	// Request iteration 2, but only iteration 1 exists
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 2)
+
+	if ctx != "" {
+		t.Errorf("expected empty context when no matching iteration, got %q", ctx)
+	}
+}
+
+func TestBuildCurrentIterationEvalContext_Header(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "feedback", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 1)
+
+	if !strings.Contains(ctx, "## Current Iteration Feedback") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(ctx, "### Evaluator Feedback") {
+		t.Error("missing Evaluator Feedback section")
+	}
+}

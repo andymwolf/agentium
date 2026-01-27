@@ -230,12 +230,8 @@ type TaskState struct {
     PRNumber         string      // Linked PR for issues
     PhaseIteration   int         // Current iteration within phase
     MaxPhaseIter     int         // Max iterations for current phase
-    LastJudgeVerdict string      // "ADVANCE", "ITERATE", "BLOCKED", etc.
+    LastJudgeVerdict string      // "ADVANCE", "ITERATE", "BLOCKED"
     LastJudgeFeedback string     // Judge's feedback text
-    ReviewDecided    bool        // SIMPLE/COMPLEX decision made?
-    ReviewActive     bool        // Full review for this task?
-    IsSimple         bool        // Task marked as SIMPLE?
-    RegressionCount  int         // Number of REGRESS events
 }
 ```
 

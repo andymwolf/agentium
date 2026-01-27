@@ -206,7 +206,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 
 			// Get worker handoff summary if available
-			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase, iter)
+			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase)
 
 			// Run reviewer + judge
 			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
@@ -383,7 +383,7 @@ func (c *Controller) processHandoffOutput(taskID string, phase TaskPhase, iterat
 
 // buildWorkerHandoffSummary extracts a summary of what the worker claims to have done
 // from the handoff store. This helps the reviewer verify claims against actual output.
-func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase, _ int) string {
+func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase) string {
 	if !c.isHandoffEnabled() || c.handoffStore == nil {
 		return ""
 	}

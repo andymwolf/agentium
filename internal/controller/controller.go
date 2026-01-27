@@ -80,7 +80,6 @@ type TaskState struct {
 	MaxPhaseIter      int    // Max iterations for current phase (phase loop)
 	LastJudgeVerdict  string // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
 	LastJudgeFeedback string // Last judge feedback text
-	ReviewActive      bool   // Whether review loop is active for this task (auto mode)
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
