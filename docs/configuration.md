@@ -157,7 +157,7 @@ codex:
   auth_json_path: "~/.codex/auth.json"
 ```
 
-> **Note:** To set up Codex credentials, install Codex (`npm install -g @openai/codex`) and run `codex --login`. Agentium reads the cached credentials and transfers them to the VM automatically.
+> **Note:** To set up Codex credentials, install Codex (`bun add -g @openai/codex`) and run `codex --login`. Agentium reads the cached credentials and transfers them to the VM automatically.
 
 ### claude
 
@@ -171,7 +171,7 @@ codex:
 - **`api`** - Uses the `ANTHROPIC_API_KEY` environment variable. Simple setup, requires a long-lived API key.
 - **`oauth`** - Uses Claude Code OAuth credentials from an `auth.json` file. More secure for local usage. On macOS, Agentium will also check the macOS Keychain for Claude Code credentials if the file is not found.
 
-> **Note:** OAuth auth mode is only supported with the `claude-code` agent. To set up OAuth credentials, install Claude Code (`npm install -g @anthropic-ai/claude-code`) and run `claude login`.
+> **Note:** OAuth auth mode is only supported with the `claude-code` agent. To set up OAuth credentials, install Claude Code (`bun add -g @anthropic-ai/claude-code`) and run `claude login`.
 
 ### controller
 

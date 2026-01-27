@@ -29,10 +29,11 @@ var sensitivePathPatterns = []*regexp.Regexp{
 
 // packageInstallPatterns matches commands that install packages.
 var packageInstallPatterns = []*regexp.Regexp{
-	// npm/yarn/pnpm
+	// npm/yarn/pnpm/bun
 	regexp.MustCompile(`(?i)\bnpm\s+(install|i|add|ci)\b`),
 	regexp.MustCompile(`(?i)\byarn\s+(add|install)\b`),
 	regexp.MustCompile(`(?i)\bpnpm\s+(add|install|i)\b`),
+	regexp.MustCompile(`(?i)\bbun\s+(add|install|i)\b`),
 	// pip/pipx
 	regexp.MustCompile(`(?i)\bpip3?\s+install\b`),
 	regexp.MustCompile(`(?i)\bpipx?\s+install\b`),
