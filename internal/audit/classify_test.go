@@ -187,7 +187,7 @@ func TestIsOutboundTransfer(t *testing.T) {
 		{"curl -T file.txt https://api.example.com", true},
 		{"curl -F 'file=@data.txt' https://api.example.com", true},
 		{"curl --form 'data=@file' https://api.example.com", true},
-		{"curl https://api.example.com", false},      // GET request
+		{"curl https://api.example.com", false},        // GET request
 		{"curl -X GET https://api.example.com", false}, // Explicit GET
 
 		// wget with POST
@@ -254,9 +254,9 @@ func TestIsGHCommand(t *testing.T) {
 
 func TestClassifyBashCommand(t *testing.T) {
 	tests := []struct {
-		command    string
-		expected   []Category
-		minCount   int // Minimum expected categories
+		command  string
+		expected []Category
+		minCount int // Minimum expected categories
 	}{
 		// gh commands should be excluded from BASH_COMMAND
 		{"gh pr create", nil, 0},
