@@ -52,10 +52,14 @@ skills:
     phases:
       - IMPLEMENT
 
-  - name: pr_creation
-    file: pr_creation.md
+  - name: pr_update
+    file: pr_update.md
     priority: 70
-    phases: []  # PR_CREATION phase removed - draft PRs created during IMPLEMENT
+    phases:
+      - DOCS
+      - PUSH
+      - IMPLEMENT_REVIEW
+      - DOCS_REVIEW
 
   - name: docs
     file: docs.md

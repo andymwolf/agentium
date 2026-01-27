@@ -502,7 +502,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		} else {
 			c.logInfo("Focusing on issue #%s", nextTask.ID)
 			existingWork := c.detectExistingWork(ctx, nextTask.ID)
-			c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork)
+			c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork, "")
 			c.activeTaskExistingWork = existingWork
 
 			// Use phase loop if enabled for issue tasks
@@ -1143,7 +1143,10 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 }
 
 // buildPromptForTask builds a focused prompt for a single issue, incorporating existing work context.
-func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.ExistingWork) string {
+// The phase parameter controls whether implementation instructions are included:
+// - For IMPLEMENT phase (or empty phase): include full implementation instructions
+// - For other phases (PLAN, DOCS, etc.): defer to the phase-specific system prompt
+func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.ExistingWork, phase TaskPhase) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
@@ -1169,49 +1172,63 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		}
 	}
 
+	// Always include existing work context (branch/PR info) regardless of phase
 	if existingWork != nil {
-		// Existing work found — instruct continuation
 		sb.WriteString("## Existing Work Detected\n\n")
 		if existingWork.PRNumber != "" {
 			sb.WriteString(fmt.Sprintf("An open PR already exists for this issue: **PR #%s** (%s)\n",
 				existingWork.PRNumber, existingWork.PRTitle))
 			sb.WriteString(fmt.Sprintf("Branch: `%s`\n\n", existingWork.Branch))
-			sb.WriteString("### Instructions\n\n")
-			sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
-			sb.WriteString("2. Review the current state of the code on this branch\n")
-			sb.WriteString("3. Continue implementation or fix any issues found\n")
-			sb.WriteString("4. Run tests to verify correctness\n")
-			sb.WriteString(fmt.Sprintf("5. Push updates to the existing branch: `git push origin %s`\n", existingWork.Branch))
-			sb.WriteString("6. The existing PR will update automatically\n\n")
-			sb.WriteString("### DO NOT\n\n")
-			sb.WriteString("- Do NOT create a new branch\n")
-			sb.WriteString("- Do NOT create a new PR\n")
-			sb.WriteString("- Do NOT close or delete the existing PR\n")
 		} else {
 			sb.WriteString(fmt.Sprintf("An existing branch was found for this issue: `%s`\n\n", existingWork.Branch))
-			sb.WriteString("### Instructions\n\n")
-			sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
-			sb.WriteString("2. Review what's already been done on this branch\n")
-			sb.WriteString("3. Continue implementation or fix issues\n")
-			sb.WriteString("4. Run tests to verify correctness\n")
-			sb.WriteString("5. Commit and push your changes\n")
-			sb.WriteString("6. Create a PR linking to the issue (if one doesn't exist yet)\n\n")
-			sb.WriteString("### DO NOT\n\n")
-			sb.WriteString("- Do NOT create a new branch (use the existing one)\n")
 		}
-	} else {
-		// No existing work — fresh start
-		sb.WriteString("### Instructions\n\n")
-		sb.WriteString(fmt.Sprintf("1. Create a new branch: `agentium/issue-%s-<short-description>`\n", issueNumber))
-		sb.WriteString("2. Implement the fix or feature\n")
-		sb.WriteString("3. Run tests to verify correctness\n")
-		sb.WriteString("4. Commit your changes with a descriptive message\n")
-		sb.WriteString("5. Push the branch\n")
-		sb.WriteString("6. Create a pull request linking to the issue\n\n")
 	}
 
-	sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
-	sb.WriteString(fmt.Sprintf("The repository is already cloned at %s.\n", c.workDir))
+	// Only include detailed implementation instructions for IMPLEMENT phase (or when phase is empty/unspecified)
+	// For PLAN, DOCS, and other phases, defer to the phase-specific system prompt
+	if phase == PhaseImplement || phase == "" {
+		if existingWork != nil {
+			if existingWork.PRNumber != "" {
+				sb.WriteString("### Instructions\n\n")
+				sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
+				sb.WriteString("2. Review the current state of the code on this branch\n")
+				sb.WriteString("3. Continue implementation or fix any issues found\n")
+				sb.WriteString("4. Run tests to verify correctness\n")
+				sb.WriteString(fmt.Sprintf("5. Push updates to the existing branch: `git push origin %s`\n", existingWork.Branch))
+				sb.WriteString("6. The existing PR will update automatically\n\n")
+				sb.WriteString("### DO NOT\n\n")
+				sb.WriteString("- Do NOT create a new branch\n")
+				sb.WriteString("- Do NOT create a new PR\n")
+				sb.WriteString("- Do NOT close or delete the existing PR\n")
+			} else {
+				sb.WriteString("### Instructions\n\n")
+				sb.WriteString(fmt.Sprintf("1. Check out the existing branch: `git checkout %s`\n", existingWork.Branch))
+				sb.WriteString("2. Review what's already been done on this branch\n")
+				sb.WriteString("3. Continue implementation or fix issues\n")
+				sb.WriteString("4. Run tests to verify correctness\n")
+				sb.WriteString("5. Commit and push your changes\n")
+				sb.WriteString("6. Create a PR linking to the issue (if one doesn't exist yet)\n\n")
+				sb.WriteString("### DO NOT\n\n")
+				sb.WriteString("- Do NOT create a new branch (use the existing one)\n")
+			}
+		} else {
+			// No existing work — fresh start
+			sb.WriteString("### Instructions\n\n")
+			sb.WriteString(fmt.Sprintf("1. Create a new branch: `agentium/issue-%s-<short-description>`\n", issueNumber))
+			sb.WriteString("2. Implement the fix or feature\n")
+			sb.WriteString("3. Run tests to verify correctness\n")
+			sb.WriteString("4. Commit your changes with a descriptive message\n")
+			sb.WriteString("5. Push the branch\n")
+			sb.WriteString("6. Create a pull request linking to the issue\n\n")
+		}
+		sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
+		sb.WriteString(fmt.Sprintf("The repository is already cloned at %s.\n", c.workDir))
+	} else {
+		// For PLAN, DOCS, and other phases: defer to the phase-specific system prompt
+		sb.WriteString("### Instructions\n\n")
+		sb.WriteString("Follow the instructions in your system prompt to complete this phase.\n")
+		sb.WriteString(fmt.Sprintf("The repository is cloned at %s.\n", c.workDir))
+	}
 
 	return sb.String()
 }
@@ -1396,12 +1413,20 @@ func (c *Controller) determineActivePhase() string {
 }
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
-	// Check delegation before standard iteration
+	// Build phase-aware prompt FIRST (before delegation check)
+	// This ensures both delegated and non-delegated paths use the same phase-appropriate prompt
+	prompt := c.config.Prompt
+	if c.activeTaskType == "issue" && c.activeTask != "" {
+		phase := TaskPhase(c.determineActivePhase())
+		prompt = c.buildPromptForTask(c.activeTask, c.activeTaskExistingWork, phase)
+	}
+
+	// Check delegation AFTER prompt is built
 	if c.orchestrator != nil {
 		phase := TaskPhase(c.determineActivePhase())
 		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
 			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
-			return c.runDelegatedIteration(ctx, phase, subCfg)
+			return c.runDelegatedIteration(ctx, phase, subCfg, prompt)
 		}
 	}
 
@@ -1413,7 +1438,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		GitHubToken:    c.gitHubToken,
 		MaxIterations:  c.config.MaxIterations,
 		MaxDuration:    c.config.MaxDuration,
-		Prompt:         c.config.Prompt,
+		Prompt:         prompt,
 		Metadata:       make(map[string]string),
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 		SystemPrompt:   c.systemPrompt,
