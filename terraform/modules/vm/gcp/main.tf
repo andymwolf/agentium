@@ -174,6 +174,17 @@ runcmd:
 
     log "Starting agentium controller setup"
 
+    # Fix ownership of auth files (cloud-init owner directive doesn't work on COS)
+    # Container runs as UID 1000, so files must be readable by that UID
+    if [ -f /etc/agentium/claude-auth.json ]; then
+      chown 1000:1000 /etc/agentium/claude-auth.json
+      log "Fixed ownership of claude-auth.json to 1000:1000"
+    fi
+    if [ -f /etc/agentium/codex-auth.json ]; then
+      chown 1000:1000 /etc/agentium/codex-auth.json
+      log "Fixed ownership of codex-auth.json to 1000:1000"
+    fi
+
     # Create workspace directory
     mkdir -p /home/workspace
     log "Created /home/workspace"
@@ -193,6 +204,11 @@ runcmd:
     if ! docker image inspect ${var.controller_image} >/dev/null 2>&1; then
       log "ERROR: Failed to pull controller image after 3 attempts"
       exit 1
+    fi
+
+    # Debug: Verify OAuth credential file permissions after chown
+    if [ -f /etc/agentium/claude-auth.json ]; then
+      log "claude-auth.json permissions: $(ls -la /etc/agentium/claude-auth.json)"
     fi
 
     # Run controller
