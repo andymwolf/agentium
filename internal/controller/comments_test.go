@@ -194,6 +194,93 @@ func TestGetPRNumberForTask(t *testing.T) {
 	}
 }
 
+func TestInstanceSignature(t *testing.T) {
+	tests := []struct {
+		name          string
+		cloudProvider string
+		sessionID     string
+		wantSignature string
+	}{
+		{
+			name:          "gcp provider",
+			cloudProvider: "gcp",
+			sessionID:     "agentium-abc123",
+			wantSignature: "agentium:gcp:agentium-abc123",
+		},
+		{
+			name:          "aws provider",
+			cloudProvider: "aws",
+			sessionID:     "agentium-def456",
+			wantSignature: "agentium:aws:agentium-def456",
+		},
+		{
+			name:          "local provider",
+			cloudProvider: "local",
+			sessionID:     "agentium-local-xyz789",
+			wantSignature: "agentium:local:agentium-local-xyz789",
+		},
+		{
+			name:          "empty provider defaults to unknown",
+			cloudProvider: "",
+			sessionID:     "agentium-test",
+			wantSignature: "agentium:unknown:agentium-test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				config: SessionConfig{
+					ID:            tt.sessionID,
+					CloudProvider: tt.cloudProvider,
+				},
+				logger: testLogger(),
+			}
+
+			got := c.instanceSignature()
+			if got != tt.wantSignature {
+				t.Errorf("instanceSignature() = %q, want %q", got, tt.wantSignature)
+			}
+		})
+	}
+}
+
+func TestAppendSignature(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			ID:            "agentium-test123",
+			CloudProvider: "gcp",
+		},
+		logger: testLogger(),
+	}
+
+	body := "This is a test comment."
+	got := c.appendSignature(body)
+	want := "This is a test comment.\n\n<!-- agentium:gcp:agentium-test123 -->"
+
+	if got != want {
+		t.Errorf("appendSignature() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestAppendSignature_MultilineBody(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			ID:            "agentium-multi",
+			CloudProvider: "local",
+		},
+		logger: testLogger(),
+	}
+
+	body := "### Phase: IMPLEMENT\n\nThis is a multi-line\ncomment body."
+	got := c.appendSignature(body)
+	want := "### Phase: IMPLEMENT\n\nThis is a multi-line\ncomment body.\n\n<!-- agentium:local:agentium-multi -->"
+
+	if got != want {
+		t.Errorf("appendSignature() =\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestPostReviewFeedbackForPhase_Routing(t *testing.T) {
 	tests := []struct {
 		name           string

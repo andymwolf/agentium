@@ -50,8 +50,9 @@ type CodexAuthConfig struct {
 
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string                `json:"id"`
-	Repository    string                `json:"repository"`
+	ID            string `json:"id"`
+	CloudProvider string `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
+	Repository    string `json:"repository"`
 	Tasks         []string              `json:"tasks"`
 	PRs           []string              `json:"prs,omitempty"`
 	Agent         string                `json:"agent"`
