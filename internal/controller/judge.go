@@ -17,6 +17,9 @@ const (
 	VerdictAdvance JudgeVerdict = "ADVANCE"
 	VerdictIterate JudgeVerdict = "ITERATE"
 	VerdictBlocked JudgeVerdict = "BLOCKED"
+	VerdictSimple  JudgeVerdict = "SIMPLE"  // PLAN iteration 1: straightforward change
+	VerdictComplex JudgeVerdict = "COMPLEX" // PLAN iteration 1: multiple components, architectural decisions
+	VerdictNoMerge JudgeVerdict = "NOMERGE" // COMPLEX final review: low confidence, needs human review
 )
 
 // JudgeResult holds the parsed judge verdict and feedback.
@@ -37,14 +40,14 @@ type judgeRunParams struct {
 }
 
 // judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
-var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED)[ \t]*(.*)$`)
+var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED|SIMPLE|COMPLEX|NOMERGE)[ \t]*(.*)$`)
 
 // parseJudgeVerdict extracts the judge verdict from agent output.
-// If no verdict line is found, defaults to ITERATE (fail-closed).
+// If no verdict line is found, defaults to BLOCKED (fail-closed).
 func parseJudgeVerdict(output string) JudgeResult {
 	matches := judgePattern.FindStringSubmatch(output)
 	if matches == nil {
-		return JudgeResult{Verdict: VerdictIterate, SignalFound: false}
+		return JudgeResult{Verdict: VerdictBlocked, SignalFound: false}
 	}
 	return JudgeResult{
 		Verdict:     JudgeVerdict(matches[1]),
