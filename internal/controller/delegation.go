@@ -10,7 +10,8 @@ import (
 // runDelegatedIteration executes a single iteration using the delegated sub-task config.
 // It resolves the agent adapter, builds skills and session context, and runs the
 // agent container with the specified overrides.
-func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase, config *SubTaskConfig) (*agent.IterationResult, error) {
+// The prompt parameter contains the phase-aware prompt built by the caller.
+func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase, config *SubTaskConfig, prompt string) (*agent.IterationResult, error) {
 	// Resolve agent adapter
 	activeAgent := c.agent
 	if config.Agent != "" {
@@ -47,7 +48,7 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		GitHubToken:    c.gitHubToken,
 		MaxIterations:  c.config.MaxIterations,
 		MaxDuration:    c.config.MaxDuration,
-		Prompt:         c.config.Prompt,
+		Prompt:         prompt, // Use phase-aware prompt passed by caller
 		Metadata:       make(map[string]string),
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 		SystemPrompt:   c.systemPrompt,

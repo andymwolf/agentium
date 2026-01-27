@@ -229,6 +229,11 @@ func (c *Controller) updateHandoffWithPRInfo(taskID, prNumber, prURL string, ite
 		implOutput.DraftPRUrl = prURL
 		if err := c.handoffStore.StorePhaseOutput(taskID, handoff.PhaseImplement, iteration, implOutput); err != nil {
 			c.logWarning("Failed to update handoff store with PR info: %v", err)
+			return // Don't try to save if store failed
+		}
+		// Persist to disk (following pattern from phase_loop.go)
+		if err := c.handoffStore.Save(); err != nil {
+			c.logWarning("Failed to persist handoff store after PR info update: %v", err)
 		}
 	}
 }

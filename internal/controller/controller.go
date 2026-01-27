@@ -1413,21 +1413,21 @@ func (c *Controller) determineActivePhase() string {
 }
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
-	// Check delegation before standard iteration
-	if c.orchestrator != nil {
-		phase := TaskPhase(c.determineActivePhase())
-		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
-			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
-			return c.runDelegatedIteration(ctx, phase, subCfg)
-		}
-	}
-
-	// Rebuild prompt per-phase for issue tasks to ensure phase-appropriate instructions
-	// For PR tasks, continue to use the pre-built c.config.Prompt
+	// Build phase-aware prompt FIRST (before delegation check)
+	// This ensures both delegated and non-delegated paths use the same phase-appropriate prompt
 	prompt := c.config.Prompt
 	if c.activeTaskType == "issue" && c.activeTask != "" {
 		phase := TaskPhase(c.determineActivePhase())
 		prompt = c.buildPromptForTask(c.activeTask, c.activeTaskExistingWork, phase)
+	}
+
+	// Check delegation AFTER prompt is built
+	if c.orchestrator != nil {
+		phase := TaskPhase(c.determineActivePhase())
+		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
+			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
+			return c.runDelegatedIteration(ctx, phase, subCfg, prompt)
+		}
 	}
 
 	session := &agent.Session{

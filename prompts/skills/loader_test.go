@@ -19,7 +19,7 @@ func TestLoadManifest(t *testing.T) {
 	expectedNames := []string{
 		"safety", "environment", "status_signals",
 		"planning", "plan", "implement", "test",
-		"pr_creation", "docs", "pr_review",
+		"pr_update", "docs", "pr_review",
 		"plan_reviewer", "code_reviewer", "judge",
 	}
 
@@ -51,8 +51,8 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
-		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
-		{"pr_creation", nil},            // PR_CREATION phase removed - draft PRs created during IMPLEMENT
+		{"test", []string{"IMPLEMENT"}},                                      // TEST merged into IMPLEMENT
+		{"pr_update", []string{"DOCS", "PUSH", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // For phases after draft PR creation
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},
@@ -155,7 +155,7 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"plan":           "PLAN PHASE",
 		"implement":      "Pre-Flight Check",
 		"test":           "Development Loop",
-		"pr_creation":    "Push and Create PR",
+		"pr_update":      "PR Update Skill",
 		"docs":           "DOCS PHASE",
 		"pr_review":      "PR REVIEW SESSIONS",
 		"plan_reviewer":  "PLAN REVIEWER",

@@ -35,8 +35,8 @@ var embeddedImplement string
 //go:embed test.md
 var embeddedTest string
 
-//go:embed pr_creation.md
-var embeddedPRCreation string
+//go:embed pr_update.md
+var embeddedPRUpdate string
 
 //go:embed docs.md
 var embeddedDocs string
@@ -63,7 +63,7 @@ var skillFiles = map[string]string{
 	"plan.md":           embeddedPlan,
 	"implement.md":      embeddedImplement,
 	"test.md":           embeddedTest,
-	"pr_creation.md":    embeddedPRCreation,
+	"pr_update.md":      embeddedPRUpdate,
 	"docs.md":           embeddedDocs,
 	"pr_review.md":      embeddedPRReview,
 	"plan_reviewer.md":  embeddedPlanReviewer,
