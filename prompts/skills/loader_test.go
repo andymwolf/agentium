@@ -48,7 +48,7 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // PR_CREATION removed
 		{"environment", nil},
 		{"status_signals", nil},
-		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
+		{"planning", []string{"ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
 		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
