@@ -15,14 +15,13 @@ linters:
     - misspell
     - unconvert
     - unparam
+  settings:
+    govet:
+      enable:
+        - shadow
+        - unusedwrite
 
 formatters:
   enable:
     - gofmt
     - goimports
-
-settings:
-  govet:
-    enable:
-      - shadow
-      - unusedwrite
