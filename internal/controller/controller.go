@@ -92,12 +92,12 @@ type TaskState struct {
 	Phase               TaskPhase
 	TestRetries         int
 	LastStatus          string
-	PRNumber            string // Linked PR number (for issues that create PRs)
-	PhaseIteration      int    // Current iteration within the active phase (phase loop)
-	MaxPhaseIter        int    // Max iterations for current phase (phase loop)
-	LastJudgeVerdict    string // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
-	LastJudgeFeedback   string // Last judge feedback text
-	DraftPRCreated      bool   // Whether draft PR has been created for this task
+	PRNumber            string       // Linked PR number (for issues that create PRs)
+	PhaseIteration      int          // Current iteration within the active phase (phase loop)
+	MaxPhaseIter        int          // Max iterations for current phase (phase loop)
+	LastJudgeVerdict    string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
+	LastJudgeFeedback   string       // Last judge feedback text
+	DraftPRCreated      bool         // Whether draft PR has been created for this task
 	WorkflowPath        WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
 	ControllerOverrode  bool         // True if controller forced ADVANCE at max iterations
 	NoMergeVerdictGiven bool         // True if NOMERGE verdict given during final review
