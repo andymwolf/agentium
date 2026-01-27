@@ -45,10 +45,18 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		cfg.Session.Repository = repo
 	}
 	if issues := viper.GetStringSlice("session.issues"); len(issues) > 0 {
-		cfg.Session.Tasks = issues
+		expandedIssues, err := ExpandRanges(issues)
+		if err != nil {
+			return fmt.Errorf("invalid --issues value: %w", err)
+		}
+		cfg.Session.Tasks = expandedIssues
 	}
 	if prs := viper.GetStringSlice("session.prs"); len(prs) > 0 {
-		cfg.Session.PRs = prs
+		expandedPRs, err := ExpandRanges(prs)
+		if err != nil {
+			return fmt.Errorf("invalid --prs value: %w", err)
+		}
+		cfg.Session.PRs = expandedPRs
 	}
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
