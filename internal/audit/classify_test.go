@@ -121,6 +121,13 @@ func TestIsPackageInstall(t *testing.T) {
 		{"pnpm i", true},
 		{"pnpm test", false},
 
+		// bun
+		{"bun add express", true},
+		{"bun install", true},
+		{"bun i", true},
+		{"bun run build", false},
+		{"bun test", false},
+
 		// pip
 		{"pip install requests", true},
 		{"pip3 install flask", true},

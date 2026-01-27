@@ -366,7 +366,7 @@ func readAuthJSON(path string) ([]byte, error) {
 					return keychainData, nil
 				}
 			}
-			return nil, fmt.Errorf("auth.json not found at %s and not in macOS Keychain\n\nTo use OAuth authentication:\n  1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n  2. Run: claude login\n  3. Try again", path)
+			return nil, fmt.Errorf("auth.json not found at %s and not in macOS Keychain\n\nTo use OAuth authentication:\n  1. Install Claude Code: bun add -g @anthropic-ai/claude-code\n  2. Run: claude login\n  3. Try again", path)
 		}
 		return nil, fmt.Errorf("failed to read auth.json: %w", err)
 	}
@@ -430,7 +430,7 @@ func readCodexAuthJSON(path string) ([]byte, error) {
 					return keychainData, nil
 				}
 			}
-			return nil, fmt.Errorf("codex auth.json not found at %s and not in macOS Keychain\n\nTo use Codex authentication:\n  1. Install Codex: npm install -g @openai/codex\n  2. Run: codex --login\n  3. Try again", path)
+			return nil, fmt.Errorf("codex auth.json not found at %s and not in macOS Keychain\n\nTo use Codex authentication:\n  1. Install Codex: bun add -g @openai/codex\n  2. Run: codex --login\n  3. Try again", path)
 		}
 		return nil, fmt.Errorf("failed to read Codex auth.json: %w", err)
 	}

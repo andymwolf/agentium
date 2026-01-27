@@ -72,7 +72,7 @@ If using the Codex agent, authenticate on a machine with a browser first:
 
 ```bash
 # Install Codex
-npm install -g @openai/codex
+bun add -g @openai/codex
 
 # Login (opens browser for OAuth)
 codex --login

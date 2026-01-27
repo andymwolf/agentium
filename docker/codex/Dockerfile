@@ -24,8 +24,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
     apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
+# Install bun for faster package installation
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
 # Install Codex CLI
-RUN npm install -g @openai/codex
+RUN bun add -g @openai/codex
 
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
