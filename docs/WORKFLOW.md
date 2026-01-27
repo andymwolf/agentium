@@ -93,35 +93,48 @@ The COMPLEX path refreshes context and conducts additional review.
 
 The phase loop is implemented in `internal/controller/phase_loop.go`:
 
-NOTE: Diagram needs to be fixed. SIMPLE/COMPLEX occurs before review in PLAN iteration 1
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Phase Loop                              │
-│                                                              │
-│  ┌──────────┐    ┌──────────┐    ┌─────────┐                │
-│  │  Worker  │───▶│ Reviewer │───▶│  Judge  │                │
-│  │  Agent   │    │  Agent   │    │  Agent  │                │
-│  └──────────┘    └──────────┘    └─────────┘                │
-│                                       │                      │
-│                                       ▼                      │
-│                              ┌─────────────────┐            │
-│                              │    Verdict?     │            │
-│                              └─────────────────┘            │
-│                                       │                      │
-│        ┌──────────────────────────────┼──────────────────┐  │
-│        │           │          │       │         │        │  │
-│        ▼           ▼          ▼       ▼         ▼        ▼  │
-│   ┌─────────┐ ┌─────────┐ ┌───────┐ ┌───────┐ ┌────────┐    | 
-│   │ ADVANCE │ │ ITERATE │ │BLOCKED│ │SIMPLE │ │COMPLEX │    │
-│   └─────────┘ └─────────┘ └───────┘ └───────┘ └────────┘    |
-│        │           │          │       │         │           │
-│        │           │          │       └────┬────┘           │
-│        │           │          │            │                │
-│        ▼           ▼          ▼            ▼                │
-│   Next phase   Same phase   Stop    Set workflow            │
-│                                       path                  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Phase Loop                                     │
+│                                                                          │
+│  ┌──────────┐                                                           │
+│  │  Worker  │                                                           │
+│  │  Agent   │                                                           │
+│  └────┬─────┘                                                           │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ┌─────────────────────────────────────────┐                            │
+│  │  PLAN iteration 1 & path not set?       │                            │
+│  └─────────────────────────────────────────┘                            │
+│       │                                                                  │
+│       ├── Yes ──▶ ┌─────────────┐    ┌───────────────────────────┐      │
+│       │           │ Complexity  │───▶│ SIMPLE: auto-advance,     │      │
+│       │           │ Assessor    │    │         skip reviewer     │      │
+│       │           └─────────────┘    │ COMPLEX: continue below   │      │
+│       │                              └───────────────────────────┘      │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ┌──────────┐    ┌─────────┐                                            │
+│  │ Reviewer │───▶│  Judge  │                                            │
+│  │  Agent   │    │  Agent  │                                            │
+│  └──────────┘    └────┬────┘                                            │
+│                       │                                                  │
+│                       ▼                                                  │
+│              ┌─────────────────┐                                        │
+│              │    Verdict?     │                                        │
+│              └─────────────────┘                                        │
+│                       │                                                  │
+│        ┌──────────────┼──────────────┐                                  │
+│        │              │              │                                  │
+│        ▼              ▼              ▼                                  │
+│   ┌─────────┐   ┌─────────┐   ┌───────┐                                 │
+│   │ ADVANCE │   │ ITERATE │   │BLOCKED│                                 │
+│   └────┬────┘   └────┬────┘   └───┬───┘                                 │
+│        │              │           │                                      │
+│        ▼              ▼           ▼                                      │
+│   Next phase    Same phase      Stop                                     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Iteration Control
@@ -152,6 +165,17 @@ Different reviewers are used for different phases:
 | `plan_reviewer` | PLAN_REVIEW | Reviews implementation plans |
 | `code_reviewer` | IMPLEMENT_REVIEW, REVIEW_REVIEW, DOCS_REVIEW | Reviews code changes |
 
+### Complexity Assessor
+
+After PLAN iteration 1, a **Complexity Assessor** (not the Judge) determines the workflow path:
+
+| Verdict | When Used | Effect |
+|---------|-----------|--------|
+| SIMPLE | PLAN iteration 1 only | Auto-advance, skip reviewer, use reduced iteration limits |
+| COMPLEX | PLAN iteration 1 only | Continue to reviewer/judge, use standard iteration limits |
+
+The Complexity Assessor emits verdicts using `AGENTIUM_EVAL: SIMPLE` or `AGENTIUM_EVAL: COMPLEX`.
+
 ### Judge Verdicts
 
 | Verdict | Constant | When Used | Effect |
@@ -159,9 +183,6 @@ Different reviewers are used for different phases:
 | ADVANCE | `VerdictAdvance` | All phases | Phase complete, move to next phase |
 | ITERATE | `VerdictIterate` | All phases | More work needed, run another iteration |
 | BLOCKED | `VerdictBlocked` | All phases | Unresolvable issue, stop task |
-| SIMPLE | `VerdictSimple` | PLAN only | Task is simple, skip REVIEW phase |
-| COMPLEX | `VerdictComplex` | PLAN only | Task is complex, include REVIEW phase |
-| NOMERGE | `VerdictNoMerge` | Final REVIEW only | Comments reason on PR, does not finalize PR |
 
 ### Verdict Signal Format
 
@@ -171,10 +192,15 @@ Agents emit verdicts using this format:
 AGENTIUM_EVAL: ADVANCE [optional feedback]
 AGENTIUM_EVAL: ITERATE More work needed on error handling
 AGENTIUM_EVAL: BLOCKED Cannot access required API
-AGENTIUM_EVAL: SIMPLE straightforward config change
-AGENTIUM_EVAL: COMPLEX multiple files and architectural changes
-AGENTIUM_EVAL: NOMERGE signals low confidence in output, prompts human review of PR, only applies to COMPLEX workflows
 ```
+
+### NOMERGE Behavior
+
+NOMERGE is **not a verdict** but a controller behavior. When the controller forces ADVANCE at max iterations (because the Judge kept returning ITERATE), the `ControllerOverrode` flag is set. At PR finalization:
+
+- If `ControllerOverrode` is true, the PR remains as a draft
+- A NOMERGE comment is posted explaining human review is required
+- The PR is NOT marked as ready for review
 
 ### Fail-Safe Behaviors
 
@@ -223,16 +249,19 @@ The `TaskState` struct tracks per-task metadata:
 
 ```go
 type TaskState struct {
-    ID               string      // Issue/PR number
-    Type             string      // "issue" or "pr"
-    Phase            TaskPhase   // Current phase
-    TestRetries      int         // Count of test failures
-    LastStatus       string      // Last agent status signal
-    PRNumber         string      // Linked PR for issues
-    PhaseIteration   int         // Current iteration within phase
-    MaxPhaseIter     int         // Max iterations for current phase
-    LastJudgeVerdict string      // "ADVANCE", "ITERATE", "BLOCKED"
-    LastJudgeFeedback string     // Judge's feedback text
+    ID                 string       // Issue/PR number
+    Type               string       // "issue" or "pr"
+    Phase              TaskPhase    // Current phase
+    TestRetries        int          // Count of test failures
+    LastStatus         string       // Last agent status signal
+    PRNumber           string       // Linked PR for issues
+    PhaseIteration     int          // Current iteration within phase
+    MaxPhaseIter       int          // Max iterations for current phase
+    LastJudgeVerdict   string       // "ADVANCE", "ITERATE", "BLOCKED"
+    LastJudgeFeedback  string       // Judge's feedback text
+    DraftPRCreated     bool         // Whether draft PR has been created
+    WorkflowPath       WorkflowPath // SIMPLE or COMPLEX (set after PLAN iteration 1)
+    ControllerOverrode bool         // True if controller forced ADVANCE (triggers NOMERGE)
 }
 ```
 
