@@ -1,6 +1,10 @@
 package controller
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/andywolf/agentium/internal/handoff"
+)
 
 func TestAdvancePhase(t *testing.T) {
 	tests := []struct {
@@ -220,7 +224,7 @@ func TestBuildWorkerHandoffSummary_DisabledHandoff(t *testing.T) {
 		handoffStore: nil,
 	}
 
-	result := c.buildWorkerHandoffSummary("issue:123", PhasePlan)
+	result := c.buildWorkerHandoffSummary("issue:123", PhasePlan, 1)
 	if result != "" {
 		t.Errorf("expected empty result when handoff disabled, got %q", result)
 	}
@@ -236,8 +240,46 @@ func TestBuildWorkerHandoffSummary_NoHandoffStore(t *testing.T) {
 		handoffStore: nil,
 	}
 
-	result := c.buildWorkerHandoffSummary("issue:123", PhasePlan)
+	result := c.buildWorkerHandoffSummary("issue:123", PhasePlan, 1)
 	if result != "" {
 		t.Errorf("expected empty result when handoff store is nil, got %q", result)
+	}
+}
+
+func TestBuildWorkerHandoffSummary_SkipsStaleIteration(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	// Store handoff data from iteration 1
+	taskID := "issue:123"
+	_ = store.StorePhaseOutput(taskID, handoff.PhasePlan, 1, &handoff.PlanOutput{
+		Summary: "Plan from iteration 1",
+	})
+
+	c := &Controller{
+		config: SessionConfig{
+			Handoff: struct {
+				Enabled bool `json:"enabled,omitempty"`
+			}{Enabled: true},
+		},
+		handoffStore: store,
+	}
+
+	// Request summary for iteration 2 - should return empty since data is from iteration 1
+	result := c.buildWorkerHandoffSummary(taskID, PhasePlan, 2)
+	if result != "" {
+		t.Errorf("expected empty result for stale iteration, got %q", result)
+	}
+
+	// Request summary for iteration 1 - should return the data
+	result = c.buildWorkerHandoffSummary(taskID, PhasePlan, 1)
+	if result == "" {
+		t.Error("expected non-empty result for current iteration")
+	}
+	if result != "Summary: Plan from iteration 1" {
+		t.Errorf("unexpected result: %q", result)
 	}
 }

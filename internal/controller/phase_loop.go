@@ -206,7 +206,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 
 			// Get worker handoff summary if available
-			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase)
+			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase, iter)
 
 			// Run reviewer + judge
 			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
@@ -383,7 +383,9 @@ func (c *Controller) processHandoffOutput(taskID string, phase TaskPhase, iterat
 
 // buildWorkerHandoffSummary extracts a summary of what the worker claims to have done
 // from the handoff store. This helps the reviewer verify claims against actual output.
-func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase) string {
+// Only returns data if the handoff was produced in the current iteration to avoid
+// showing stale claims from previous iterations.
+func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase, currentIteration int) string {
 	if !c.isHandoffEnabled() || c.handoffStore == nil {
 		return ""
 	}
@@ -391,6 +393,11 @@ func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase) s
 	handoffPhase := handoff.Phase(phase)
 	hd := c.handoffStore.GetPhaseOutput(taskID, handoffPhase)
 	if hd == nil {
+		return ""
+	}
+
+	// Skip stale handoff data from previous iterations to avoid validating wrong work
+	if hd.Iteration != currentIteration {
 		return ""
 	}
 

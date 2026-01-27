@@ -339,3 +339,34 @@ func TestBuildCurrentIterationEvalContext_Header(t *testing.T) {
 		t.Error("missing Evaluator Feedback section")
 	}
 }
+
+func TestBuildCurrentIterationEvalContext_RespectsBudget(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 100})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: "short feedback", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: strings.Repeat("x", 200), Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 1)
+
+	// First item should fit
+	if !strings.Contains(ctx, "short feedback") {
+		t.Error("first item should fit within budget")
+	}
+	// Second long item should be cut
+	if strings.Contains(ctx, strings.Repeat("x", 200)) {
+		t.Error("long item should be cut by budget")
+	}
+}
+
+func TestBuildCurrentIterationEvalContext_AllEntriesExceedBudget(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 50})
+	s.data.Entries = []Entry{
+		{Type: EvalFeedback, Content: strings.Repeat("x", 200), Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildCurrentIterationEvalContext("issue:123", 1)
+	if ctx != "" {
+		t.Errorf("expected empty context when no items fit budget, got %q", ctx)
+	}
+}
