@@ -77,6 +77,14 @@ const (
 	WorkflowPathComplex WorkflowPath = "COMPLEX" // Multiple components, full review
 )
 
+// ComplexityVerdict represents the outcome of complexity assessment.
+type ComplexityVerdict string
+
+const (
+	ComplexitySimple  ComplexityVerdict = "SIMPLE"
+	ComplexityComplex ComplexityVerdict = "COMPLEX"
+)
+
 // TaskState tracks the current state of a task being worked on
 type TaskState struct {
 	ID                  string

@@ -211,6 +211,38 @@ func (c *Controller) getPRNumberForTask() string {
 	return ""
 }
 
+// postNOMERGEComment posts a warning comment on the PR indicating that it
+// requires human review before merging. This is called when the controller
+// forced ADVANCE at max iterations or when a NOMERGE verdict was given.
+func (c *Controller) postNOMERGEComment(ctx context.Context, prNumber string, reason string) {
+	if prNumber == "" {
+		return
+	}
+
+	body := fmt.Sprintf(`## NOMERGE - Human Review Required
+
+This pull request was completed but **requires human review** before merging.
+
+**Reason:** %s
+
+### What this means
+
+The automated review process did not achieve full confidence in this change.
+Please review the changes carefully before merging.
+
+### Recommended actions
+
+1. Review all code changes in this PR
+2. Verify tests are passing and adequate
+3. Check for edge cases or potential issues
+4. Mark as ready for review when satisfied
+
+---
+*This PR remains in draft status until a human reviewer approves it.*`, reason)
+
+	c.postPRComment(ctx, prNumber, body)
+}
+
 // postReviewFeedbackForPhase posts reviewer feedback to the appropriate location based on phase.
 // - PLAN phase: Posts to the associated issue
 // - IMPLEMENT phase: Posts to the associated PR (if one exists)
