@@ -26,8 +26,6 @@ func (b *Builder) BuildInputForPhase(taskID string, phase Phase) (string, error)
 		input, err = b.buildPlanInput(taskID)
 	case PhaseImplement:
 		input, err = b.buildImplementInput(taskID)
-	case PhaseReview:
-		input, err = b.buildReviewInput(taskID)
 	case PhaseDocs:
 		input, err = b.buildDocsInput(taskID)
 	case PhasePRCreation:

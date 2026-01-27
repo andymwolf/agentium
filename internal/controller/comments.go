@@ -33,12 +33,6 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, resu
 		body = fmt.Sprintf("**Judge:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
 	case VerdictBlocked:
 		body = fmt.Sprintf("**Judge:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
-	case VerdictSimple:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — SIMPLE (REVIEW will be skipped)", phase)
-	case VerdictComplex:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — COMPLEX (REVIEW will be used)", phase)
-	case VerdictRegress:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — REGRESS (returning to PLAN)\n\n> %s", phase, result.Feedback)
 	}
 
 	c.postIssueComment(ctx, body)

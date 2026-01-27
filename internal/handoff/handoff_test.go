@@ -104,7 +104,7 @@ func TestStore(t *testing.T) {
 
 		_ = store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{Summary: "Plan"})
 		_ = store.StorePhaseOutput(taskID, PhaseImplement, 1, &ImplementOutput{BranchName: "feature/test"})
-		_ = store.StorePhaseOutput(taskID, PhaseReview, 1, &ReviewOutput{})
+		_ = store.StorePhaseOutput(taskID, PhaseDocs, 1, &DocsOutput{})
 
 		store.ClearFromPhase(taskID, PhaseImplement)
 
@@ -114,8 +114,8 @@ func TestStore(t *testing.T) {
 		if store.GetImplementOutput(taskID) != nil {
 			t.Error("Implement should be cleared")
 		}
-		if store.GetReviewOutput(taskID) != nil {
-			t.Error("Review should be cleared")
+		if store.GetDocsOutput(taskID) != nil {
+			t.Error("Docs should be cleared")
 		}
 	})
 
@@ -397,31 +397,6 @@ func TestValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("ValidateReviewOutput regression needs reason", func(t *testing.T) {
-		out := &ReviewOutput{
-			RegressionNeeded: true,
-			// Missing RegressionReason
-		}
-
-		errs := validator.ValidatePhaseOutput(PhaseReview, out)
-		if !errs.HasErrors() {
-			t.Error("Expected validation error for missing regression reason")
-		}
-	})
-
-	t.Run("ValidateReviewOutput invalid severity", func(t *testing.T) {
-		out := &ReviewOutput{
-			IssuesFound: []ReviewIssue{
-				{Severity: "CRITICAL", Description: "Bad thing"},
-			},
-		}
-
-		errs := validator.ValidatePhaseOutput(PhaseReview, out)
-		if !errs.HasErrors() {
-			t.Error("Expected validation error for invalid severity")
-		}
-	})
-
 	t.Run("ValidatePRCreationOutput success", func(t *testing.T) {
 		out := &PRCreationOutput{
 			PRNumber: 123,
@@ -481,12 +456,6 @@ func TestValidator(t *testing.T) {
 		errs = validator.ValidatePhaseInput(store, taskID, PhaseImplement)
 		if errs.HasErrors() {
 			t.Errorf("IMPLEMENT should pass with plan: %v", errs)
-		}
-
-		// REVIEW should fail without implement
-		errs = validator.ValidatePhaseInput(store, taskID, PhaseReview)
-		if !errs.HasErrors() {
-			t.Error("REVIEW should fail without implement output")
 		}
 	})
 }

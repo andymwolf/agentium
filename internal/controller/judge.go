@@ -17,31 +17,27 @@ const (
 	VerdictAdvance JudgeVerdict = "ADVANCE"
 	VerdictIterate JudgeVerdict = "ITERATE"
 	VerdictBlocked JudgeVerdict = "BLOCKED"
-	VerdictSimple  JudgeVerdict = "SIMPLE"  // Task is simple, skip reviewers
-	VerdictComplex JudgeVerdict = "COMPLEX" // Task is complex, use reviewers
-	VerdictRegress JudgeVerdict = "REGRESS" // Return to PLAN phase
 )
 
 // JudgeResult holds the parsed judge verdict and feedback.
 type JudgeResult struct {
 	Verdict     JudgeVerdict
 	Feedback    string
-	SignalFound bool   // Whether the AGENTIUM_EVAL signal was found in output
-	ReviewMode  string // "FULL", "SIMPLE", or "" (only set when AssessComplexity is true)
+	SignalFound bool // Whether the AGENTIUM_EVAL signal was found in output
 }
 
 // judgeRunParams holds parameters for running a judge agent.
 type judgeRunParams struct {
-	CompletedPhase   TaskPhase
-	PhaseOutput      string
-	ReviewFeedback   string
-	Iteration        int
-	MaxIterations    int
-	AssessComplexity bool // When true, judge also emits AGENTIUM_REVIEW_MODE signal
+	CompletedPhase TaskPhase
+	PhaseOutput    string
+	ReviewFeedback string
+	Iteration      int
+	MaxIterations  int
+	PhaseIteration int // Within-phase iteration (1-indexed) for scoped feedback
 }
 
 // judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
-var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED|SIMPLE|COMPLEX|REGRESS)[ \t]*(.*)$`)
+var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED)[ \t]*(.*)$`)
 
 // parseJudgeVerdict extracts the judge verdict from agent output.
 // If no verdict line is found, defaults to ITERATE (fail-closed).
@@ -57,21 +53,8 @@ func parseJudgeVerdict(output string) JudgeResult {
 	}
 }
 
-// reviewModePattern matches lines of the form: AGENTIUM_REVIEW_MODE: FULL|SIMPLE
-var reviewModePattern = regexp.MustCompile(`(?m)^AGENTIUM_REVIEW_MODE:[ \t]+(FULL|SIMPLE)[ \t]*$`)
-
-// parseReviewModeSignal extracts the review mode decision from judge output.
-// Returns "FULL", "SIMPLE", or "" if no signal found.
-func parseReviewModeSignal(output string) string {
-	matches := reviewModePattern.FindStringSubmatch(output)
-	if matches == nil {
-		return ""
-	}
-	return matches[1]
-}
-
 // runJudge runs a judge agent that interprets reviewer feedback and decides
-// whether to ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, or REGRESS.
+// whether to ADVANCE, ITERATE, or BLOCKED.
 func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (JudgeResult, error) {
 	judgePrompt := c.buildJudgePrompt(params)
 
@@ -102,10 +85,11 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	}
 
 	// Inject eval memory context for iteration awareness
+	// Use iteration-scoped context so judge only sees current iteration's feedback
 	if c.memoryStore != nil {
-		// Build context scoped to the current task
+		// Build context scoped to the current task and phase iteration
 		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
-		evalCtx := c.memoryStore.BuildEvalContext(taskID)
+		evalCtx := c.memoryStore.BuildCurrentIterationEvalContext(taskID, params.PhaseIteration)
 		if evalCtx != "" {
 			if session.IterationContext == nil {
 				session.IterationContext = &agent.IterationContext{}
@@ -165,16 +149,12 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgeResult := parseJudgeVerdict(parseSource)
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
 
-	// Parse review mode signal when complexity assessment was requested
-	if params.AssessComplexity {
-		judgeResult.ReviewMode = parseReviewModeSignal(parseSource)
-	}
-
-	// On ITERATE or REGRESS, store the reviewer's feedback (not the judge's) in memory for the worker
-	if (judgeResult.Verdict == VerdictIterate || judgeResult.Verdict == VerdictRegress) && params.ReviewFeedback != "" && c.memoryStore != nil {
-		c.memoryStore.Update([]memory.Signal{
+	// On ITERATE, store the reviewer's feedback (not the judge's) in memory for the worker
+	// Use phase iteration to scope feedback so judge only sees current iteration's feedback
+	if judgeResult.Verdict == VerdictIterate && params.ReviewFeedback != "" && c.memoryStore != nil {
+		c.memoryStore.UpdateWithPhaseIteration([]memory.Signal{
 			{Type: memory.EvalFeedback, Content: params.ReviewFeedback},
-		}, c.iteration, fmt.Sprintf("issue:%s", c.activeTask))
+		}, c.iteration, params.PhaseIteration, fmt.Sprintf("issue:%s", c.activeTask))
 	}
 
 	return judgeResult, nil
@@ -224,30 +204,10 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	sb.WriteString("- `AGENTIUM_EVAL: ADVANCE` - Phase complete, move to next phase\n")
 	sb.WriteString("- `AGENTIUM_EVAL: ITERATE <feedback>` - More work needed in current phase\n")
 	sb.WriteString("- `AGENTIUM_EVAL: BLOCKED <reason>` - Unresolvable issue, needs human intervention\n")
-
-	// Only show REGRESS option during REVIEW phase
-	if params.CompletedPhase == PhaseReview {
-		sb.WriteString("- `AGENTIUM_EVAL: REGRESS <reason>` - Significant issues found, return to PLAN phase\n")
-	}
-
 	sb.WriteString("\n")
 
 	if params.Iteration >= params.MaxIterations {
 		sb.WriteString("**NOTE:** This is the FINAL iteration. Prefer ADVANCE unless there are critical issues that would prevent the work from being usable.\n\n")
-	}
-
-	if params.AssessComplexity {
-		sb.WriteString("## Complexity Assessment\n\n")
-		sb.WriteString("In addition to your verdict, assess whether this task is complex enough\n")
-		sb.WriteString("to warrant detailed review in subsequent phases.\n\n")
-		sb.WriteString("Emit exactly one line:\n")
-		sb.WriteString("  AGENTIUM_REVIEW_MODE: FULL\n")
-		sb.WriteString("or\n")
-		sb.WriteString("  AGENTIUM_REVIEW_MODE: SIMPLE\n\n")
-		sb.WriteString("Use FULL when: multiple files, architectural changes, complex logic,\n")
-		sb.WriteString("significant new functionality, or non-trivial testing requirements.\n")
-		sb.WriteString("Use SIMPLE when: single-file changes, straightforward fixes, config\n")
-		sb.WriteString("updates, documentation-only, or well-scoped small features.\n\n")
 	}
 
 	return sb.String()

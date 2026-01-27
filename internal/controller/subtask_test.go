@@ -11,7 +11,6 @@ func TestPhaseToSubTask_AllConfiguredPhases(t *testing.T) {
 	expected := map[TaskPhase]SubTaskType{
 		PhasePlan:       SubTaskPlan,
 		PhaseImplement:  SubTaskImplement,
-		PhaseReview:     SubTaskReview,
 		PhaseDocs:       SubTaskDocs,
 		PhasePRCreation: SubTaskPRCreation,
 		PhaseAnalyze:    SubTaskPlan,
@@ -92,27 +91,6 @@ func TestDelegationConfig_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPhaseToSubTask_PRCreationDistinctFromReview(t *testing.T) {
-	prType, prOk := phaseToSubTask[PhasePRCreation]
-	reviewType, reviewOk := phaseToSubTask[PhaseReview]
-
-	if !prOk {
-		t.Fatal("phaseToSubTask missing PhasePRCreation")
-	}
-	if !reviewOk {
-		t.Fatal("phaseToSubTask missing PhaseReview")
-	}
-	if prType == reviewType {
-		t.Errorf("PhasePRCreation and PhaseReview should map to distinct subtask types, both map to %s", prType)
-	}
-	if prType != SubTaskPRCreation {
-		t.Errorf("PhasePRCreation maps to %s, want %s", prType, SubTaskPRCreation)
-	}
-	if reviewType != SubTaskReview {
-		t.Errorf("PhaseReview maps to %s, want %s", reviewType, SubTaskReview)
-	}
-}
-
 func TestPhaseToSubTask_AllPhasesRouteCorrectly(t *testing.T) {
 	tests := []struct {
 		phase   TaskPhase
@@ -121,7 +99,6 @@ func TestPhaseToSubTask_AllPhasesRouteCorrectly(t *testing.T) {
 	}{
 		{PhasePlan, SubTaskPlan, true},
 		{PhaseImplement, SubTaskImplement, true},
-		{PhaseReview, SubTaskReview, true},
 		{PhaseDocs, SubTaskDocs, true},
 		{PhasePRCreation, SubTaskPRCreation, true},
 		{PhaseAnalyze, SubTaskPlan, true},
@@ -147,8 +124,8 @@ func TestPhaseToSubTask_AllPhasesRouteCorrectly(t *testing.T) {
 
 func TestPhaseToSubTask_MapCompleteness(t *testing.T) {
 	// Verify the map has exactly the expected number of entries
-	// TEST phase is merged into IMPLEMENT, so we have 7 entries
-	expectedLen := 7 // Plan, Implement, Review, Docs, PRCreation, Analyze, Push
+	// REVIEW phase removed, so we have 6 entries: Plan, Implement, Docs, PRCreation, Analyze, Push
+	expectedLen := 6
 	if len(phaseToSubTask) != expectedLen {
 		t.Errorf("phaseToSubTask has %d entries, want %d", len(phaseToSubTask), expectedLen)
 	}

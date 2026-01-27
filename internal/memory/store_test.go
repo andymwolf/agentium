@@ -305,3 +305,129 @@ func TestResolvePending_TaskScoped(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateWithPhaseIteration_SetsPhaseIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "feedback1"},
+	}, 5, 2, "issue:42")
+
+	entries := s.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Iteration != 5 {
+		t.Errorf("expected Iteration 5, got %d", entries[0].Iteration)
+	}
+	if entries[0].PhaseIteration != 2 {
+		t.Errorf("expected PhaseIteration 2, got %d", entries[0].PhaseIteration)
+	}
+}
+
+func TestUpdateWithPhaseIteration_DefaultsToZero(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	// Using Update (which calls UpdateWithPhaseIteration with 0)
+	s.Update([]Signal{
+		{Type: EvalFeedback, Content: "feedback"},
+	}, 1, "issue:42")
+
+	entries := s.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].PhaseIteration != 0 {
+		t.Errorf("expected PhaseIteration 0, got %d", entries[0].PhaseIteration)
+	}
+}
+
+func TestGetPreviousIterationFeedback_ReturnsEmpty_WhenFirstIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "feedback"},
+	}, 1, 1, "issue:42")
+
+	result := s.GetPreviousIterationFeedback("issue:42", 1)
+	if len(result) != 0 {
+		t.Errorf("expected empty result for first iteration, got %d entries", len(result))
+	}
+}
+
+func TestGetPreviousIterationFeedback_ReturnsPreviousIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "iter1 feedback"},
+	}, 1, 1, "issue:42")
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "iter2 feedback"},
+	}, 2, 2, "issue:42")
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "iter3 feedback"},
+	}, 3, 3, "issue:42")
+
+	// Request previous iteration for iteration 2 (should return iteration 1)
+	result := s.GetPreviousIterationFeedback("issue:42", 2)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result))
+	}
+	if result[0].Content != "iter1 feedback" {
+		t.Errorf("expected 'iter1 feedback', got %q", result[0].Content)
+	}
+
+	// Request previous iteration for iteration 3 (should return iteration 2)
+	result = s.GetPreviousIterationFeedback("issue:42", 3)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result))
+	}
+	if result[0].Content != "iter2 feedback" {
+		t.Errorf("expected 'iter2 feedback', got %q", result[0].Content)
+	}
+}
+
+func TestGetPreviousIterationFeedback_FiltersByTaskID(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "task1 feedback"},
+	}, 1, 1, "issue:123")
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "task2 feedback"},
+	}, 1, 1, "issue:456")
+
+	// Request previous iteration for task1, iteration 2
+	result := s.GetPreviousIterationFeedback("issue:123", 2)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result))
+	}
+	if result[0].Content != "task1 feedback" {
+		t.Errorf("expected 'task1 feedback', got %q", result[0].Content)
+	}
+}
+
+func TestGetPreviousIterationFeedback_OnlyReturnsEvalFeedback(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "eval feedback"},
+		{Type: PhaseResult, Content: "phase result"},
+		{Type: KeyFact, Content: "key fact"},
+	}, 1, 1, "issue:42")
+
+	result := s.GetPreviousIterationFeedback("issue:42", 2)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 entry (only EvalFeedback), got %d", len(result))
+	}
+	if result[0].Type != EvalFeedback {
+		t.Errorf("expected EvalFeedback type, got %s", result[0].Type)
+	}
+}
+
+func TestGetPreviousIterationFeedback_MultipleFeedbackEntries(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	s.UpdateWithPhaseIteration([]Signal{
+		{Type: EvalFeedback, Content: "feedback A"},
+		{Type: EvalFeedback, Content: "feedback B"},
+	}, 1, 1, "issue:42")
+
+	result := s.GetPreviousIterationFeedback("issue:42", 2)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(result))
+	}
+}

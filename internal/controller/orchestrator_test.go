@@ -26,11 +26,6 @@ func TestConfigForPhase_UnconfiguredPhases(t *testing.T) {
 	if cfg := orch.ConfigForPhase(PhaseBlocked); cfg != nil {
 		t.Errorf("ConfigForPhase(BLOCKED) = %+v, want nil", cfg)
 	}
-
-	// PhaseReview maps to SubTaskReview, but not configured in SubAgents
-	if cfg := orch.ConfigForPhase(PhaseReview); cfg != nil {
-		t.Errorf("ConfigForPhase(REVIEW) = %+v, want nil (not in SubAgents)", cfg)
-	}
 }
 
 func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
@@ -59,7 +54,6 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 	}{
 		{PhaseImplement, "claude-code", "claude-opus-4-20250514"},
 		{PhaseDocs, "aider", "claude-sonnet-4-20250514"},
-		{PhaseReview, "claude-code", ""},     // review type
 		{PhasePRCreation, "claude-code", ""}, // pr_creation type
 		{PhaseAnalyze, "claude-code", ""},    // plan type
 		{PhasePush, "claude-code", ""},       // push type

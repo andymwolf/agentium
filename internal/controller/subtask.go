@@ -20,7 +20,6 @@ const (
 var phaseToSubTask = map[TaskPhase]SubTaskType{
 	PhasePlan:       SubTaskPlan,
 	PhaseImplement:  SubTaskImplement,
-	PhaseReview:     SubTaskReview,
 	PhaseDocs:       SubTaskDocs,
 	PhasePRCreation: SubTaskPRCreation,
 	PhaseAnalyze:    SubTaskPlan,

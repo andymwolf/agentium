@@ -49,21 +49,6 @@ func TestJudgeResultFormatting(t *testing.T) {
 			result:  JudgeResult{Verdict: VerdictBlocked, Feedback: "need credentials"},
 			wantStr: "BLOCKED",
 		},
-		{
-			name:    "simple verdict",
-			result:  JudgeResult{Verdict: VerdictSimple},
-			wantStr: "SIMPLE",
-		},
-		{
-			name:    "complex verdict",
-			result:  JudgeResult{Verdict: VerdictComplex},
-			wantStr: "COMPLEX",
-		},
-		{
-			name:    "regress verdict",
-			result:  JudgeResult{Verdict: VerdictRegress, Feedback: "design issue"},
-			wantStr: "REGRESS",
-		},
 	}
 
 	for _, tt := range tests {

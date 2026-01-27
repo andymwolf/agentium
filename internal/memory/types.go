@@ -24,11 +24,12 @@ type Signal struct {
 
 // Entry is a single persisted memory entry.
 type Entry struct {
-	Type      SignalType `json:"type"`
-	Content   string     `json:"content"`
-	Iteration int        `json:"iteration"`
-	TaskID    string     `json:"task_id"`
-	Timestamp time.Time  `json:"timestamp"`
+	Type           SignalType `json:"type"`
+	Content        string     `json:"content"`
+	Iteration      int        `json:"iteration"`       // Global iteration across all phases
+	PhaseIteration int        `json:"phase_iteration"` // Within-phase iteration (1-indexed)
+	TaskID         string     `json:"task_id"`
+	Timestamp      time.Time  `json:"timestamp"`
 }
 
 // Data is the on-disk representation of the memory store.

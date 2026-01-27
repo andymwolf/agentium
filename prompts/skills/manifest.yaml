@@ -10,14 +10,12 @@ skills:
     phases:
       - PLAN
       - IMPLEMENT
-      - REVIEW
       - DOCS
       - PR_CREATION
       - ANALYZE
       - PUSH
       - PLAN_REVIEW
       - IMPLEMENT_REVIEW
-      - REVIEW_REVIEW
       - DOCS_REVIEW
 
   - name: environment
@@ -61,12 +59,6 @@ skills:
     phases:
       - PR_CREATION
 
-  - name: review
-    file: review.md
-    priority: 75
-    phases:
-      - REVIEW
-
   - name: docs
     file: docs.md
     priority: 77
@@ -91,7 +83,6 @@ skills:
     priority: 91
     phases:
       - IMPLEMENT_REVIEW
-      - REVIEW_REVIEW
       - DOCS_REVIEW
 
   - name: judge
@@ -101,5 +92,4 @@ skills:
       - JUDGE
       - PLAN_JUDGE
       - IMPLEMENT_JUDGE
-      - REVIEW_JUDGE
       - DOCS_JUDGE

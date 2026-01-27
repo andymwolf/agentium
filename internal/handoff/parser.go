@@ -32,8 +32,6 @@ func (p *Parser) ParseOutput(output string, phase Phase) (interface{}, error) {
 		return p.parsePlanOutput(jsonStr)
 	case PhaseImplement:
 		return p.parseImplementOutput(jsonStr)
-	case PhaseReview:
-		return p.parseReviewOutput(jsonStr)
 	case PhaseDocs:
 		return p.parseDocsOutput(jsonStr)
 	case PhasePRCreation:
@@ -179,7 +177,6 @@ func (p *Parser) ParseAny(output string) (Phase, interface{}, error) {
 	}{
 		{PhasePlan, func(s string) (interface{}, error) { return p.parsePlanOutput(s) }},
 		{PhaseImplement, func(s string) (interface{}, error) { return p.parseImplementOutput(s) }},
-		{PhaseReview, func(s string) (interface{}, error) { return p.parseReviewOutput(s) }},
 		{PhaseDocs, func(s string) (interface{}, error) { return p.parseDocsOutput(s) }},
 		{PhasePRCreation, func(s string) (interface{}, error) { return p.parsePRCreationOutput(s) }},
 	}
@@ -206,11 +203,6 @@ func (p *Parser) ParseAny(output string) (Phase, interface{}, error) {
 	if _, ok := raw["branch_name"]; ok {
 		out, err := p.parseImplementOutput(jsonStr)
 		return PhaseImplement, out, err
-	}
-	// REVIEW: issues_found is unique
-	if _, ok := raw["issues_found"]; ok {
-		out, err := p.parseReviewOutput(jsonStr)
-		return PhaseReview, out, err
 	}
 	// DOCS: docs_updated is unique
 	if _, ok := raw["docs_updated"]; ok {

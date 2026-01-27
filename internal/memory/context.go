@@ -92,6 +92,56 @@ func (s *Store) BuildEvalContext(taskID string) string {
 	return result
 }
 
+// BuildCurrentIterationEvalContext generates a budget-aware Markdown summary containing only
+// the current phase iteration's EvalFeedback entries. This prevents the judge from seeing
+// feedback from prior iterations that may have already been addressed.
+// If taskID is provided (non-empty), only entries for that task are included.
+// Respects the configured context budget to prevent overflowing model context.
+func (s *Store) BuildCurrentIterationEvalContext(taskID string, phaseIteration int) string {
+	if len(s.data.Entries) == 0 {
+		return ""
+	}
+
+	// Collect only EvalFeedback from the current phase iteration
+	var items []string
+	for _, e := range s.data.Entries {
+		// Skip entries from other tasks if taskID is specified
+		if taskID != "" && e.TaskID != taskID {
+			continue
+		}
+		if e.Type == EvalFeedback && e.PhaseIteration == phaseIteration {
+			items = append(items, e.Content)
+		}
+	}
+
+	if len(items) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Current Iteration Feedback\n\n")
+	sb.WriteString("### Evaluator Feedback\n")
+	used := sb.Len()
+
+	for _, item := range items {
+		line := fmt.Sprintf("- %s\n", item)
+		// Check budget before adding item
+		if used+len(line) > s.contextBudget {
+			break
+		}
+		sb.WriteString(line)
+		used += len(line)
+	}
+	sb.WriteString("\n")
+
+	result := sb.String()
+	// If only headers were written (no items fit), return empty
+	if result == "## Current Iteration Feedback\n\n### Evaluator Feedback\n\n" {
+		return ""
+	}
+	return result
+}
+
 // BuildContext generates a budget-aware Markdown summary of the memory entries.
 // It groups entries by type and renders sections in priority order, stopping
 // when approaching the context budget limit.

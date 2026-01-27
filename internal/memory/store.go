@@ -68,14 +68,22 @@ func (s *Store) Save() error {
 // Update appends new entries from the given signals and prunes if necessary.
 // Returns the number of entries that were pruned (0 if no pruning occurred).
 func (s *Store) Update(signals []Signal, iteration int, taskID string) int {
+	return s.UpdateWithPhaseIteration(signals, iteration, 0, taskID)
+}
+
+// UpdateWithPhaseIteration appends new entries with both global and phase iteration tracking.
+// phaseIteration is the within-phase iteration (1-indexed), used to scope feedback to specific iterations.
+// Returns the number of entries that were pruned (0 if no pruning occurred).
+func (s *Store) UpdateWithPhaseIteration(signals []Signal, iteration int, phaseIteration int, taskID string) int {
 	now := time.Now()
 	for _, sig := range signals {
 		s.data.Entries = append(s.data.Entries, Entry{
-			Type:      sig.Type,
-			Content:   sig.Content,
-			Iteration: iteration,
-			TaskID:    taskID,
-			Timestamp: now,
+			Type:           sig.Type,
+			Content:        sig.Content,
+			Iteration:      iteration,
+			PhaseIteration: phaseIteration,
+			TaskID:         taskID,
+			Timestamp:      now,
 		})
 	}
 	s.resolvePending(signals, taskID)
@@ -133,4 +141,25 @@ func (s *Store) prune() int {
 	excess := len(s.data.Entries) - s.maxEntries
 	s.data.Entries = s.data.Entries[excess:]
 	return excess
+}
+
+// GetPreviousIterationFeedback returns the EvalFeedback entries from the previous phase iteration.
+// This allows the reviewer to see what feedback was given in iteration N-1 so it can verify
+// whether the worker addressed that feedback.
+func (s *Store) GetPreviousIterationFeedback(taskID string, currentPhaseIteration int) []Entry {
+	if currentPhaseIteration <= 1 {
+		return nil
+	}
+
+	previousIteration := currentPhaseIteration - 1
+	var result []Entry
+	for _, e := range s.data.Entries {
+		if taskID != "" && e.TaskID != taskID {
+			continue
+		}
+		if e.Type == EvalFeedback && e.PhaseIteration == previousIteration {
+			result = append(result, e)
+		}
+	}
+	return result
 }
