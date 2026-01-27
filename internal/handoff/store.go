@@ -211,10 +211,9 @@ func (s *Store) ClearFromPhase(taskID string, phase Phase) {
 	}
 
 	phaseOrder := map[Phase]int{
-		PhasePlan:       0,
-		PhaseImplement:  1,
-		PhaseDocs:       2,
-		PhasePRCreation: 3,
+		PhasePlan:      0,
+		PhaseImplement: 1,
+		PhaseDocs:      2,
 	}
 
 	targetOrder := phaseOrder[phase]

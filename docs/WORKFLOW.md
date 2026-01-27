@@ -15,12 +15,14 @@ The primary phases for processing issues (in order):
 | Phase | Constant | Purpose | Default Max Iterations |
 |-------|----------|---------|----------------------|
 | PLAN | `PhasePlan` | Create implementation plan | 3 |
-| IMPLEMENT | `PhaseImplement` | Write the code and run tests | 5 |
-| REVIEW | `PhaseReview` | Code review (COMPLEX only) | 3 |
-| DOCS | `PhaseDocs` | Update documentation | 2 |
-| PR_CREATION | `PhasePRCreation` | Create pull request | 1 |
+| IMPLEMENT | `PhaseImplement` | Write code, run tests, create draft PR | 5 |
+| DOCS | `PhaseDocs` | Update documentation (non-blocking) | 2 |
 
-**Note:** Testing is integrated into the IMPLEMENT phase. There is no separate TEST phase.
+**Notes:**
+- Testing is integrated into the IMPLEMENT phase. There is no separate TEST phase.
+- Draft PRs are created during the IMPLEMENT phase (not a separate phase).
+- The DOCS phase auto-succeeds after max iterations to avoid blocking PR finalization.
+- PRs are finalized (marked as ready for review) when the workflow reaches PhaseComplete.
 
 ### Terminal Phases
 
@@ -43,38 +45,26 @@ For pull request review sessions:
 
 ## Workflow Paths
 
-### SIMPLE Path
+### Standard Path
 
-For straightforward tasks (single-file changes, config updates, small fixes):
-
-```
-PLAN → (SIMPLE) → IMPLEMENT → DOCS → PR_CREATION → COMPLETE
-```
-
-The Judge marks a task as SIMPLE during the PLAN phase when:
-- Single-file or minimal changes
-- Straightforward fixes
-- Configuration updates
-- Documentation-only changes
-
-### COMPLEX Path
-
-For tasks requiring detailed code review:
+All tasks follow the same streamlined workflow:
 
 ```
-PLAN → (COMPLEX) → IMPLEMENT → REVIEW → DOCS → PR_CREATION → COMPLETE
-  ↑                              │
-  └──────── (REGRESS) ───────────┘
-           (reset iterations,
-            keep review feedback)
+PLAN → IMPLEMENT (creates draft PR) → DOCS → COMPLETE (finalizes PR)
 ```
 
-The Judge marks a task as COMPLEX during the PLAN phase when:
-- Multiple files involved
-- Architectural changes
-- Complex logic
-- Significant new functionality
-- Non-trivial testing requirements
+**Draft PR Creation:**
+- A draft PR is created during the first IMPLEMENT iteration that has commits to push
+- Subsequent IMPLEMENT iterations push to the same branch, automatically updating the PR
+- Review feedback can be posted to the draft PR during the IMPLEMENT phase
+
+**PR Finalization:**
+- When the workflow reaches PhaseComplete, the draft PR is marked as ready for review
+- This happens automatically via `gh pr ready`
+
+**DOCS Phase Behavior:**
+- The DOCS phase is non-blocking: it auto-succeeds after max iterations
+- Documentation issues should not prevent PR finalization
 
 ## Phase Loop Execution
 
@@ -299,7 +289,7 @@ routing:
 
 ## Example Workflows
 
-### SIMPLE Workflow (Issue #42)
+### Standard Workflow (Issue #42)
 
 ```
 Task: issue:42
@@ -309,13 +299,13 @@ Initial Phase: PLAN
 Iteration 1/3:
   → Worker agent creates plan
   → Plan Reviewer provides feedback
-  → Judge verdict: SIMPLE (straightforward change)
-  → Task marked as SIMPLE
+  → Judge verdict: ADVANCE
 
 === IMPLEMENT Phase ===
 Iteration 1/5:
   → Worker implements changes and runs tests
   → Code Reviewer provides feedback
+  → Controller creates draft PR #100
   → Judge verdict: ADVANCE
 
 === DOCS Phase ===
@@ -323,15 +313,13 @@ Iteration 1/2:
   → Worker updates documentation
   → Judge verdict: ADVANCE
 
-=== PR_CREATION Phase ===
-Iteration 1/1:
-  → Worker creates pull request
-  → Detects PR_CREATED signal
+=== PhaseComplete ===
+  → Controller finalizes draft PR #100 (marks as ready for review)
 
 Final Phase: COMPLETE
 ```
 
-### COMPLEX Workflow with Regression (Issue #99)
+### Workflow with Multiple IMPLEMENT Iterations (Issue #99)
 
 ```
 Task: issue:99
@@ -341,39 +329,23 @@ Initial Phase: PLAN
 Iteration 1/3:
   → Worker creates comprehensive plan
   → Plan Reviewer provides feedback
-  → Judge verdict: COMPLEX
+  → Judge verdict: ADVANCE
 
 === IMPLEMENT Phase ===
 Iteration 1/5:
   → Worker implements changes
+  → Controller creates draft PR #150
   → Code Reviewer: needs error handling
   → Judge verdict: ITERATE
 
 Iteration 2/5:
   → Worker adds error handling
-  → Judge verdict: ADVANCE
+  → Pushes to existing branch (PR #150 auto-updates)
+  → Judge verdict: ITERATE (tests failing)
 
-=== REVIEW Phase ===
-Iteration 1/3:
-  → Worker self-reviews code
-  → Code Reviewer: architectural issue found
-  → Judge verdict: REGRESS "API design needs rework"
-
-=== PLAN Phase (regression) ===
-Iteration 1/3:
-  → Worker reads regression feedback
-  → Creates revised plan with new API design
-  → Plan Reviewer provides feedback
-  → Judge verdict: COMPLEX
-
-=== IMPLEMENT Phase ===
-Iteration 1/5:
-  → Worker re-implements with new design
-  → Judge verdict: ADVANCE
-
-=== REVIEW Phase ===
-Iteration 1/3:
-  → Worker reviews revised implementation
+Iteration 3/5:
+  → Worker fixes test failures
+  → Pushes to existing branch
   → Judge verdict: ADVANCE
 
 === DOCS Phase ===
@@ -381,9 +353,40 @@ Iteration 1/2:
   → Worker updates documentation
   → Judge verdict: ADVANCE
 
-=== PR_CREATION Phase ===
-Iteration 1/1:
-  → Worker creates pull request
+=== PhaseComplete ===
+  → Controller finalizes draft PR #150 (marks as ready for review)
+
+Final Phase: COMPLETE
+```
+
+### Workflow with DOCS Auto-Advance (Issue #77)
+
+```
+Task: issue:77
+Initial Phase: PLAN
+
+=== PLAN Phase ===
+Iteration 1/3:
+  → Worker creates plan
+  → Judge verdict: ADVANCE
+
+=== IMPLEMENT Phase ===
+Iteration 1/5:
+  → Worker implements feature
+  → Controller creates draft PR #200
+  → Judge verdict: ADVANCE
+
+=== DOCS Phase ===
+Iteration 1/2:
+  → Worker attempts to update docs
+  → Judge verdict: ITERATE
+
+Iteration 2/2:
+  → Worker updates docs but reviewer has concerns
+  → Max iterations reached, auto-advancing (non-blocking)
+
+=== PhaseComplete ===
+  → Controller finalizes draft PR #200
 
 Final Phase: COMPLETE
 ```

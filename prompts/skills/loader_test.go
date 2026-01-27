@@ -45,14 +45,14 @@ func TestLoadManifest_Phases(t *testing.T) {
 		name       string
 		wantPhases []string
 	}{
-		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "PR_CREATION", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
+		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // PR_CREATION removed
 		{"environment", nil},
 		{"status_signals", nil},
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
 		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
-		{"pr_creation", []string{"PR_CREATION"}},
+		{"pr_creation", nil},            // PR_CREATION phase removed - draft PRs created during IMPLEMENT
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},

@@ -29,7 +29,35 @@ Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
 - Follow existing code style and patterns
 - Add tests for new functionality when appropriate
 
-### Step 6: Completion
+### Step 6: Push Changes and Create Draft PR
+
+After implementing changes and running tests, push your commits:
+
+**First iteration (no existing PR):**
+```bash
+git push -u origin agentium/issue-<number>-<short-description>
+gh pr create --draft \
+  --title "Issue #<number>: <brief description>" \
+  --body "Closes #<issue-number>
+
+## Summary
+Brief description of changes made.
+
+## Status
+This is a draft PR - implementation is in progress."
+```
+
+**Subsequent iterations (PR already exists):**
+```bash
+# Just push new commits - PR is automatically updated
+git push origin agentium/issue-<number>-<short-description>
+```
+
+**Note:** The draft PR is created once during the first iteration with commits.
+Subsequent iterations just push new commits to the same branch, which automatically
+updates the PR. Do NOT create a new PR on each iteration.
+
+### Step 7: Completion
 
 When implementation is complete and tests pass, emit a structured handoff signal:
 
@@ -42,7 +70,9 @@ AGENTIUM_HANDOFF: {
   ],
   "files_changed": ["path/to/file1.go", "path/to/file2.go"],
   "tests_passed": true,
-  "test_output": "Summary of test results (optional)"
+  "test_output": "Summary of test results (optional)",
+  "draft_pr_number": 123,
+  "draft_pr_url": "https://github.com/owner/repo/pull/123"
 }
 ```
 
