@@ -166,6 +166,14 @@ func TestGetPRNumberForTask(t *testing.T) {
 			activeTask:     "42",
 			wantPRNumber:   "100",
 		},
+		{
+			name:           "PR task returns active task directly",
+			existingWork:   nil,
+			taskStates:     map[string]*TaskState{},
+			activeTaskType: "pr",
+			activeTask:     "57",
+			wantPRNumber:   "57",
+		},
 	}
 
 	for _, tt := range tests {

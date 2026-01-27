@@ -171,8 +171,14 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 }
 
 // getPRNumberForTask returns the PR number associated with the current task, if any.
-// This checks both existing work (for continuation) and task state (for newly created PRs).
+// For PR tasks, returns the active task ID directly.
+// For issue tasks, checks existing work (continuation) and task state (newly created PRs).
 func (c *Controller) getPRNumberForTask() string {
+	// For PR tasks, the active task IS the PR number
+	if c.activeTaskType == "pr" {
+		return c.activeTask
+	}
+
 	// Check existing work first (continuation of existing PR)
 	if c.activeTaskExistingWork != nil && c.activeTaskExistingWork.PRNumber != "" {
 		return c.activeTaskExistingWork.PRNumber
