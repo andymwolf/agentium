@@ -234,6 +234,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
+			// Post reviewer feedback to appropriate location
+			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewResult.Feedback)
+
 			judgeResult, err := c.runJudge(ctx, judgeRunParams{
 				CompletedPhase: currentPhase,
 				PhaseOutput:    phaseOutput,
@@ -277,16 +280,30 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (iteration %d)", currentPhase, iter)},
 					}, c.iteration, taskID)
 				}
+
+				// Update issue with plan after PLAN phase advances
+				if currentPhase == PhasePlan && phaseOutput != "" {
+					c.updateIssuePlan(ctx, truncateForPlan(phaseOutput))
+				}
+
 				advanced = true
 
 			case VerdictIterate:
 				// Feedback is already stored in memory by runJudge
 				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
+				// Post judge verdict to PR if available (makes ITERATE visible)
+				if prNumber := c.getPRNumberForTask(); prNumber != "" {
+					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, judgeResult)
+				}
 				continue
 
 			case VerdictBlocked:
 				state.Phase = PhaseBlocked
 				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
+				// Post judge verdict to PR if available (makes BLOCKED visible)
+				if prNumber := c.getPRNumberForTask(); prNumber != "" {
+					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, judgeResult)
+				}
 				return nil
 			}
 
@@ -334,6 +351,17 @@ func truncateForComment(s string) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+// truncateForPlan truncates plan text for use in GitHub issue bodies.
+// Plans can be longer than comments but still need a reasonable limit.
+func truncateForPlan(s string) string {
+	const maxRunes = 4000
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "\n\n... (plan truncated)"
 }
 
 // processHandoffOutput parses and stores structured handoff output from phase iteration.

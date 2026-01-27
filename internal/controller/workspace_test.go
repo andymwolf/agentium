@@ -28,7 +28,7 @@ func TestEnsureWorkspaceOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create nested files and directories
 	subDir := filepath.Join(tmpDir, "subdir")
@@ -82,7 +82,7 @@ func TestEnsureWorkspaceOwnership_EmptyDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ctrl := newTestController(tmpDir)
 
@@ -97,7 +97,7 @@ func TestConfigureGitSafeDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ctrl := newTestController(tmpDir)
 
@@ -116,7 +116,7 @@ func TestConfigureGitSafeDirectory_ContextCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ctrl := newTestController(tmpDir)
 
@@ -144,7 +144,7 @@ func TestInitializeWorkspace_CreatesDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	workDir := filepath.Join(tmpDir, "new-workspace")
 
@@ -174,7 +174,7 @@ func TestInitializeWorkspace_SkipsChownWhenNotRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	workDir := filepath.Join(tmpDir, "workspace")
 
