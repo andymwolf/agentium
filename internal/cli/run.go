@@ -403,7 +403,7 @@ func readAuthFromKeychain() ([]byte, error) {
 	data := []byte(strings.TrimSpace(string(output)))
 
 	if !json.Valid(data) {
-		return nil, fmt.Errorf("Keychain credential is not valid JSON")
+		return nil, fmt.Errorf("keychain credential is not valid JSON")
 	}
 
 	return data, nil
@@ -430,17 +430,17 @@ func readCodexAuthJSON(path string) ([]byte, error) {
 					return keychainData, nil
 				}
 			}
-			return nil, fmt.Errorf("Codex auth.json not found at %s and not in macOS Keychain\n\nTo use Codex authentication:\n  1. Install Codex: npm install -g @openai/codex\n  2. Run: codex --login\n  3. Try again", path)
+			return nil, fmt.Errorf("codex auth.json not found at %s and not in macOS Keychain\n\nTo use Codex authentication:\n  1. Install Codex: npm install -g @openai/codex\n  2. Run: codex --login\n  3. Try again", path)
 		}
 		return nil, fmt.Errorf("failed to read Codex auth.json: %w", err)
 	}
 
 	if len(data) < 10 {
-		return nil, fmt.Errorf("Codex auth.json appears to be empty or too small")
+		return nil, fmt.Errorf("codex auth.json appears to be empty or too small")
 	}
 
 	if !json.Valid(data) {
-		return nil, fmt.Errorf("Codex auth.json is not valid JSON")
+		return nil, fmt.Errorf("codex auth.json is not valid JSON")
 	}
 
 	return data, nil
@@ -466,7 +466,7 @@ func readCodexAuthFromKeychain() ([]byte, error) {
 	data := []byte(strings.TrimSpace(string(output)))
 
 	if !json.Valid(data) {
-		return nil, fmt.Errorf("Codex Keychain credential is not valid JSON")
+		return nil, fmt.Errorf("codex keychain credential is not valid JSON")
 	}
 
 	return data, nil

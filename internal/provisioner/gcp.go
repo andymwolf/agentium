@@ -66,7 +66,7 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result
 	// Using named return value 'err' so defer can check final error state
 	defer func() {
 		if err != nil {
-			os.RemoveAll(workDir)
+			_ = os.RemoveAll(workDir)
 		}
 	}()
 
@@ -509,7 +509,7 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 			}
 		} else {
 			// Clean up work directory
-			os.RemoveAll(workDir)
+			_ = os.RemoveAll(workDir)
 			return nil
 		}
 	}
@@ -520,7 +520,7 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 	}
 
 	// Clean up work directory
-	os.RemoveAll(workDir)
+	_ = os.RemoveAll(workDir)
 
 	return nil
 }

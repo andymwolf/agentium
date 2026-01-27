@@ -90,11 +90,11 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	defer func() {
 		// Clean up workspace on exit
 		fmt.Printf("Cleaning up workspace: %s\n", workDir)
-		os.RemoveAll(workDir)
+		_ = os.RemoveAll(workDir)
 	}()
 
 	// Set workspace environment variable for the controller
-	os.Setenv("AGENTIUM_WORKDIR", workDir)
+	_ = os.Setenv("AGENTIUM_WORKDIR", workDir)
 
 	fmt.Printf("Session ID: %s\n", sessionID)
 	fmt.Printf("Repository: %s\n", cfg.Session.Repository)
@@ -115,7 +115,8 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Handle Claude OAuth authentication
 	var claudeAuthBase64 string
 	var claudeAuthMode string
-	if cfg.Claude.AuthMode == "" {
+	switch cfg.Claude.AuthMode {
+	case "":
 		// Auto-detect OAuth credentials if auth mode not explicitly set
 		if autoAuth := tryAutoDetectOAuth(); autoAuth != nil {
 			claudeAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
@@ -124,7 +125,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		} else {
 			fmt.Println("No OAuth credentials found - will use interactive browser auth in container")
 		}
-	} else if cfg.Claude.AuthMode == "oauth" {
+	case "oauth":
 		// Explicit oauth mode - error if credentials not found
 		var authJSON []byte
 		authJSON, err = readAuthJSON(cfg.Claude.AuthJSONPath)

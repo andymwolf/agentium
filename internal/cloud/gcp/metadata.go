@@ -166,7 +166,7 @@ func IsRunningOnGCP() bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -186,7 +186,7 @@ func getInstanceMetadataField(ctx context.Context, field string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch metadata field %s: %w", field, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("metadata server returned status %d for field %s", resp.StatusCode, field)
