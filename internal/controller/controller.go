@@ -86,6 +86,7 @@ type TaskState struct {
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
 	Enabled                bool `json:"enabled"`
+	SkipPlanIfExists       bool `json:"skip_plan_if_exists,omitempty"`
 	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
 	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
@@ -95,9 +96,9 @@ type PhaseLoopConfig struct {
 
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID            string `json:"id"`
-	CloudProvider string `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
-	Repository    string `json:"repository"`
+	ID                   string   `json:"id"`
+	CloudProvider        string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
+	Repository           string   `json:"repository"`
 	Tasks                []string `json:"tasks"`
 	PRs                  []string `json:"prs,omitempty"`
 	Agent                string   `json:"agent"`

@@ -78,7 +78,7 @@ func (t *TokenExchanger) ExchangeToken(jwt string, installationID int64) (*Insta
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

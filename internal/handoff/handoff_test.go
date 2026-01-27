@@ -12,7 +12,7 @@ func TestStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	t.Run("NewStore creates directory", func(t *testing.T) {
 		store, err := NewStore(tmpDir)
@@ -143,7 +143,7 @@ func TestStore(t *testing.T) {
 
 func TestBuilder(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "handoff-builder-test")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewStore(tmpDir)
 	builder := NewBuilder(store)
@@ -423,7 +423,7 @@ func TestValidator(t *testing.T) {
 
 	t.Run("ValidatePhaseInput", func(t *testing.T) {
 		tmpDir, _ := os.MkdirTemp("", "validator-test")
-		defer os.RemoveAll(tmpDir)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
 
 		store, _ := NewStore(tmpDir)
 		taskID := "issue:validator"

@@ -50,9 +50,9 @@ type CodexAuthConfig struct {
 
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string `json:"id"`
-	CloudProvider string `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
-	Repository    string `json:"repository"`
+	ID            string                `json:"id"`
+	CloudProvider string                `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
+	Repository    string                `json:"repository"`
 	Tasks         []string              `json:"tasks"`
 	PRs           []string              `json:"prs,omitempty"`
 	Agent         string                `json:"agent"`
@@ -150,7 +150,7 @@ func New(provider string, verbose bool, project string) (Provisioner, error) {
 	case "aws":
 		return nil, fmt.Errorf("AWS provisioner not yet implemented")
 	case "azure":
-		return nil, fmt.Errorf("Azure provisioner not yet implemented")
+		return nil, fmt.Errorf("azure provisioner not yet implemented")
 	default:
 		return nil, fmt.Errorf("unknown cloud provider: %s", provider)
 	}

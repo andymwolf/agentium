@@ -289,21 +289,21 @@ func TestGetProjectID(t *testing.T) {
 			defer func() {
 				for k, v := range oldEnv {
 					if v == "" {
-						os.Unsetenv(k)
+						_ = os.Unsetenv(k)
 					} else {
-						os.Setenv(k, v)
+						_ = os.Setenv(k, v)
 					}
 				}
 			}()
 
 			// Clear all project-related env vars
-			os.Unsetenv("GOOGLE_CLOUD_PROJECT")
-			os.Unsetenv("GCP_PROJECT")
-			os.Unsetenv("GCLOUD_PROJECT")
+			_ = os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+			_ = os.Unsetenv("GCP_PROJECT")
+			_ = os.Unsetenv("GCLOUD_PROJECT")
 
 			// Set test env vars
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				_ = os.Setenv(k, v)
 			}
 
 			ctx := context.Background()

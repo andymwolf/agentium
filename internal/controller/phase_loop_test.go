@@ -328,3 +328,253 @@ func TestBuildWorkerHandoffSummary_SkipsStaleIteration(t *testing.T) {
 		t.Errorf("unexpected result: %q", result)
 	}
 }
+
+func TestHasExistingPlan(t *testing.T) {
+	tests := []struct {
+		name      string
+		issueBody string
+		want      bool
+	}{
+		{"empty body", "", false},
+		{"no indicators", "This is a simple issue description.", false},
+		{"has Files to Create/Modify", "## Plan\n\n| File | Action |\n|------|--------|\nFiles to Create/Modify\n| foo.go | Add |", true},
+		{"has Files to Modify", "Some text\n\nFiles to Modify:\n- foo.go", true},
+		{"has Implementation Steps", "## Implementation Steps\n1. Do this\n2. Do that", true},
+		{"has Implementation Plan header", "## Implementation Plan\nDetailed plan here...", true},
+		{"case sensitive - lowercase", "files to modify", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTask: "123",
+				issueDetails: []issueDetail{
+					{Number: 123, Title: "Test Issue", Body: tt.issueBody},
+				},
+			}
+			got := c.hasExistingPlan()
+			if got != tt.want {
+				t.Errorf("hasExistingPlan() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractExistingPlan(t *testing.T) {
+	tests := []struct {
+		name      string
+		issueBody string
+		wantEmpty bool
+	}{
+		{"no plan", "Simple issue", true},
+		{"has plan", "## Implementation Plan\nDo stuff", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTask: "456",
+				issueDetails: []issueDetail{
+					{Number: 456, Title: "Test", Body: tt.issueBody},
+				},
+			}
+			got := c.extractExistingPlan()
+			if tt.wantEmpty && got != "" {
+				t.Errorf("extractExistingPlan() = %q, want empty", got)
+			}
+			if !tt.wantEmpty && got != tt.issueBody {
+				t.Errorf("extractExistingPlan() = %q, want %q", got, tt.issueBody)
+			}
+		})
+	}
+}
+
+func TestGetActiveIssueBody(t *testing.T) {
+	c := &Controller{
+		activeTask: "789",
+		issueDetails: []issueDetail{
+			{Number: 123, Title: "Other Issue", Body: "Other body"},
+			{Number: 789, Title: "Active Issue", Body: "Active body"},
+		},
+	}
+
+	got := c.getActiveIssueBody()
+	if got != "Active body" {
+		t.Errorf("getActiveIssueBody() = %q, want %q", got, "Active body")
+	}
+
+	// Test with non-matching active task
+	c.activeTask = "999"
+	got = c.getActiveIssueBody()
+	if got != "" {
+		t.Errorf("getActiveIssueBody() for non-existent task = %q, want empty", got)
+	}
+}
+
+func TestIsPlanSkipEnabled(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *PhaseLoopConfig
+		want   bool
+	}{
+		{"nil config", nil, false},
+		{"disabled phase loop", &PhaseLoopConfig{Enabled: false, SkipPlanIfExists: true}, false},
+		{"enabled but skip disabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: false}, false},
+		{"both enabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{config: SessionConfig{PhaseLoop: tt.config}}
+			if got := c.isPlanSkipEnabled(); got != tt.want {
+				t.Errorf("isPlanSkipEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExistingPlanIndicators(t *testing.T) {
+	// Verify all expected indicators are present
+	expectedIndicators := []string{
+		"Files to Create/Modify",
+		"Files to Modify",
+		"Implementation Steps",
+		"## Implementation Plan",
+	}
+
+	if len(existingPlanIndicators) != len(expectedIndicators) {
+		t.Errorf("existingPlanIndicators has %d items, want %d", len(existingPlanIndicators), len(expectedIndicators))
+	}
+
+	for _, expected := range expectedIndicators {
+		found := false
+		for _, actual := range existingPlanIndicators {
+			if actual == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing expected indicator: %q", expected)
+		}
+	}
+}
+
+func TestShouldSkipPlanIteration(t *testing.T) {
+	// Issue body with plan indicator
+	issueWithPlan := "## Implementation Plan\nStep 1: Do this\nStep 2: Do that"
+	// Issue body without plan indicator
+	issueWithoutPlan := "Please implement feature X"
+
+	tests := []struct {
+		name      string
+		phase     TaskPhase
+		iter      int
+		config    *PhaseLoopConfig
+		issueBody string
+		want      bool
+	}{
+		// Iteration 1 with plan should skip
+		{
+			name:      "PLAN phase, iter 1, config enabled, has plan - should skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      true,
+		},
+		// Iteration 2+ should NEVER skip, even with plan
+		{
+			name:      "PLAN phase, iter 2, config enabled, has plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      2,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		{
+			name:      "PLAN phase, iter 3, config enabled, has plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      3,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		// Non-PLAN phases should never skip
+		{
+			name:      "IMPLEMENT phase, iter 1, config enabled, has plan - should NOT skip",
+			phase:     PhaseImplement,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		{
+			name:      "DOCS phase, iter 1, config enabled, has plan - should NOT skip",
+			phase:     PhaseDocs,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		// Config disabled should not skip
+		{
+			name:      "PLAN phase, iter 1, skip disabled, has plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: false},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		{
+			name:      "PLAN phase, iter 1, phase loop disabled, has plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: false, SkipPlanIfExists: true},
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		{
+			name:      "PLAN phase, iter 1, nil config, has plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    nil,
+			issueBody: issueWithPlan,
+			want:      false,
+		},
+		// No plan in issue should not skip
+		{
+			name:      "PLAN phase, iter 1, config enabled, no plan - should NOT skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: issueWithoutPlan,
+			want:      false,
+		},
+		// Empty issue body should not skip
+		{
+			name:      "PLAN phase, iter 1, config enabled, empty body - should NOT skip",
+			phase:     PhasePlan,
+			iter:      1,
+			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			issueBody: "",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTask: "123",
+				issueDetails: []issueDetail{
+					{Number: 123, Title: "Test Issue", Body: tt.issueBody},
+				},
+				config: SessionConfig{PhaseLoop: tt.config},
+			}
+			got := c.shouldSkipPlanIteration(tt.phase, tt.iter)
+			if got != tt.want {
+				t.Errorf("shouldSkipPlanIteration(%s, %d) = %v, want %v", tt.phase, tt.iter, got, tt.want)
+			}
+		})
+	}
+}
