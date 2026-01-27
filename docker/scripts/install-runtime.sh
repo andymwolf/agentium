@@ -16,6 +16,13 @@ file_exists() {
 # Function to install Go
 install_go() {
     log "Detected Go project (go.mod found)"
+
+    # Check if Go is already installed (pre-installed in Docker image)
+    if command -v go &> /dev/null; then
+        log "Go already installed: $(go version)"
+        return
+    fi
+
     log "Installing Go runtime..."
 
     # Download and install Go
