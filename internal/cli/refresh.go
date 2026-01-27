@@ -35,7 +35,10 @@ func init() {
 }
 
 func refreshAgentMD(cmd *cobra.Command, args []string) error {
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
 
 	// Check that .agentium.yaml exists
 	configPath := filepath.Join(cwd, ".agentium.yaml")

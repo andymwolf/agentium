@@ -71,7 +71,10 @@ type projectConfig struct {
 
 func initProject(cmd *cobra.Command, args []string) error {
 	configPath := filepath.Join(".", ".agentium.yaml")
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
 
 	force, _ := cmd.Flags().GetBool("force")
 	greenfield, _ := cmd.Flags().GetBool("greenfield")
