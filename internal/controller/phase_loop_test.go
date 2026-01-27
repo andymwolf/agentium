@@ -214,6 +214,53 @@ func TestTruncateForComment_UTF8Safety(t *testing.T) {
 	}
 }
 
+func TestTruncateForPlan(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantRunes int // expected rune count of result
+	}{
+		{"short string", "hello", 5},
+		{"exactly 4000 runes", string(make([]byte, 4000)), 4000},
+		{"over 4000 runes", string(make([]byte, 5000)), 4000 + len("\n\n... (plan truncated)")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateForPlan(tt.input)
+			if len([]rune(result)) != tt.wantRunes {
+				t.Errorf("truncateForPlan() rune count = %d, want %d", len([]rune(result)), tt.wantRunes)
+			}
+		})
+	}
+}
+
+func TestTruncateForPlan_UTF8Safety(t *testing.T) {
+	// Build a string of 5000 multi-byte runes (each is 3 bytes in UTF-8)
+	runes := make([]rune, 5000)
+	for i := range runes {
+		runes[i] = '\u4e16' // 世 (3 bytes per rune)
+	}
+	input := string(runes)
+
+	result := truncateForPlan(input)
+
+	// Should have 4000 runes + truncation message, not split mid-character
+	resultRunes := []rune(result)
+	truncationMsg := "\n\n... (plan truncated)"
+	expectedLen := 4000 + len([]rune(truncationMsg))
+	if len(resultRunes) != expectedLen {
+		t.Errorf("rune count = %d, want %d", len(resultRunes), expectedLen)
+	}
+	// First 4000 runes should all be 世
+	for i := 0; i < 4000; i++ {
+		if resultRunes[i] != '\u4e16' {
+			t.Errorf("rune[%d] = %U, want U+4E16", i, resultRunes[i])
+			break
+		}
+	}
+}
+
 func TestBuildWorkerHandoffSummary_DisabledHandoff(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
