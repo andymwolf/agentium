@@ -68,19 +68,39 @@ const (
 	PhasePush    TaskPhase = "PUSH"
 )
 
+// WorkflowPath represents the complexity path determined after PLAN iteration 1.
+type WorkflowPath string
+
+const (
+	WorkflowPathUnset   WorkflowPath = ""        // Not yet determined
+	WorkflowPathSimple  WorkflowPath = "SIMPLE"  // Straightforward change, fewer iterations
+	WorkflowPathComplex WorkflowPath = "COMPLEX" // Multiple components, full review
+)
+
+// ComplexityVerdict represents the outcome of complexity assessment.
+type ComplexityVerdict string
+
+const (
+	ComplexitySimple  ComplexityVerdict = "SIMPLE"
+	ComplexityComplex ComplexityVerdict = "COMPLEX"
+)
+
 // TaskState tracks the current state of a task being worked on
 type TaskState struct {
-	ID                string
-	Type              string // "issue" or "pr"
-	Phase             TaskPhase
-	TestRetries       int
-	LastStatus        string
-	PRNumber          string // Linked PR number (for issues that create PRs)
-	PhaseIteration    int    // Current iteration within the active phase (phase loop)
-	MaxPhaseIter      int    // Max iterations for current phase (phase loop)
-	LastJudgeVerdict  string // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
-	LastJudgeFeedback string // Last judge feedback text
-	DraftPRCreated    bool   // Whether draft PR has been created for this task
+	ID                  string
+	Type                string // "issue" or "pr"
+	Phase               TaskPhase
+	TestRetries         int
+	LastStatus          string
+	PRNumber            string       // Linked PR number (for issues that create PRs)
+	PhaseIteration      int          // Current iteration within the active phase (phase loop)
+	MaxPhaseIter        int          // Max iterations for current phase (phase loop)
+	LastJudgeVerdict    string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
+	LastJudgeFeedback   string       // Last judge feedback text
+	DraftPRCreated      bool         // Whether draft PR has been created for this task
+	WorkflowPath        WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
+	ControllerOverrode  bool         // True if controller forced ADVANCE at max iterations
+	NoMergeVerdictGiven bool         // True if NOMERGE verdict given during final review
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.

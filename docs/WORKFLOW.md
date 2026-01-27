@@ -12,16 +12,16 @@ Agentium uses a **sequential phase-based workflow** where tasks progress through
 
 The primary phases for processing issues (in order):
 
-| Phase | Constant | Purpose | Default Max Iterations |
-|-------|----------|---------|----------------------|
-| PLAN | `PhasePlan` | Create implementation plan | 3 |
-| IMPLEMENT | `PhaseImplement` | Write code, run tests, create draft PR | 5 |
-| DOCS | `PhaseDocs` | Update documentation (non-blocking) | 2 |
+| Phase | Constant | Purpose | 
+|-------|----------|---------|
+| PLAN | `PhasePlan` | Create implementation plan | 
+| IMPLEMENT | `PhaseImplement` | Write code, run tests, create draft PR | 
+| DOCS | `PhaseDocs` | Update documentation (non-blocking) | 
 
 **Notes:**
-- Testing is integrated into the IMPLEMENT phase. There is no separate TEST phase.
-- Draft PRs are created during the IMPLEMENT phase (not a separate phase).
-- The DOCS phase auto-succeeds after max iterations to avoid blocking PR finalization.
+- Testing is integrated into the IMPLEMENT phase.
+- Draft PRs are created during the IMPLEMENT phase.
+- All phases skip the Reviewer Agent and ADVANCE when they hit max iterations
 - PRs are finalized (marked as ready for review) when the workflow reaches PhaseComplete.
 
 ### Terminal Phases
@@ -34,21 +34,11 @@ Tasks end in one of these states:
 | BLOCKED | `PhaseBlocked` | Encountered unresolvable issue |
 | NOTHING_TO_DO | `PhaseNothingToDo` | No work was needed |
 
-### PR-Specific Phases
-
-For pull request review sessions:
-
-| Phase | Constant | Purpose |
-|-------|----------|---------|
-| ANALYZE | `PhaseAnalyze` | Initial PR analysis |
-| PUSH | `PhasePush` | Push changes to PR branch |
-
 ## Workflow Paths
 
-### Standard Path
+### Universal Workflow
 
-All tasks follow the same streamlined workflow:
-
+Both paths follow the basic workflow:
 ```
 PLAN → IMPLEMENT (creates draft PR) → DOCS → COMPLETE (finalizes PR)
 ```
@@ -56,20 +46,54 @@ PLAN → IMPLEMENT (creates draft PR) → DOCS → COMPLETE (finalizes PR)
 **Draft PR Creation:**
 - A draft PR is created during the first IMPLEMENT iteration that has commits to push
 - Subsequent IMPLEMENT iterations push to the same branch, automatically updating the PR
-- Review feedback can be posted to the draft PR during the IMPLEMENT phase
+- Implemenation and Docs review feedback is posted to the draft PR
 
 **PR Finalization:**
-- When the workflow reaches PhaseComplete, the draft PR is marked as ready for review
-- This happens automatically via `gh pr ready`
+- When the workflow reaches PhaseComplete, the draft PR is marked as ready for review via `gh pr ready`
 
-**DOCS Phase Behavior:**
-- The DOCS phase is non-blocking: it auto-succeeds after max iterations
-- Documentation issues should not prevent PR finalization
+
+### Path Choice
+
+Both paths follow the basic workflow:
+```
+PLAN → IMPLEMENT (creates draft PR) → DOCS → COMPLETE (finalizes PR)
+```
+After Plan Iteration 1, the Judge Agent determines if the plan is SIMPLE or COMPLEX.
+
+
+### Simple Path
+
+The SIMPLE path maintains context and minimizes review. 
+
+| Phase | SIMPLE Max Iterations |
+|-------|----------|---------|----------------------|
+| PLAN | 1 |
+| IMPLEMENT | 2 |
+| DOCS | 1 |
+
+**Notes:**
+- SIMPLE plans always ADVANCE to Implementation without further plan review
+- The same Implementation Worker Agent should be used for all Implement and Docs phases to save context
+
+
+### Complex Path
+
+The COMPLEX path refreshes context and conducts additional review. 
+
+| Phase | SIMPLE Max Iterations |
+|-------|----------|---------|----------------------|
+| PLAN | 3 |
+| IMPLEMENT | 5 |
+| DOCS | 3 |
+
+**Notes:**
+- New Implementation Worker Agents are used for each iteration
 
 ## Phase Loop Execution
 
 The phase loop is implemented in `internal/controller/phase_loop.go`:
 
+NOTE: Diagram needs to be fixed. SIMPLE/COMPLEX occurs before review in PLAN iteration 1
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Phase Loop                              │
@@ -87,15 +111,15 @@ The phase loop is implemented in `internal/controller/phase_loop.go`:
 │        ┌──────────────────────────────┼──────────────────┐  │
 │        │           │          │       │         │        │  │
 │        ▼           ▼          ▼       ▼         ▼        ▼  │
-│   ┌─────────┐ ┌─────────┐ ┌───────┐ ┌───────┐ ┌────────┐ ┌─────────┐
-│   │ ADVANCE │ │ ITERATE │ │BLOCKED│ │SIMPLE │ │COMPLEX │ │ REGRESS │
-│   └─────────┘ └─────────┘ └───────┘ └───────┘ └────────┘ └─────────┘
-│        │           │          │       │         │        │  │
-│        │           │          │       └────┬────┘        │  │
-│        │           │          │            │             │  │
-│        ▼           ▼          ▼            ▼             ▼  │
-│   Next phase   Same phase   Stop    Set workflow     Return │
-│                                       path          to PLAN │
+│   ┌─────────┐ ┌─────────┐ ┌───────┐ ┌───────┐ ┌────────┐    | 
+│   │ ADVANCE │ │ ITERATE │ │BLOCKED│ │SIMPLE │ │COMPLEX │    │
+│   └─────────┘ └─────────┘ └───────┘ └───────┘ └────────┘    |
+│        │           │          │       │         │           │
+│        │           │          │       └────┬────┘           │
+│        │           │          │            │                │
+│        ▼           ▼          ▼            ▼                │
+│   Next phase   Same phase   Stop    Set workflow            │
+│                                       path                  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -103,13 +127,13 @@ The phase loop is implemented in `internal/controller/phase_loop.go`:
 ### Iteration Control
 
 - Each phase has a configurable maximum iteration count
-- When max iterations reached, phase auto-advances
+- When max iterations for a phase is reached Reviewer Agent is skipped and Judge always answers ADVANCE
 - `PhaseIteration` tracks current iteration within phase
 - Iterations reset when advancing to next phase or regressing
 
 ## Judge System
 
-The Judge is the unified decision-maker for all phase transitions. It replaces the previous Evaluator system.
+The Judge is the unified decision-maker for all phase transitions. 
 
 ### Three-Agent Loop
 
@@ -137,7 +161,7 @@ Different reviewers are used for different phases:
 | BLOCKED | `VerdictBlocked` | All phases | Unresolvable issue, stop task |
 | SIMPLE | `VerdictSimple` | PLAN only | Task is simple, skip REVIEW phase |
 | COMPLEX | `VerdictComplex` | PLAN only | Task is complex, include REVIEW phase |
-| REGRESS | `VerdictRegress` | REVIEW only | Return to PLAN phase with feedback |
+| NOMERGE | `VerdictNoMerge` | Final REVIEW only | Comments reason on PR, does not finalize PR |
 
 ### Verdict Signal Format
 
@@ -149,28 +173,16 @@ AGENTIUM_EVAL: ITERATE More work needed on error handling
 AGENTIUM_EVAL: BLOCKED Cannot access required API
 AGENTIUM_EVAL: SIMPLE straightforward config change
 AGENTIUM_EVAL: COMPLEX multiple files and architectural changes
-AGENTIUM_EVAL: REGRESS fundamental design issue needs re-planning
+AGENTIUM_EVAL: NOMERGE signals low confidence in output, prompts human review of PR, only applies to COMPLEX workflows
 ```
 
 ### Fail-Safe Behaviors
 
 | Scenario | Behavior |
 |----------|----------|
-| Judge produces no signal | Defaults to ITERATE (fail-closed) |
-| Judge no-signal for N consecutive iterations | Force ADVANCE (prevents infinite loops) |
+| Judge produces no signal | Mark as BLOCKED |
 
 The `evalNoSignalLimit` config (default: 2) controls consecutive no-signal iterations before force-advancing.
-
-## Phase Regression
-
-When the Judge issues a REGRESS verdict during REVIEW:
-
-1. **Iteration count resets** - Fresh start for planning
-2. **Review feedback preserved** - Context for what went wrong
-3. **Return to PLAN phase** - Re-plan with new context
-4. **Complexity re-assessed** - Fresh SIMPLE/COMPLEX decision
-
-This allows the workflow to recover from fundamental design issues discovered during code review.
 
 ## Memory System
 
@@ -182,7 +194,6 @@ The memory system persists context across iterations and phases. Implemented in 
 |-------|---------------|
 | ITERATE within phase | Keep all memory |
 | ADVANCE to next phase | Clear phase-specific, keep KEY_FACTs |
-| REGRESS from REVIEW→PLAN | Keep review feedback for context |
 
 ### Signal Types
 
@@ -241,12 +252,11 @@ IMPLEMENT_REVIEW → REVIEW → default
 ### Valid Phase Keys
 
 Base phases:
-- `PLAN`, `IMPLEMENT`, `REVIEW`, `DOCS`, `PR_CREATION`
-- `ANALYZE`, `PUSH`
+- `PLAN`, `IMPLEMENT`, `REVIEW`, `DOCS`
 - `COMPLETE`, `BLOCKED`, `NOTHING_TO_DO`
 
 Reviewer phases:
-- `PLAN_REVIEW`, `IMPLEMENT_REVIEW`, `REVIEW_REVIEW`, `DOCS_REVIEW`
+- `PLAN_REVIEW`, `IMPLEMENT_REVIEW`, `DOCS_REVIEW`
 
 Judge phases:
 - `JUDGE`, `PLAN_JUDGE`, `IMPLEMENT_JUDGE`, `REVIEW_JUDGE`, `DOCS_JUDGE`
@@ -289,28 +299,35 @@ routing:
 
 ## Example Workflows
 
-### Standard Workflow (Issue #42)
+### Standard Simple Workflow (Issue #22)
 
 ```
-Task: issue:42
+Task: issue:22
 Initial Phase: PLAN
 
 === PLAN Phase ===
-Iteration 1/3:
+Iteration 1:
   → Worker agent creates plan
-  → Plan Reviewer provides feedback
-  → Judge verdict: ADVANCE
+  → Judge verdict: SIMPLE -> ADVANCE
 
 === IMPLEMENT Phase ===
-Iteration 1/5:
+Iteration 1/2:
   → Worker implements changes and runs tests
+  → Worker creates draft PR #100
   → Code Reviewer provides feedback
-  → Controller creates draft PR #100
-  → Judge verdict: ADVANCE
+  → Judge verdict: ITERATE
+
+Iteration 2/2:
+  → Worker implements changes and runs tests
+  → Worker updates draft PR #100
+  → Code Reviewer provides feedback
+  → Judge verdict: ITERATE
+  → Controller overrides: ADVANCE
 
 === DOCS Phase ===
-Iteration 1/2:
+Iteration 1/1:
   → Worker updates documentation
+  → Docs Reviewer provides feedback
   → Judge verdict: ADVANCE
 
 === PhaseComplete ===
@@ -319,7 +336,39 @@ Iteration 1/2:
 Final Phase: COMPLETE
 ```
 
-### Workflow with Multiple IMPLEMENT Iterations (Issue #99)
+### Standard Complex Workflow (Issue #42)
+
+```
+Task: issue:42
+Initial Phase: PLAN
+
+=== PLAN Phase ===
+Iteration 1/3:
+  → Worker agent creates plan
+  → Judge verdict: COMPLEX
+  → Plan Reviewer provides feedback
+  → Judge verdict: ADVANCE
+
+=== IMPLEMENT Phase ===
+Iteration 1/5:
+  → Worker implements changes and runs tests
+  → Worker creates draft PR #101
+  → Code Reviewer provides feedback
+  → Judge verdict: ADVANCE
+
+=== DOCS Phase ===
+Iteration 1/3:
+  → Worker updates documentation
+  → Docs Reviewer provides feedback
+  → Judge verdict: ADVANCE
+
+=== PhaseComplete ===
+  → Controller finalizes draft PR #101 (marks as ready for review)
+
+Final Phase: COMPLETE
+```
+
+### Workflow with Multiple Iterations (Issue #99)
 
 ```
 Task: issue:99
@@ -328,29 +377,38 @@ Initial Phase: PLAN
 === PLAN Phase ===
 Iteration 1/3:
   → Worker creates comprehensive plan
+  → Judge verdict: COMPLEX
+  → Plan Reviewer provides feedback
+  → Judge verdict: ITERATE
+
+Iteration 2/3:
+  → Worker updates plan
   → Plan Reviewer provides feedback
   → Judge verdict: ADVANCE
 
 === IMPLEMENT Phase ===
 Iteration 1/5:
-  → Worker implements changes
-  → Controller creates draft PR #150
+  → Worker implements Plan
+  → Worker creates draft PR #150
   → Code Reviewer: needs error handling
   → Judge verdict: ITERATE
 
 Iteration 2/5:
   → Worker adds error handling
   → Pushes to existing branch (PR #150 auto-updates)
+  → Code Reviewer: error handling still insufficient
   → Judge verdict: ITERATE (tests failing)
 
 Iteration 3/5:
   → Worker fixes test failures
   → Pushes to existing branch
+  → Code Reviewer: provides insignificant feedback
   → Judge verdict: ADVANCE
 
 === DOCS Phase ===
 Iteration 1/2:
   → Worker updates documentation
+  → Docs Reviewer: provides insignificant feedback
   → Judge verdict: ADVANCE
 
 === PhaseComplete ===
@@ -359,7 +417,7 @@ Iteration 1/2:
 Final Phase: COMPLETE
 ```
 
-### Workflow with DOCS Auto-Advance (Issue #77)
+### Workflow with Auto-Advance (Issue #77)
 
 ```
 Task: issue:77
@@ -367,26 +425,49 @@ Initial Phase: PLAN
 
 === PLAN Phase ===
 Iteration 1/3:
-  → Worker creates plan
-  → Judge verdict: ADVANCE
+  → Worker creates comprehensive plan
+  → Judge verdict: COMPLEX
+  → Plan Reviewer provides feedback
+  → Judge verdict: ITERATE
+
+Iteration 2/3:
+  → Worker updates plan
+  → Plan Reviewer provides feedback
+  → Judge verdict: ITERATE
+
+Iteration 3/3:
+  → Worker updates plan
+  → Plan Reviewer provides feedback
+  → Judge verdict: ITERATE
+  → Controller hits max iterations: ADVANCE
 
 === IMPLEMENT Phase ===
 Iteration 1/5:
-  → Worker implements feature
-  → Controller creates draft PR #200
+  → Worker implements Plan
+  → Worker creates draft PR #175
+  → Code Reviewer: provides insignificant feedback
+  → Judge verdict: ADVANCE
+
+Iteration 2/5:
+  → Worker adds error handling
+  → Pushes to existing branch (PR #175 auto-updates)
+  → Code Reviewer: error handling still insufficient
+  → Judge verdict: ITERATE (tests failing)
+
+Iteration 3/5:
+  → Worker fixes test failures
+  → Pushes to existing branch
+  → Code Reviewer: provides insignificant feedback
   → Judge verdict: ADVANCE
 
 === DOCS Phase ===
 Iteration 1/2:
-  → Worker attempts to update docs
-  → Judge verdict: ITERATE
-
-Iteration 2/2:
-  → Worker updates docs but reviewer has concerns
-  → Max iterations reached, auto-advancing (non-blocking)
+  → Worker updates documentation
+  → Docs Reviewer: provides insignificant feedback
+  → Judge verdict: ADVANCE
 
 === PhaseComplete ===
-  → Controller finalizes draft PR #200
+  → Controller overrode the Judge in at least one phase. Comments NOMERGE on draft PR #175. PR is not finalized.
 
 Final Phase: COMPLETE
 ```

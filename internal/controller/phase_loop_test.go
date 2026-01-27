@@ -48,9 +48,9 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.phase), func(t *testing.T) {
-			got := c.phaseMaxIterations(tt.phase)
+			got := c.phaseMaxIterations(tt.phase, WorkflowPathUnset)
 			if got != tt.want {
-				t.Errorf("phaseMaxIterations(%q) = %d, want %d", tt.phase, got, tt.want)
+				t.Errorf("phaseMaxIterations(%q, UNSET) = %d, want %d", tt.phase, got, tt.want)
 			}
 		})
 	}
@@ -79,9 +79,9 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.phase), func(t *testing.T) {
-			got := c.phaseMaxIterations(tt.phase)
+			got := c.phaseMaxIterations(tt.phase, WorkflowPathComplex)
 			if got != tt.want {
-				t.Errorf("phaseMaxIterations(%q) = %d, want %d", tt.phase, got, tt.want)
+				t.Errorf("phaseMaxIterations(%q, COMPLEX) = %d, want %d", tt.phase, got, tt.want)
 			}
 		})
 	}
@@ -95,8 +95,40 @@ func TestPhaseLoopConfig_Nil(t *testing.T) {
 	}
 
 	// Should use defaults when config is nil
-	if got := c.phaseMaxIterations(PhasePlan); got != defaultPlanMaxIter {
-		t.Errorf("phaseMaxIterations(PLAN) with nil config = %d, want %d", got, defaultPlanMaxIter)
+	if got := c.phaseMaxIterations(PhasePlan, WorkflowPathUnset); got != defaultPlanMaxIter {
+		t.Errorf("phaseMaxIterations(PLAN, UNSET) with nil config = %d, want %d", got, defaultPlanMaxIter)
+	}
+}
+
+func TestPhaseMaxIterations_SimplePath(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				Enabled:                true,
+				PlanMaxIterations:      5, // Should be ignored for SIMPLE path
+				ImplementMaxIterations: 10,
+				DocsMaxIterations:      4,
+			},
+		},
+	}
+
+	tests := []struct {
+		phase TaskPhase
+		want  int
+	}{
+		{PhasePlan, simplePlanMaxIter},
+		{PhaseImplement, simpleImplementMaxIter},
+		{PhaseDocs, simpleDocsMaxIter},
+		{TaskPhase("UNKNOWN"), 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.phase), func(t *testing.T) {
+			got := c.phaseMaxIterations(tt.phase, WorkflowPathSimple)
+			if got != tt.want {
+				t.Errorf("phaseMaxIterations(%q, SIMPLE) = %d, want %d", tt.phase, got, tt.want)
+			}
+		})
 	}
 }
 

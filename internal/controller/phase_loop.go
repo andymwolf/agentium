@@ -25,13 +25,27 @@ const (
 	defaultDocsMaxIter      = 2
 )
 
+// SIMPLE path max iterations - fewer iterations for straightforward changes.
+const (
+	simplePlanMaxIter      = 1
+	simpleImplementMaxIter = 2
+	simpleDocsMaxIter      = 1
+)
+
 // defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
 const defaultJudgeContextBudget = 8000
 
 // phaseMaxIterations returns the configured max iterations for a phase,
-// falling back to defaults when not specified.
-func (c *Controller) phaseMaxIterations(phase TaskPhase) int {
+// considering the workflow path and falling back to defaults when not specified.
+func (c *Controller) phaseMaxIterations(phase TaskPhase, workflowPath WorkflowPath) int {
 	cfg := c.config.PhaseLoop
+
+	// For SIMPLE path, use reduced iterations
+	if workflowPath == WorkflowPathSimple {
+		return simpleMaxIter(phase)
+	}
+
+	// For COMPLEX or UNSET, use configured or default iterations
 	if cfg == nil {
 		return defaultMaxIter(phase)
 	}
@@ -60,6 +74,19 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultImplementMaxIter
 	case PhaseDocs:
 		return defaultDocsMaxIter
+	default:
+		return 1
+	}
+}
+
+func simpleMaxIter(phase TaskPhase) int {
+	switch phase {
+	case PhasePlan:
+		return simplePlanMaxIter
+	case PhaseImplement:
+		return simpleImplementMaxIter
+	case PhaseDocs:
+		return simpleDocsMaxIter
 	default:
 		return 1
 	}
@@ -202,7 +229,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			return nil
 		}
 
-		maxIter := c.phaseMaxIterations(currentPhase)
+		maxIter := c.phaseMaxIterations(currentPhase, state.WorkflowPath)
 		state.MaxPhaseIter = maxIter
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
@@ -272,6 +299,49 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if prErr := c.maybeCreateDraftPR(ctx, taskID); prErr != nil {
 					c.logWarning("Failed to create draft PR: %v", prErr)
 				}
+			}
+
+			// Run complexity assessor after PLAN iteration 1 (only if workflow path is unset)
+			if currentPhase == PhasePlan && iter == 1 && state.WorkflowPath == WorkflowPathUnset {
+				complexityResult, complexityErr := c.runComplexityAssessor(ctx, complexityRunParams{
+					PlanOutput:    phaseOutput,
+					Iteration:     iter,
+					MaxIterations: maxIter,
+				})
+				if complexityErr != nil {
+					c.logWarning("Complexity assessor error: %v (defaulting to COMPLEX)", complexityErr)
+					state.WorkflowPath = WorkflowPathComplex
+				} else {
+					state.WorkflowPath = WorkflowPath(complexityResult.Verdict)
+					c.logInfo("Workflow path set to %s: %s", state.WorkflowPath, complexityResult.Feedback)
+				}
+
+				// Post complexity verdict comment
+				c.postPhaseComment(ctx, currentPhase, iter,
+					fmt.Sprintf("Complexity assessment: **%s**\n\n%s", state.WorkflowPath, complexityResult.Feedback))
+
+				// For SIMPLE tasks, auto-advance from PLAN (skip reviewer/judge)
+				if state.WorkflowPath == WorkflowPathSimple {
+					c.logInfo("SIMPLE workflow: auto-advancing from PLAN phase")
+					// Clear any feedback and store phase result
+					if c.memoryStore != nil {
+						c.memoryStore.ClearByType(memory.EvalFeedback)
+						c.memoryStore.Update([]memory.Signal{
+							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (SIMPLE path, iteration %d)", currentPhase, iter)},
+						}, c.iteration, taskID)
+					}
+					// Update issue with plan
+					if phaseOutput != "" {
+						c.updateIssuePlan(ctx, truncateForPlan(phaseOutput))
+					}
+					advanced = true
+					break
+				}
+
+				// For COMPLEX tasks, recalculate max iterations now that we know the path
+				maxIter = c.phaseMaxIterations(currentPhase, state.WorkflowPath)
+				state.MaxPhaseIter = maxIter
+				c.logInfo("COMPLEX workflow: continuing with reviewer/judge (max iterations: %d)", maxIter)
 			}
 
 			// Gather previous iteration feedback for reviewer context
@@ -402,9 +472,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.postPhaseComment(ctx, currentPhase, maxIter,
 					fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", maxIter))
 			} else {
-				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance", currentPhase, maxIter)
+				// Set ControllerOverrode flag for NOMERGE handling during PR finalization
+				state.ControllerOverrode = true
+				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance (NOMERGE flag set)", currentPhase, maxIter)
 				c.postPhaseComment(ctx, currentPhase, maxIter,
-					fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE", maxIter))
+					fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE (PR will require human review)", maxIter))
 			}
 			if c.memoryStore != nil {
 				c.memoryStore.ClearByType(memory.EvalFeedback)

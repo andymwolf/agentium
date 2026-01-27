@@ -239,7 +239,8 @@ func (c *Controller) updateHandoffWithPRInfo(taskID, prNumber, prURL string, ite
 	}
 }
 
-// finalizeDraftPR marks the draft PR as ready for review.
+// finalizeDraftPR marks the draft PR as ready for review, or posts a NOMERGE
+// comment if the controller forced advancement at max iterations.
 // This is called when the workflow reaches PhaseComplete.
 func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 	state := c.taskStates[taskID]
@@ -250,6 +251,18 @@ func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 	// Skip if no PR number
 	if state.PRNumber == "" {
 		c.logInfo("Skipping PR finalization: no PR number in state")
+		return nil
+	}
+
+	// Check if NOMERGE handling is needed
+	if state.ControllerOverrode || state.NoMergeVerdictGiven {
+		reason := "Controller forced ADVANCE at max iterations"
+		if state.NoMergeVerdictGiven {
+			reason = "NOMERGE verdict was given during review"
+		}
+		c.logWarning("PR #%s requires human review: %s", state.PRNumber, reason)
+		c.postNOMERGEComment(ctx, state.PRNumber, reason)
+		// Keep PR as draft - do not mark as ready
 		return nil
 	}
 
