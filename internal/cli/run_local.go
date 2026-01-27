@@ -151,6 +151,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Build controller session config
 	sessionConfig := controller.SessionConfig{
 		ID:                   sessionID,
+		CloudProvider:        "local",
 		Repository:           cfg.Session.Repository,
 		Tasks:                cfg.Session.Tasks,
 		PRs:                  cfg.Session.PRs,

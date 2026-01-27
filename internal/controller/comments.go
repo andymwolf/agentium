@@ -8,6 +8,22 @@ import (
 	"strings"
 )
 
+// instanceSignature returns a signature like "agentium:gcp:agentium-abc123" for debugging.
+// This is appended to comments to help identify which instance posted them.
+func (c *Controller) instanceSignature() string {
+	provider := c.config.CloudProvider
+	if provider == "" {
+		provider = "unknown"
+	}
+	return fmt.Sprintf("agentium:%s:%s", provider, c.config.ID)
+}
+
+// appendSignature adds the instance signature as an HTML comment to the body.
+// The signature is invisible when rendered but helps with debugging.
+func (c *Controller) appendSignature(body string) string {
+	return fmt.Sprintf("%s\n\n<!-- %s -->", body, c.instanceSignature())
+}
+
 // postPhaseComment posts a progress comment on the GitHub issue for the current task.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, summary string) {
@@ -41,6 +57,7 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, resu
 
 // postIssueComment posts a comment on the active issue. Best-effort.
 func (c *Controller) postIssueComment(ctx context.Context, body string) {
+	body = c.appendSignature(body)
 	cmd := exec.CommandContext(ctx, "gh", "issue", "comment", c.activeTask,
 		"--repo", c.config.Repository,
 		"--body", body,
@@ -60,6 +77,7 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 		return
 	}
 
+	body = c.appendSignature(body)
 	cmd := exec.CommandContext(ctx, "gh", "pr", "comment", prNumber,
 		"--repo", c.config.Repository,
 		"--body", body,

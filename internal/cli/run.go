@@ -194,6 +194,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 	// Build session config for the VM
 	sessionConfig := provisioner.SessionConfig{
 		ID:            sessionID,
+		CloudProvider: cfg.Cloud.Provider,
 		Repository:    cfg.Session.Repository,
 		Tasks:         cfg.Session.Tasks,
 		PRs:           cfg.Session.PRs,

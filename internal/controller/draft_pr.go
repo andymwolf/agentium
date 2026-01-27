@@ -97,7 +97,8 @@ This is a draft PR - implementation is in progress.
 - [ ] Documentation updated
 
 ---
-*This draft PR was automatically created by Agentium during the IMPLEMENT phase.*`, issueNumber)
+*This draft PR was automatically created by Agentium during the IMPLEMENT phase.*
+*Instance: %s*`, issueNumber, c.instanceSignature())
 
 	c.logInfo("Creating draft PR for issue #%s", issueNumber)
 	createCmd := exec.CommandContext(ctx, "gh", "pr", "create",
