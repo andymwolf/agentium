@@ -614,16 +614,18 @@ func TestBuildPromptForTask(t *testing.T) {
 		issueNumber  string
 		issueDetails []issueDetail
 		existingWork *agent.ExistingWork
+		phase        TaskPhase
 		contains     []string
 		notContains  []string
 	}{
 		{
-			name:        "fresh start - no existing work",
+			name:        "fresh start - no existing work (IMPLEMENT phase)",
 			issueNumber: "42",
 			issueDetails: []issueDetail{
 				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
 			},
 			existingWork: nil,
+			phase:        PhaseImplement,
 			contains: []string{
 				"Issue #42",
 				"Fix login bug",
@@ -634,10 +636,27 @@ func TestBuildPromptForTask(t *testing.T) {
 			notContains: []string{
 				"Existing Work Detected",
 				"Do NOT create a new branch",
+				"Follow the instructions in your system prompt",
 			},
 		},
 		{
-			name:        "existing PR found",
+			name:        "fresh start - empty phase defaults to IMPLEMENT behavior",
+			issueNumber: "42",
+			issueDetails: []issueDetail{
+				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
+			},
+			existingWork: nil,
+			phase:        "",
+			contains: []string{
+				"Issue #42",
+				"Create a new branch",
+			},
+			notContains: []string{
+				"Follow the instructions in your system prompt",
+			},
+		},
+		{
+			name:        "existing PR found (IMPLEMENT phase)",
 			issueNumber: "6",
 			issueDetails: []issueDetail{
 				{Number: 6, Title: "Add cloud logging", Body: "Integrate GCP logging"},
@@ -647,6 +666,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				PRNumber: "87",
 				PRTitle:  "Add Cloud Logging integration",
 			},
+			phase: PhaseImplement,
 			contains: []string{
 				"Issue #6",
 				"Existing Work Detected",
@@ -657,10 +677,11 @@ func TestBuildPromptForTask(t *testing.T) {
 			},
 			notContains: []string{
 				"Create a new branch",
+				"Follow the instructions in your system prompt",
 			},
 		},
 		{
-			name:        "existing branch only (no PR)",
+			name:        "existing branch only (no PR) - IMPLEMENT phase",
 			issueNumber: "7",
 			issueDetails: []issueDetail{
 				{Number: 7, Title: "Graceful shutdown", Body: "Implement shutdown"},
@@ -668,6 +689,7 @@ func TestBuildPromptForTask(t *testing.T) {
 			existingWork: &agent.ExistingWork{
 				Branch: "agentium/issue-7-graceful-shutdown",
 			},
+			phase: PhaseImplement,
 			contains: []string{
 				"Issue #7",
 				"Existing Work Detected",
@@ -678,16 +700,79 @@ func TestBuildPromptForTask(t *testing.T) {
 			notContains: []string{
 				"Create a new branch",
 				"Do NOT create a new PR",
+				"Follow the instructions in your system prompt",
 			},
 		},
 		{
-			name:         "issue not in details",
+			name:         "issue not in details (IMPLEMENT phase)",
 			issueNumber:  "99",
 			issueDetails: []issueDetail{},
 			existingWork: nil,
+			phase:        PhaseImplement,
 			contains: []string{
 				"Issue #99",
 				"Create a new branch",
+			},
+		},
+		{
+			name:        "PLAN phase - defers to system prompt",
+			issueNumber: "42",
+			issueDetails: []issueDetail{
+				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
+			},
+			existingWork: nil,
+			phase:        PhasePlan,
+			contains: []string{
+				"Issue #42",
+				"Fix login bug",
+				"Follow the instructions in your system prompt",
+			},
+			notContains: []string{
+				"Create a new branch",
+				"Create a pull request",
+				"Run tests",
+			},
+		},
+		{
+			name:        "DOCS phase - defers to system prompt",
+			issueNumber: "42",
+			issueDetails: []issueDetail{
+				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
+			},
+			existingWork: nil,
+			phase:        PhaseDocs,
+			contains: []string{
+				"Issue #42",
+				"Follow the instructions in your system prompt",
+			},
+			notContains: []string{
+				"Create a new branch",
+				"Create a pull request",
+			},
+		},
+		{
+			name:        "PLAN phase with existing work - includes existing work context but defers instructions",
+			issueNumber: "6",
+			issueDetails: []issueDetail{
+				{Number: 6, Title: "Add cloud logging", Body: "Integrate GCP logging"},
+			},
+			existingWork: &agent.ExistingWork{
+				Branch:   "agentium/issue-6-cloud-logging",
+				PRNumber: "87",
+				PRTitle:  "Add Cloud Logging integration",
+			},
+			phase: PhasePlan,
+			contains: []string{
+				"Issue #6",
+				"Existing Work Detected",
+				"PR #87",
+				"agentium/issue-6-cloud-logging",
+				"Follow the instructions in your system prompt",
+			},
+			notContains: []string{
+				"Check out the existing branch",
+				"Do NOT create a new branch",
+				"Run tests",
 			},
 		},
 	}
@@ -699,7 +784,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				issueDetails: tt.issueDetails,
 				workDir:      "/workspace",
 			}
-			got := c.buildPromptForTask(tt.issueNumber, tt.existingWork)
+			got := c.buildPromptForTask(tt.issueNumber, tt.existingWork, tt.phase)
 
 			for _, substr := range tt.contains {
 				if !containsString(got, substr) {
