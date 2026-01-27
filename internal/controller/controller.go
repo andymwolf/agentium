@@ -58,7 +58,6 @@ type TaskPhase string
 const (
 	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
-	PhaseReview      TaskPhase = "REVIEW"
 	PhaseDocs        TaskPhase = "DOCS"
 	PhasePRCreation  TaskPhase = "PR_CREATION"
 	PhaseComplete    TaskPhase = "COMPLETE"
@@ -79,12 +78,9 @@ type TaskState struct {
 	PRNumber          string // Linked PR number (for issues that create PRs)
 	PhaseIteration    int    // Current iteration within the active phase (phase loop)
 	MaxPhaseIter      int    // Max iterations for current phase (phase loop)
-	LastJudgeVerdict  string // Last judge verdict (ADVANCE, ITERATE, BLOCKED, SIMPLE, COMPLEX, REGRESS)
+	LastJudgeVerdict  string // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
 	LastJudgeFeedback string // Last judge feedback text
-	ReviewDecided     bool   // Whether complexity decision has been made
 	ReviewActive      bool   // Whether review loop is active for this task (auto mode)
-	IsSimple          bool   // Whether task was marked as SIMPLE (skip REVIEW phase)
-	RegressionCount   int    // Number of times we've regressed from REVIEW to PLAN
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
@@ -92,7 +88,6 @@ type PhaseLoopConfig struct {
 	Enabled                bool `json:"enabled"`
 	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
-	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`
 	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
 	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`

@@ -3,17 +3,18 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
-// TEST is merged into IMPLEMENT; REVIEW is skipped for SIMPLE tasks.
+// TEST is merged into IMPLEMENT. REVIEW phase has been removed as IMPLEMENT
+// already runs Worker → Reviewer → Judge per iteration.
 var issuePhaseOrder = []TaskPhase{
 	PhasePlan,
 	PhaseImplement,
-	PhaseReview,
 	PhaseDocs,
 	PhasePRCreation,
 }
@@ -22,7 +23,6 @@ var issuePhaseOrder = []TaskPhase{
 const (
 	defaultPlanMaxIter      = 3
 	defaultImplementMaxIter = 5
-	defaultReviewMaxIter    = 3
 	defaultDocsMaxIter      = 2
 	defaultPRMaxIter        = 1
 )
@@ -46,10 +46,6 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase) int {
 		if cfg.ImplementMaxIterations > 0 {
 			return cfg.ImplementMaxIterations
 		}
-	case PhaseReview:
-		if cfg.ReviewMaxIterations > 0 {
-			return cfg.ReviewMaxIterations
-		}
 	case PhaseDocs:
 		if cfg.DocsMaxIterations > 0 {
 			return cfg.DocsMaxIterations
@@ -64,8 +60,6 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultPlanMaxIter
 	case PhaseImplement:
 		return defaultImplementMaxIter
-	case PhaseReview:
-		return defaultReviewMaxIter
 	case PhaseDocs:
 		return defaultDocsMaxIter
 	case PhasePRCreation:
@@ -77,30 +71,17 @@ func defaultMaxIter(phase TaskPhase) int {
 
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
-// For SIMPLE tasks, REVIEW is skipped.
-func advancePhase(current TaskPhase, isSimple bool) TaskPhase {
+func advancePhase(current TaskPhase) TaskPhase {
 	for i, p := range issuePhaseOrder {
 		if p == current {
 			if i+1 < len(issuePhaseOrder) {
-				next := issuePhaseOrder[i+1]
-				// Skip REVIEW for SIMPLE tasks
-				if next == PhaseReview && isSimple {
-					if i+2 < len(issuePhaseOrder) {
-						return issuePhaseOrder[i+2]
-					}
-					return PhaseComplete
-				}
-				return next
+				return issuePhaseOrder[i+1]
 			}
 			return PhaseComplete
 		}
 	}
 	return PhaseComplete
 }
-
-// maxRegressionCount is the maximum number of REGRESS events allowed before
-// forcing the task to BLOCKED to prevent infinite regression loops.
-const maxRegressionCount = 3
 
 // runPhaseLoop executes the controller-as-judge phase loop for the active issue task.
 // It iterates through phases, running the agent and judge at each step.
@@ -122,7 +103,6 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		}
 	}
 
-phaseLoop:
 	for {
 		// Check context cancellation
 		select {
@@ -212,12 +192,30 @@ phaseLoop:
 				return nil
 			}
 
+			// Gather previous iteration feedback for reviewer context
+			var previousFeedback string
+			if iter > 1 && c.memoryStore != nil {
+				prevEntries := c.memoryStore.GetPreviousIterationFeedback(taskID, iter)
+				if len(prevEntries) > 0 {
+					var feedbackParts []string
+					for _, e := range prevEntries {
+						feedbackParts = append(feedbackParts, e.Content)
+					}
+					previousFeedback = strings.Join(feedbackParts, "\n")
+				}
+			}
+
+			// Get worker handoff summary if available
+			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase, iter)
+
 			// Run reviewer + judge
 			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
-				CompletedPhase: currentPhase,
-				PhaseOutput:    phaseOutput,
-				Iteration:      iter,
-				MaxIterations:  maxIter,
+				CompletedPhase:       currentPhase,
+				PhaseOutput:          phaseOutput,
+				Iteration:            iter,
+				MaxIterations:        maxIter,
+				PreviousFeedback:     previousFeedback,
+				WorkerHandoffSummary: workerHandoffSummary,
 			})
 			if reviewErr != nil {
 				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
@@ -236,16 +234,13 @@ phaseLoop:
 				break
 			}
 
-			// Assess complexity during PLAN phase
-			assessComplexity := currentPhase == PhasePlan && !state.ReviewDecided
-
 			judgeResult, err := c.runJudge(ctx, judgeRunParams{
-				CompletedPhase:   currentPhase,
-				PhaseOutput:      phaseOutput,
-				ReviewFeedback:   reviewResult.Feedback,
-				Iteration:        iter,
-				MaxIterations:    maxIter,
-				AssessComplexity: assessComplexity,
+				CompletedPhase: currentPhase,
+				PhaseOutput:    phaseOutput,
+				ReviewFeedback: reviewResult.Feedback,
+				Iteration:      iter,
+				MaxIterations:  maxIter,
+				PhaseIteration: iter,
 			})
 			if err != nil {
 				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
@@ -293,86 +288,6 @@ phaseLoop:
 				state.Phase = PhaseBlocked
 				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
 				return nil
-
-			case VerdictSimple:
-				// Mark task as simple (skip REVIEW phase)
-				state.IsSimple = true
-				state.ReviewDecided = true
-				c.logInfo("Phase %s: judge marked task as SIMPLE (REVIEW will be skipped)", currentPhase)
-				// Clear feedback and advance
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-				}
-				advanced = true
-
-			case VerdictComplex:
-				// Mark task as complex (include REVIEW phase)
-				state.IsSimple = false
-				state.ReviewDecided = true
-				c.logInfo("Phase %s: judge marked task as COMPLEX (REVIEW will be used)", currentPhase)
-				// Clear feedback and advance
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-				}
-				advanced = true
-
-			case VerdictRegress:
-				// Return to PLAN phase (only valid during REVIEW)
-				if currentPhase != PhaseReview {
-					c.logWarning("Phase %s: REGRESS verdict only valid during REVIEW, treating as ITERATE", currentPhase)
-					continue
-				}
-				state.RegressionCount++
-
-				// Guard against infinite regression loops
-				if state.RegressionCount > maxRegressionCount {
-					c.logWarning("Phase %s: max regression count (%d) exceeded, marking as BLOCKED",
-						currentPhase, maxRegressionCount)
-					state.Phase = PhaseBlocked
-					state.LastJudgeFeedback = fmt.Sprintf("Exceeded max regression count (%d)", maxRegressionCount)
-					return nil
-				}
-
-				c.logInfo("Phase %s: judge requested regression to PLAN (count: %d/%d, feedback: %s)",
-					currentPhase, state.RegressionCount, maxRegressionCount, judgeResult.Feedback)
-
-				// Keep review feedback in memory for context
-				if c.memoryStore != nil && judgeResult.Feedback != "" {
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.EvalFeedback, Content: fmt.Sprintf("REVIEW regression: %s", judgeResult.Feedback)},
-					}, c.iteration, taskID)
-				}
-
-				// Clear handoff data from PLAN onwards (need fresh plan after regression)
-				if c.isHandoffEnabled() {
-					c.handoffStore.ClearFromPhase(taskID, handoff.PhasePlan)
-					if err := c.handoffStore.Save(); err != nil {
-						c.logWarning("Failed to persist handoff store after regression: %v", err)
-					}
-					c.logInfo("Cleared handoff data from PLAN onwards due to regression")
-				}
-
-				// Reset to PLAN phase with fresh iterations
-				state.Phase = PhasePlan
-				state.PhaseIteration = 0
-				// Don't clear IsSimple - let the new PLAN judge reassess
-				state.ReviewDecided = false
-				continue phaseLoop // Restart the outer loop without recursion
-			}
-
-			// Apply ReviewMode if set (complexity assessment during PLAN phase)
-			// This happens in addition to the verdict, e.g., ADVANCE + REVIEW_MODE: SIMPLE
-			if judgeResult.ReviewMode != "" && !state.ReviewDecided {
-				switch judgeResult.ReviewMode {
-				case "SIMPLE":
-					state.IsSimple = true
-					state.ReviewDecided = true
-					c.logInfo("Phase %s: complexity assessment = SIMPLE (REVIEW will be skipped)", currentPhase)
-				case "FULL":
-					state.IsSimple = false
-					state.ReviewDecided = true
-					c.logInfo("Phase %s: complexity assessment = FULL (REVIEW will be used)", currentPhase)
-				}
 			}
 
 			if advanced {
@@ -390,9 +305,9 @@ phaseLoop:
 			}
 		}
 
-		// Move to next phase (respecting SIMPLE/COMPLEX path)
-		nextPhase := advancePhase(currentPhase, state.IsSimple)
-		c.logInfo("Phase loop: advancing from %s to %s (simple=%v)", currentPhase, nextPhase, state.IsSimple)
+		// Move to next phase
+		nextPhase := advancePhase(currentPhase)
+		c.logInfo("Phase loop: advancing from %s to %s", currentPhase, nextPhase)
 		state.Phase = nextPhase
 	}
 }
@@ -464,4 +379,65 @@ func (c *Controller) processHandoffOutput(taskID string, phase TaskPhase, iterat
 	}
 
 	return nil
+}
+
+// buildWorkerHandoffSummary extracts a summary of what the worker claims to have done
+// from the handoff store. This helps the reviewer verify claims against actual output.
+func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase, _ int) string {
+	if !c.isHandoffEnabled() || c.handoffStore == nil {
+		return ""
+	}
+
+	handoffPhase := handoff.Phase(phase)
+	hd := c.handoffStore.GetPhaseOutput(taskID, handoffPhase)
+	if hd == nil {
+		return ""
+	}
+
+	var parts []string
+
+	// Extract relevant info based on phase type
+	switch phase {
+	case PhasePlan:
+		if hd.PlanOutput != nil {
+			if hd.PlanOutput.Summary != "" {
+				parts = append(parts, fmt.Sprintf("Summary: %s", hd.PlanOutput.Summary))
+			}
+			if len(hd.PlanOutput.FilesToModify) > 0 {
+				parts = append(parts, fmt.Sprintf("Files to modify: %v", hd.PlanOutput.FilesToModify))
+			}
+			if len(hd.PlanOutput.FilesToCreate) > 0 {
+				parts = append(parts, fmt.Sprintf("Files to create: %v", hd.PlanOutput.FilesToCreate))
+			}
+		}
+	case PhaseImplement:
+		if hd.ImplementOutput != nil {
+			if hd.ImplementOutput.BranchName != "" {
+				parts = append(parts, fmt.Sprintf("Branch: %s", hd.ImplementOutput.BranchName))
+			}
+			if len(hd.ImplementOutput.FilesChanged) > 0 {
+				parts = append(parts, fmt.Sprintf("Files changed: %v", hd.ImplementOutput.FilesChanged))
+			}
+			if hd.ImplementOutput.TestsPassed {
+				parts = append(parts, "Tests: Passed")
+			} else if hd.ImplementOutput.TestOutput != "" {
+				parts = append(parts, fmt.Sprintf("Tests: %s", hd.ImplementOutput.TestOutput))
+			}
+		}
+	case PhaseDocs:
+		if hd.DocsOutput != nil {
+			if len(hd.DocsOutput.DocsUpdated) > 0 {
+				parts = append(parts, fmt.Sprintf("Docs updated: %v", hd.DocsOutput.DocsUpdated))
+			}
+			if hd.DocsOutput.ReadmeChanged {
+				parts = append(parts, "README: Updated")
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return strings.Join(parts, "\n")
 }

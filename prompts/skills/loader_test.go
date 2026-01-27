@@ -15,11 +15,11 @@ func TestLoadManifest(t *testing.T) {
 		t.Fatal("LoadManifest() returned empty skills list")
 	}
 
-	// Verify expected skill names
+	// Verify expected skill names (review skill removed with REVIEW phase)
 	expectedNames := []string{
 		"safety", "environment", "status_signals",
 		"planning", "plan", "implement", "test",
-		"pr_creation", "review", "docs", "pr_review",
+		"pr_creation", "docs", "pr_review",
 		"plan_reviewer", "code_reviewer", "judge",
 	}
 
@@ -45,7 +45,7 @@ func TestLoadManifest_Phases(t *testing.T) {
 		name       string
 		wantPhases []string
 	}{
-		{"safety", []string{"PLAN", "IMPLEMENT", "REVIEW", "DOCS", "PR_CREATION", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW"}},
+		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "PR_CREATION", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
 		{"environment", nil},
 		{"status_signals", nil},
 		{"planning", []string{"IMPLEMENT", "ANALYZE"}},
@@ -53,12 +53,11 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"implement", []string{"IMPLEMENT"}},
 		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
 		{"pr_creation", []string{"PR_CREATION"}},
-		{"review", []string{"REVIEW"}},
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},
-		{"code_reviewer", []string{"IMPLEMENT_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW"}},
-		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "REVIEW_JUDGE", "DOCS_JUDGE"}},
+		{"code_reviewer", []string{"IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
+		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "DOCS_JUDGE"}},
 	}
 
 	skillMap := make(map[string]SkillEntry)
@@ -147,6 +146,7 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 	}
 
 	// Spot-check that key content exists in expected skills
+	// Note: review skill removed with REVIEW phase
 	contentChecks := map[string]string{
 		"safety":         "CRITICAL SAFETY CONSTRAINTS",
 		"environment":    "ENVIRONMENT",
@@ -156,7 +156,6 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"implement":      "Pre-Flight Check",
 		"test":           "Development Loop",
 		"pr_creation":    "Push and Create PR",
-		"review":         "REVIEW PHASE",
 		"docs":           "DOCS PHASE",
 		"pr_review":      "PR REVIEW SESSIONS",
 		"plan_reviewer":  "PLAN REVIEWER",

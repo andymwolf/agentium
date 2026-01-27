@@ -64,14 +64,6 @@ func (v *Validator) ValidatePhaseOutput(phase Phase, output interface{}) Validat
 		}
 		errs = append(errs, v.validateImplementOutput(out)...)
 
-	case PhaseReview:
-		out, ok := output.(*ReviewOutput)
-		if !ok {
-			errs = append(errs, ValidationError{Phase: phase, Field: "type", Message: "expected *ReviewOutput"})
-			return errs
-		}
-		errs = append(errs, v.validateReviewOutput(out)...)
-
 	case PhaseDocs:
 		out, ok := output.(*DocsOutput)
 		if !ok {
@@ -180,46 +172,6 @@ func (v *Validator) validateImplementOutput(out *ImplementOutput) ValidationErro
 	return errs
 }
 
-// validateReviewOutput validates REVIEW phase output.
-func (v *Validator) validateReviewOutput(out *ReviewOutput) ValidationErrors {
-	var errs ValidationErrors
-
-	if out == nil {
-		errs = append(errs, ValidationError{Phase: PhaseReview, Field: "output", Message: "output is nil"})
-		return errs
-	}
-
-	// Validate issue severities
-	validSeverities := map[string]bool{"ERROR": true, "WARNING": true, "SUGGESTION": true}
-	for i, issue := range out.IssuesFound {
-		if !validSeverities[issue.Severity] {
-			errs = append(errs, ValidationError{
-				Phase:   PhaseReview,
-				Field:   fmt.Sprintf("issues_found[%d].severity", i),
-				Message: fmt.Sprintf("invalid severity '%s', must be ERROR, WARNING, or SUGGESTION", issue.Severity),
-			})
-		}
-		if strings.TrimSpace(issue.Description) == "" {
-			errs = append(errs, ValidationError{
-				Phase:   PhaseReview,
-				Field:   fmt.Sprintf("issues_found[%d].description", i),
-				Message: "issue description is required",
-			})
-		}
-	}
-
-	// If regression is needed, reason is required
-	if out.RegressionNeeded && strings.TrimSpace(out.RegressionReason) == "" {
-		errs = append(errs, ValidationError{
-			Phase:   PhaseReview,
-			Field:   "regression_reason",
-			Message: "regression reason is required when regression_needed is true",
-		})
-	}
-
-	return errs
-}
-
 // validateDocsOutput validates DOCS phase output.
 func (v *Validator) validateDocsOutput(out *DocsOutput) ValidationErrors {
 	var errs ValidationErrors
@@ -272,14 +224,6 @@ func (v *Validator) ValidatePhaseInput(store *Store, taskID string, phase Phase)
 	case PhaseImplement:
 		if store.GetPlanOutput(taskID) == nil {
 			errs = append(errs, ValidationError{Phase: phase, Field: "plan_output", Message: "plan output is required for IMPLEMENT phase"})
-		}
-
-	case PhaseReview:
-		if store.GetPlanOutput(taskID) == nil {
-			errs = append(errs, ValidationError{Phase: phase, Field: "plan_output", Message: "plan output is required for REVIEW phase"})
-		}
-		if store.GetImplementOutput(taskID) == nil {
-			errs = append(errs, ValidationError{Phase: phase, Field: "implement_output", Message: "implement output is required for REVIEW phase"})
 		}
 
 	case PhaseDocs:

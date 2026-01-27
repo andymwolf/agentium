@@ -11,7 +11,6 @@ type Phase string
 const (
 	PhasePlan       Phase = "PLAN"
 	PhaseImplement  Phase = "IMPLEMENT"
-	PhaseReview     Phase = "REVIEW"
 	PhaseDocs       Phase = "DOCS"
 	PhasePRCreation Phase = "PR_CREATION"
 )
@@ -176,8 +175,6 @@ func (h *HandoffData) GetOutput() interface{} {
 		return h.PlanOutput
 	case PhaseImplement:
 		return h.ImplementOutput
-	case PhaseReview:
-		return h.ReviewOutput
 	case PhaseDocs:
 		return h.DocsOutput
 	case PhasePRCreation:

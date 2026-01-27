@@ -30,7 +30,7 @@ func TestDefaultOnly(t *testing.T) {
 		t.Error("router with default should be configured")
 	}
 
-	for _, phase := range []string{"IMPLEMENT", "TEST", "REVIEW", "PR_CREATION"} {
+	for _, phase := range []string{"IMPLEMENT", "TEST", "PR_CREATION"} {
 		cfg := r.ModelForPhase(phase)
 		if cfg.Adapter != "claude-code" || cfg.Model != "opus" {
 			t.Errorf("phase %s: expected default, got %+v", phase, cfg)
@@ -70,8 +70,8 @@ func TestAdaptersUnique(t *testing.T) {
 	r := NewRouter(&PhaseRouting{
 		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
 		Overrides: map[string]ModelConfig{
-			"TEST":   {Adapter: "claude-code", Model: "sonnet"},
-			"REVIEW": {Adapter: "aider", Model: "gpt-4"},
+			"TEST": {Adapter: "claude-code", Model: "sonnet"},
+			"DOCS": {Adapter: "aider", Model: "gpt-4"},
 		},
 	})
 
@@ -152,7 +152,7 @@ func TestUnknownPhases_AllValid(t *testing.T) {
 		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
 		Overrides: map[string]ModelConfig{
 			"IMPLEMENT":   {Model: "sonnet"},
-			"REVIEW":      {Model: "haiku"},
+			"DOCS":        {Model: "haiku"},
 			"PR_CREATION": {Model: "opus"},
 		},
 	})
@@ -193,8 +193,8 @@ func TestUnknownPhases_NilRouter(t *testing.T) {
 
 func TestCompoundPhaseKeysAreValid(t *testing.T) {
 	compoundPhases := []string{
-		"PLAN_REVIEW", "IMPLEMENT_REVIEW", "REVIEW_REVIEW", "DOCS_REVIEW",
-		"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "REVIEW_JUDGE", "DOCS_JUDGE",
+		"PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW",
+		"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "DOCS_JUDGE",
 	}
 
 	for _, phase := range compoundPhases {
@@ -252,8 +252,8 @@ func TestAdaptersSorted(t *testing.T) {
 	r := NewRouter(&PhaseRouting{
 		Default: ModelConfig{Adapter: "zeta", Model: "opus"},
 		Overrides: map[string]ModelConfig{
-			"TEST":   {Adapter: "alpha", Model: "sonnet"},
-			"REVIEW": {Adapter: "middle", Model: "gpt-4"},
+			"TEST": {Adapter: "alpha", Model: "sonnet"},
+			"DOCS": {Adapter: "middle", Model: "gpt-4"},
 		},
 	})
 

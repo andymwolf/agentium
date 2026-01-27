@@ -152,11 +152,11 @@ func TestDelegation_ControllerRoutesCorrectly(t *testing.T) {
 		t.Errorf("delegated agent = %q, want %q", subCfg.Agent, "delegated")
 	}
 
-	// Phase REVIEW should NOT be routed (not configured)
-	c.taskStates["issue:1"].Phase = PhaseReview
+	// Phase DOCS should NOT be routed (not configured)
+	c.taskStates["issue:1"].Phase = PhaseDocs
 	phase = TaskPhase(c.determineActivePhase())
 	subCfg = c.orchestrator.ConfigForPhase(phase)
 	if subCfg != nil {
-		t.Errorf("expected nil config for REVIEW phase, got %+v", subCfg)
+		t.Errorf("expected nil config for DOCS phase, got %+v", subCfg)
 	}
 }

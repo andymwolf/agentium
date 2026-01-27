@@ -182,15 +182,6 @@ func (s *Store) GetImplementOutput(taskID string) *ImplementOutput {
 	return hd.ImplementOutput
 }
 
-// GetReviewOutput is a convenience method to get typed review output.
-func (s *Store) GetReviewOutput(taskID string) *ReviewOutput {
-	hd := s.GetPhaseOutput(taskID, PhaseReview)
-	if hd == nil {
-		return nil
-	}
-	return hd.ReviewOutput
-}
-
 // GetDocsOutput is a convenience method to get typed docs output.
 func (s *Store) GetDocsOutput(taskID string) *DocsOutput {
 	hd := s.GetPhaseOutput(taskID, PhaseDocs)
@@ -210,7 +201,6 @@ func (s *Store) GetPRCreationOutput(taskID string) *PRCreationOutput {
 }
 
 // ClearFromPhase clears all handoff data from the specified phase onwards.
-// Used when regressing (e.g., REVIEW finds issues, need to re-plan).
 func (s *Store) ClearFromPhase(taskID string, phase Phase) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -223,9 +213,8 @@ func (s *Store) ClearFromPhase(taskID string, phase Phase) {
 	phaseOrder := map[Phase]int{
 		PhasePlan:       0,
 		PhaseImplement:  1,
-		PhaseReview:     2,
-		PhaseDocs:       3,
-		PhasePRCreation: 4,
+		PhaseDocs:       2,
+		PhasePRCreation: 3,
 	}
 
 	targetOrder := phaseOrder[phase]

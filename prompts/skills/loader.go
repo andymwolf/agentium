@@ -38,9 +38,6 @@ var embeddedTest string
 //go:embed pr_creation.md
 var embeddedPRCreation string
 
-//go:embed review.md
-var embeddedReview string
-
 //go:embed docs.md
 var embeddedDocs string
 
@@ -67,7 +64,6 @@ var skillFiles = map[string]string{
 	"implement.md":      embeddedImplement,
 	"test.md":           embeddedTest,
 	"pr_creation.md":    embeddedPRCreation,
-	"review.md":         embeddedReview,
 	"docs.md":           embeddedDocs,
 	"pr_review.md":      embeddedPRReview,
 	"plan_reviewer.md":  embeddedPlanReviewer,

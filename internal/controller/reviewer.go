@@ -16,10 +16,12 @@ type ReviewResult struct {
 
 // reviewRunParams holds parameters for running a reviewer agent.
 type reviewRunParams struct {
-	CompletedPhase TaskPhase
-	PhaseOutput    string
-	Iteration      int
-	MaxIterations  int
+	CompletedPhase       TaskPhase
+	PhaseOutput          string
+	Iteration            int
+	MaxIterations        int
+	PreviousFeedback     string // Feedback from iteration N-1 (for comparison)
+	WorkerHandoffSummary string // What worker claims to have done this iteration
 }
 
 // runReviewer runs a reviewer agent against the completed phase output.
@@ -118,6 +120,24 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString(fmt.Sprintf("Repository: %s\n", c.config.Repository))
 	sb.WriteString(fmt.Sprintf("Issue: #%s\n\n", c.activeTask))
 
+	// Include previous iteration feedback for comparison (if iteration > 1)
+	if params.Iteration > 1 && params.PreviousFeedback != "" {
+		sb.WriteString("## Previous Iteration Feedback\n\n")
+		sb.WriteString("The following feedback was given in the previous iteration:\n\n")
+		sb.WriteString("```\n")
+		sb.WriteString(params.PreviousFeedback)
+		sb.WriteString("\n```\n\n")
+	}
+
+	// Include worker handoff summary if available
+	if params.WorkerHandoffSummary != "" {
+		sb.WriteString("## Worker's Claimed Actions\n\n")
+		sb.WriteString("The worker claims to have done the following this iteration:\n\n")
+		sb.WriteString("```\n")
+		sb.WriteString(params.WorkerHandoffSummary)
+		sb.WriteString("\n```\n\n")
+	}
+
 	sb.WriteString("## Phase Output\n\n")
 	budget := c.judgeContextBudget()
 	output := params.PhaseOutput
@@ -131,6 +151,14 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString("## Your Task\n\n")
 	sb.WriteString("Provide constructive, actionable review feedback on the phase output above.\n")
 	sb.WriteString("Be specific about what to improve. Do NOT emit any verdict — your role is to provide feedback only.\n")
+
+	// Add comparison task if we have previous feedback
+	if params.Iteration > 1 && params.PreviousFeedback != "" {
+		sb.WriteString("\n**Important:** Compare the current output against the previous iteration's feedback.\n")
+		sb.WriteString("- Did the worker address the issues raised previously?\n")
+		sb.WriteString("- What feedback items remain unresolved?\n")
+		sb.WriteString("- Are there any new issues introduced?\n")
+	}
 
 	return sb.String()
 }

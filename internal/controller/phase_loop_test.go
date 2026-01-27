@@ -4,28 +4,23 @@ import "testing"
 
 func TestAdvancePhase(t *testing.T) {
 	tests := []struct {
-		name     string
-		current  TaskPhase
-		isSimple bool
-		want     TaskPhase
+		name    string
+		current TaskPhase
+		want    TaskPhase
 	}{
-		{"PLAN advances to IMPLEMENT", PhasePlan, false, PhaseImplement},
-		{"IMPLEMENT advances to REVIEW (complex)", PhaseImplement, false, PhaseReview},
-		{"IMPLEMENT skips REVIEW (simple)", PhaseImplement, true, PhaseDocs},
-		{"REVIEW advances to DOCS", PhaseReview, false, PhaseDocs},
-		{"DOCS advances to PR_CREATION", PhaseDocs, false, PhasePRCreation},
-		{"PR_CREATION advances to COMPLETE", PhasePRCreation, false, PhaseComplete},
-		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), false, PhaseComplete},
-		{"COMPLETE stays COMPLETE", PhaseComplete, false, PhaseComplete},
-		{"simple path: PLAN to IMPLEMENT", PhasePlan, true, PhaseImplement},
-		{"simple path: DOCS to PR_CREATION", PhaseDocs, true, PhasePRCreation},
+		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
+		{"IMPLEMENT advances to DOCS", PhaseImplement, PhaseDocs},
+		{"DOCS advances to PR_CREATION", PhaseDocs, PhasePRCreation},
+		{"PR_CREATION advances to COMPLETE", PhasePRCreation, PhaseComplete},
+		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
+		{"COMPLETE stays COMPLETE", PhaseComplete, PhaseComplete},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := advancePhase(tt.current, tt.isSimple)
+			got := advancePhase(tt.current)
 			if got != tt.want {
-				t.Errorf("advancePhase(%q, %v) = %q, want %q", tt.current, tt.isSimple, got, tt.want)
+				t.Errorf("advancePhase(%q) = %q, want %q", tt.current, got, tt.want)
 			}
 		})
 	}
@@ -44,7 +39,6 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 	}{
 		{PhasePlan, defaultPlanMaxIter},
 		{PhaseImplement, defaultImplementMaxIter},
-		{PhaseReview, defaultReviewMaxIter},
 		{PhaseDocs, defaultDocsMaxIter},
 		{PhasePRCreation, defaultPRMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
@@ -67,7 +61,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 				Enabled:                true,
 				PlanMaxIterations:      2,
 				ImplementMaxIterations: 10,
-				ReviewMaxIterations:    4,
 				DocsMaxIterations:      4,
 			},
 		},
@@ -79,7 +72,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 	}{
 		{PhasePlan, 2},
 		{PhaseImplement, 10},
-		{PhaseReview, 4},
 		{PhaseDocs, 4},
 		{PhasePRCreation, defaultPRMaxIter}, // No custom config for PR_CREATION
 	}
@@ -129,8 +121,8 @@ func TestIsPhaseLoopEnabled(t *testing.T) {
 }
 
 func TestIssuePhaseOrder(t *testing.T) {
-	// Verify the expected phase order (TEST is merged into IMPLEMENT)
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseReview, PhaseDocs, PhasePRCreation}
+	// Verify the expected phase order (REVIEW phase removed)
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhasePRCreation}
 	if len(issuePhaseOrder) != len(expected) {
 		t.Fatalf("issuePhaseOrder length = %d, want %d", len(issuePhaseOrder), len(expected))
 	}
