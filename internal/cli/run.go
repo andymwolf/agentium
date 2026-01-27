@@ -94,16 +94,16 @@ func runSession(cmd *cobra.Command, args []string) error {
 		cfg.Session.Repository = repo
 	}
 	if issues := viper.GetStringSlice("session.issues"); len(issues) > 0 {
-		expandedIssues, err := ExpandRanges(issues)
-		if err != nil {
-			return fmt.Errorf("invalid --issues value: %w", err)
+		expandedIssues, expandErr := ExpandRanges(issues)
+		if expandErr != nil {
+			return fmt.Errorf("invalid --issues value: %w", expandErr)
 		}
 		cfg.Session.Tasks = expandedIssues
 	}
 	if prs := viper.GetStringSlice("session.prs"); len(prs) > 0 {
-		expandedPRs, err := ExpandRanges(prs)
-		if err != nil {
-			return fmt.Errorf("invalid --prs value: %w", err)
+		expandedPRs, expandErr := ExpandRanges(prs)
+		if expandErr != nil {
+			return fmt.Errorf("invalid --prs value: %w", expandErr)
 		}
 		cfg.Session.PRs = expandedPRs
 	}

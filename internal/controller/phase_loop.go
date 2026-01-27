@@ -181,8 +181,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			// Create draft PR after first IMPLEMENT iteration with commits
 			if currentPhase == PhaseImplement && !state.DraftPRCreated {
-				if err := c.maybeCreateDraftPR(ctx, taskID); err != nil {
-					c.logWarning("Failed to create draft PR: %v", err)
+				if prErr := c.maybeCreateDraftPR(ctx, taskID); prErr != nil {
+					c.logWarning("Failed to create draft PR: %v", prErr)
 				}
 			}
 
