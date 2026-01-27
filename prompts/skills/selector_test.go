@@ -20,7 +20,7 @@ func newTestSkills() []Skill {
 			Content: "STATUS_SIGNALS CONTENT",
 		},
 		{
-			Entry:   SkillEntry{Name: "planning", File: "planning.md", Priority: 40, Phases: []string{"IMPLEMENT", "ANALYZE"}},
+			Entry:   SkillEntry{Name: "planning", File: "planning.md", Priority: 40, Phases: []string{"ANALYZE"}},
 			Content: "PLANNING CONTENT",
 		},
 		{
@@ -47,15 +47,15 @@ func TestSelector_SelectForPhase_Implement(t *testing.T) {
 	result := s.SelectForPhase("IMPLEMENT")
 
 	// Should include universal skills + IMPLEMENT-phase skills
-	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "PLANNING CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT"}
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "IMPLEMENT CONTENT", "TEST CONTENT"}
 	for _, exp := range expected {
 		if !strings.Contains(result, exp) {
 			t.Errorf("SelectForPhase(IMPLEMENT) missing %q", exp)
 		}
 	}
 
-	// Should NOT include PR-specific skills
-	excluded := []string{"PR CREATION CONTENT", "PR REVIEW CONTENT"}
+	// Should NOT include planning or PR-specific skills
+	excluded := []string{"PLANNING CONTENT", "PR CREATION CONTENT", "PR REVIEW CONTENT"}
 	for _, exc := range excluded {
 		if strings.Contains(result, exc) {
 			t.Errorf("SelectForPhase(IMPLEMENT) should not contain %q", exc)
@@ -164,7 +164,6 @@ func TestSelector_SelectForPhase_PriorityOrder(t *testing.T) {
 	safetyIdx := strings.Index(result, "SAFETY CONTENT")
 	envIdx := strings.Index(result, "ENVIRONMENT CONTENT")
 	statusIdx := strings.Index(result, "STATUS_SIGNALS CONTENT")
-	planningIdx := strings.Index(result, "PLANNING CONTENT")
 	implementIdx := strings.Index(result, "IMPLEMENT CONTENT")
 	testIdx := strings.Index(result, "TEST CONTENT")
 
@@ -174,11 +173,8 @@ func TestSelector_SelectForPhase_PriorityOrder(t *testing.T) {
 	if envIdx > statusIdx {
 		t.Error("environment should come before status_signals")
 	}
-	if statusIdx > planningIdx {
-		t.Error("status_signals should come before planning")
-	}
-	if planningIdx > implementIdx {
-		t.Error("planning should come before implement")
+	if statusIdx > implementIdx {
+		t.Error("status_signals should come before implement")
 	}
 	if implementIdx > testIdx {
 		t.Error("implement should come before test")
@@ -192,7 +188,7 @@ func TestSelector_SkillsForPhase(t *testing.T) {
 		phase    string
 		expected []string
 	}{
-		{"IMPLEMENT", []string{"safety", "environment", "status_signals", "planning", "implement", "test"}},
+		{"IMPLEMENT", []string{"safety", "environment", "status_signals", "implement", "test"}},
 		{"TEST", []string{"safety", "environment", "status_signals", "test"}},
 		{"ANALYZE", []string{"safety", "environment", "status_signals", "planning", "pr_review"}},
 		{"PR_CREATION", []string{"safety", "environment", "status_signals", "pr_creation"}},
@@ -222,8 +218,8 @@ func TestSelector_SelectForPhase_Separator(t *testing.T) {
 
 	// Verify parts are separated by double newlines
 	parts := strings.Split(result, "\n\n")
-	if len(parts) < 6 {
-		t.Errorf("Expected at least 6 parts separated by double newlines, got %d", len(parts))
+	if len(parts) < 5 {
+		t.Errorf("Expected at least 5 parts separated by double newlines, got %d", len(parts))
 	}
 }
 

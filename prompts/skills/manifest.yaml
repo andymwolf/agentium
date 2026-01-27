@@ -31,7 +31,6 @@ skills:
     file: planning.md
     priority: 40
     phases:
-      - IMPLEMENT
       - ANALYZE
 
   - name: plan
