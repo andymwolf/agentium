@@ -112,6 +112,8 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	// Log structured events at DEBUG level
 	if c.cloudLogger != nil && len(result.Events) > 0 {
 		c.logAgentEvents(result.Events)
+		// Emit security audit events at INFO level
+		c.emitAuditEvents(result.Events, params.Agent.Name())
 	}
 
 	// Process memory signals using the adapter's parsed text content
