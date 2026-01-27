@@ -254,12 +254,9 @@ func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 		return nil
 	}
 
-	// Check if NOMERGE handling is needed
-	if state.ControllerOverrode || state.NoMergeVerdictGiven {
+	// Check if NOMERGE handling is needed (controller forced ADVANCE at max iterations)
+	if state.ControllerOverrode {
 		reason := "Controller forced ADVANCE at max iterations"
-		if state.NoMergeVerdictGiven {
-			reason = "NOMERGE verdict was given during review"
-		}
 		c.logWarning("PR #%s requires human review: %s", state.PRNumber, reason)
 		c.postNOMERGEComment(ctx, state.PRNumber, reason)
 		// Keep PR as draft - do not mark as ready
