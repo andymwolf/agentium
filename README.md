@@ -77,7 +77,6 @@ Based on open issues:
 
 **Developer Experience**
 - GitHub Actions integration
-- Auto-generated AGENT.md files
 - Cost estimation
 
 See all [open issues](https://github.com/andymwolf/agentium/issues) for the complete roadmap.

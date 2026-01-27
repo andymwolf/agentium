@@ -35,11 +35,14 @@ agentium init [flags]
 | `--app-id` | int64 | - | GitHub App ID |
 | `--installation-id` | int64 | - | GitHub App Installation ID |
 | `--force` | bool | `false` | Overwrite existing config file |
+| `--greenfield` | bool | `false` | Skip project scanning, create minimal AGENT.md for new projects |
+| `--skip-agent-md` | bool | `false` | Skip AGENT.md generation entirely |
+| `--non-interactive` | bool | `false` | Use auto-detected values without prompting |
 
 **Examples:**
 
 ```bash
-# Basic initialization
+# Basic initialization (scans project and generates AGENT.md)
 agentium init --repo github.com/myorg/myrepo --provider gcp
 
 # Full initialization with GitHub App credentials
@@ -50,13 +53,58 @@ agentium init \
   --app-id 123456 \
   --installation-id 789012
 
+# Non-interactive mode (accept detected values)
+agentium init --repo github.com/myorg/myrepo --non-interactive
+
+# New project without existing code
+agentium init --repo github.com/myorg/newrepo --greenfield
+
+# Skip AGENT.md generation
+agentium init --repo github.com/myorg/myrepo --skip-agent-md
+
 # Overwrite existing config
 agentium init --repo github.com/myorg/myrepo --force
 ```
 
 **Output:**
 
-Creates `.agentium.yaml` with the specified configuration. If a file already exists and `--force` is not set, the command will exit with an error.
+Creates `.agentium.yaml` with the specified configuration. Also generates `.agentium/AGENT.md` with auto-detected project information (build commands, test commands, project structure) unless `--skip-agent-md` is specified. If a config file already exists and `--force` is not set, the command will exit with an error.
+
+---
+
+### `agentium refresh`
+
+Regenerate `.agentium/AGENT.md` by rescanning the project. Preserves custom content you've added outside the auto-generated sections.
+
+**Usage:**
+
+```bash
+agentium refresh [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--non-interactive` | bool | `false` | Use detected values without prompting |
+| `--force` | bool | `false` | Regenerate without confirmation prompt |
+
+**Examples:**
+
+```bash
+# Regenerate AGENT.md (prompts for confirmation if custom content exists)
+agentium refresh
+
+# Non-interactive mode
+agentium refresh --non-interactive
+
+# Force regeneration without confirmation
+agentium refresh --force
+```
+
+**Output:**
+
+Updates `.agentium/AGENT.md` with fresh project analysis while preserving any custom sections you've added. Requires `.agentium.yaml` to exist (run `agentium init` first).
 
 ---
 
