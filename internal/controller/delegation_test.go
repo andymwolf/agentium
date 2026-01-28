@@ -143,7 +143,7 @@ func TestDelegation_ControllerRoutesCorrectly(t *testing.T) {
 	c.orchestrator = NewSubTaskOrchestrator(*c.config.Delegation, c)
 
 	// Phase IMPLEMENT should be routed to delegation
-	phase := TaskPhase(c.determineActivePhase())
+	phase := c.determineActivePhase()
 	subCfg := c.orchestrator.ConfigForPhase(phase)
 	if subCfg == nil {
 		t.Fatal("expected delegation config for IMPLEMENT")
@@ -154,7 +154,7 @@ func TestDelegation_ControllerRoutesCorrectly(t *testing.T) {
 
 	// Phase DOCS should NOT be routed (not configured)
 	c.taskStates["issue:1"].Phase = PhaseDocs
-	phase = TaskPhase(c.determineActivePhase())
+	phase = c.determineActivePhase()
 	subCfg = c.orchestrator.ConfigForPhase(phase)
 	if subCfg != nil {
 		t.Errorf("expected nil config for DOCS phase, got %+v", subCfg)

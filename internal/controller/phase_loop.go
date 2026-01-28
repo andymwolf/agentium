@@ -230,7 +230,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		}
 
 		maxIter := c.phaseMaxIterations(currentPhase, state.WorkflowPath)
-		state.MaxPhaseIter = maxIter
+		state.MaxPhaseIterations = maxIter
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
 
@@ -340,7 +340,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 				// For COMPLEX tasks, recalculate max iterations now that we know the path
 				maxIter = c.phaseMaxIterations(currentPhase, state.WorkflowPath)
-				state.MaxPhaseIter = maxIter
+				state.MaxPhaseIterations = maxIter
 				c.logInfo("COMPLEX workflow: continuing with reviewer/judge (max iterations: %d)", maxIter)
 			}
 
