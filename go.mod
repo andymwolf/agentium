@@ -1,6 +1,6 @@
 module github.com/andywolf/agentium
 
-go 1.19
+go 1.25.6
 
 require (
 	cloud.google.com/go/logging v1.7.0
