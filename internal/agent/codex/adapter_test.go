@@ -570,7 +570,15 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 			t.Fatalf("ParseOutput() returned error: %v", err)
 		}
 
-		expectedTokens := 1000 + 500 + 800 + 300
+		expectedInput := 1000 + 800
+		expectedOutput := 500 + 300
+		expectedTokens := expectedInput + expectedOutput
+		if result.InputTokens != expectedInput {
+			t.Errorf("InputTokens = %d, want %d", result.InputTokens, expectedInput)
+		}
+		if result.OutputTokens != expectedOutput {
+			t.Errorf("OutputTokens = %d, want %d", result.OutputTokens, expectedOutput)
+		}
 		if result.TokensUsed != expectedTokens {
 			t.Errorf("TokensUsed = %d, want %d", result.TokensUsed, expectedTokens)
 		}

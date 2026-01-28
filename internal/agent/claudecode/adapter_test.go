@@ -701,6 +701,48 @@ func TestAdapter_ParseOutput_PRDetectionRegex(t *testing.T) {
 	}
 }
 
+func TestAdapter_ParseOutput_TokenUsage(t *testing.T) {
+	a := New()
+
+	t.Run("populates InputTokens and OutputTokens from result event", func(t *testing.T) {
+		stdout := `{"type":"result","result":{"content":[{"type":"text","text":"Done."}],"usage":{"input_tokens":1500,"output_tokens":300},"stop_reason":"end_turn"}}` + "\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if result.InputTokens != 1500 {
+			t.Errorf("InputTokens = %d, want %d", result.InputTokens, 1500)
+		}
+		if result.OutputTokens != 300 {
+			t.Errorf("OutputTokens = %d, want %d", result.OutputTokens, 300)
+		}
+		if result.TokensUsed != 1800 {
+			t.Errorf("TokensUsed = %d, want %d", result.TokensUsed, 1800)
+		}
+	})
+
+	t.Run("zero tokens when no result event", func(t *testing.T) {
+		stdout := wrapInStreamJSON("Just some text without token info")
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if result.InputTokens != 0 {
+			t.Errorf("InputTokens = %d, want 0", result.InputTokens)
+		}
+		if result.OutputTokens != 0 {
+			t.Errorf("OutputTokens = %d, want 0", result.OutputTokens)
+		}
+		if result.TokensUsed != 0 {
+			t.Errorf("TokensUsed = %d, want 0", result.TokensUsed)
+		}
+	})
+}
+
 func TestAdapter_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

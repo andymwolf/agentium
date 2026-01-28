@@ -113,6 +113,9 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
 	}
 
+	// Log token consumption to GCP Cloud Logging
+	c.logTokenConsumption(result, params.Agent.Name(), params.Session)
+
 	// Log structured events at DEBUG level
 	if c.cloudLogger != nil && len(result.Events) > 0 {
 		c.logAgentEvents(result.Events)

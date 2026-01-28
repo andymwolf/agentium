@@ -51,7 +51,9 @@ type IterationResult struct {
 	StatusMessage  string // Optional message accompanying the status signal
 	Error          string
 	Summary        string
-	TokensUsed     int
+	TokensUsed     int // Total tokens (sum of InputTokens + OutputTokens, kept for backward compatibility)
+	InputTokens    int // Input tokens consumed this iteration
+	OutputTokens   int // Output tokens consumed this iteration
 	Events         []interface{} `json:"-"` // Structured events (type-assert per adapter)
 	RawTextContent string        `json:"-"` // Aggregated text from structured output
 	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present

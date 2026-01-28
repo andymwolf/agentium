@@ -414,6 +414,41 @@ func (c *Controller) logError(format string, args ...interface{}) {
 	}
 }
 
+// logTokenConsumption logs token usage for a completed iteration to Cloud Logging.
+func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentName string, session *agent.Session) {
+	if c.cloudLogger == nil {
+		return
+	}
+	if result.InputTokens == 0 && result.OutputTokens == 0 {
+		return
+	}
+
+	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	phase := ""
+	if state, ok := c.taskStates[taskID]; ok && state != nil {
+		phase = string(state.Phase)
+	}
+
+	labels := map[string]string{
+		"log_type":      "token_usage",
+		"task_id":       taskID,
+		"phase":         phase,
+		"agent":         agentName,
+		"input_tokens":  strconv.Itoa(result.InputTokens),
+		"output_tokens": strconv.Itoa(result.OutputTokens),
+		"total_tokens":  strconv.Itoa(result.InputTokens + result.OutputTokens),
+	}
+
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		labels["model"] = session.IterationContext.ModelOverride
+	}
+
+	msg := fmt.Sprintf("Token usage: input=%d output=%d total=%d",
+		result.InputTokens, result.OutputTokens, result.InputTokens+result.OutputTokens)
+
+	c.cloudLogger.LogWithLabels(gcp.SeverityInfo, msg, labels)
+}
+
 // AddShutdownHook registers a function to be called during graceful shutdown.
 // Hooks are executed in the order they were added.
 func (c *Controller) AddShutdownHook(hook ShutdownHook) {
