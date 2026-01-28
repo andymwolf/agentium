@@ -8,9 +8,13 @@ import (
 	"strings"
 )
 
-// AttachmentThreshold is the character count (in runes) above which content
+// CommentAttachmentThreshold is the rune count above which comment content
 // is uploaded as a gist attachment instead of being posted directly.
-const AttachmentThreshold = 500
+const CommentAttachmentThreshold = 1000
+
+// PlanAttachmentThreshold is the rune count above which plan content
+// is uploaded as a gist attachment instead of being posted directly.
+const PlanAttachmentThreshold = 2000
 
 // createGistAttachment uploads content as a public gist using `gh gist create`.
 // Returns the gist URL on success, or an empty string on failure (graceful fallback).
@@ -54,9 +58,9 @@ func (c *Controller) createGistAttachment(ctx context.Context, filename, content
 }
 
 // contentNeedsAttachment returns true if the content length (in runes)
-// exceeds AttachmentThreshold and should be uploaded as a gist.
-func contentNeedsAttachment(content string) bool {
-	return len([]rune(content)) > AttachmentThreshold
+// exceeds the given threshold and should be uploaded as a gist.
+func contentNeedsAttachment(content string, threshold int) bool {
+	return len([]rune(content)) > threshold
 }
 
 // extractSummary returns the first ~maxRunes of content, breaking at a newline

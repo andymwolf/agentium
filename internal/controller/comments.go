@@ -32,7 +32,7 @@ func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iter
 	}
 
 	var body string
-	if contentNeedsAttachment(summary) {
+	if contentNeedsAttachment(summary, CommentAttachmentThreshold) {
 		filename := gistFilename("phase", phase, iteration, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, summary); gistURL != "" {
 			excerpt := extractSummary(summary, 200)
@@ -70,7 +70,7 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, resu
 
 // formatJudgeFeedback formats judge feedback, using gist attachment for long content.
 func (c *Controller) formatJudgeFeedback(ctx context.Context, phase TaskPhase, verdict, feedback string) string {
-	if contentNeedsAttachment(feedback) {
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
 		filename := gistFilename("judge", phase, 0, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
 			excerpt := extractSummary(feedback, 200)
@@ -130,7 +130,7 @@ func (c *Controller) postReviewerFeedback(ctx context.Context, phase TaskPhase, 
 	}
 
 	var body string
-	if contentNeedsAttachment(feedback) {
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
 		filename := gistFilename("review", phase, iteration, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
 			excerpt := extractSummary(feedback, 200)
@@ -154,7 +154,7 @@ func (c *Controller) postPRReviewSummary(ctx context.Context, prNumber string, p
 	}
 
 	var body string
-	if contentNeedsAttachment(reviewFeedback) {
+	if contentNeedsAttachment(reviewFeedback, CommentAttachmentThreshold) {
 		filename := gistFilename("review", phase, iteration, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, reviewFeedback); gistURL != "" {
 			excerpt := extractSummary(reviewFeedback, 200)
@@ -195,7 +195,7 @@ func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, ph
 
 // formatPRJudgeFeedback formats judge feedback for PR comments, using gist attachment for long content.
 func (c *Controller) formatPRJudgeFeedback(ctx context.Context, phase TaskPhase, emoji, verdict, feedback string) string {
-	if contentNeedsAttachment(feedback) {
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
 		filename := gistFilename("judge", phase, 0, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
 			excerpt := extractSummary(feedback, 200)
@@ -238,7 +238,7 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 
 	// Prepare plan content - use gist for long plans
 	var planContent string
-	if contentNeedsAttachment(plan) {
+	if contentNeedsAttachment(plan, PlanAttachmentThreshold) {
 		filename := gistFilename("plan", PhasePlan, 0, c.activeTask)
 		if gistURL := c.createGistAttachment(ctx, filename, plan); gistURL != "" {
 			excerpt := extractSummary(plan, 500)

@@ -7,53 +7,79 @@ import (
 
 func TestContentNeedsAttachment(t *testing.T) {
 	tests := []struct {
-		name     string
-		content  string
-		expected bool
+		name      string
+		content   string
+		threshold int
+		expected  bool
 	}{
 		{
-			name:     "short content",
-			content:  "Hello, world!",
-			expected: false,
+			name:      "short content under comment threshold",
+			content:   "Hello, world!",
+			threshold: CommentAttachmentThreshold,
+			expected:  false,
 		},
 		{
-			name:     "exactly at threshold",
-			content:  strings.Repeat("a", AttachmentThreshold),
-			expected: false,
+			name:      "exactly at comment threshold",
+			content:   strings.Repeat("a", CommentAttachmentThreshold),
+			threshold: CommentAttachmentThreshold,
+			expected:  false,
 		},
 		{
-			name:     "just over threshold",
-			content:  strings.Repeat("a", AttachmentThreshold+1),
-			expected: true,
+			name:      "just over comment threshold",
+			content:   strings.Repeat("a", CommentAttachmentThreshold+1),
+			threshold: CommentAttachmentThreshold,
+			expected:  true,
 		},
 		{
-			name:     "well over threshold",
-			content:  strings.Repeat("a", 1000),
-			expected: true,
+			name:      "content between comment and plan thresholds",
+			content:   strings.Repeat("a", 1500),
+			threshold: CommentAttachmentThreshold,
+			expected:  true,
 		},
 		{
-			name:     "empty content",
-			content:  "",
-			expected: false,
+			name:      "content between comment and plan thresholds (plan threshold)",
+			content:   strings.Repeat("a", 1500),
+			threshold: PlanAttachmentThreshold,
+			expected:  false,
 		},
 		{
-			name:     "unicode content under threshold",
-			content:  strings.Repeat("日", 100),
-			expected: false,
+			name:      "exactly at plan threshold",
+			content:   strings.Repeat("a", PlanAttachmentThreshold),
+			threshold: PlanAttachmentThreshold,
+			expected:  false,
 		},
 		{
-			name:     "unicode content over threshold",
-			content:  strings.Repeat("日", AttachmentThreshold+1),
-			expected: true,
+			name:      "just over plan threshold",
+			content:   strings.Repeat("a", PlanAttachmentThreshold+1),
+			threshold: PlanAttachmentThreshold,
+			expected:  true,
+		},
+		{
+			name:      "empty content",
+			content:   "",
+			threshold: CommentAttachmentThreshold,
+			expected:  false,
+		},
+		{
+			name:      "unicode content under threshold",
+			content:   strings.Repeat("日", 500),
+			threshold: CommentAttachmentThreshold,
+			expected:  false,
+		},
+		{
+			name:      "unicode content over threshold",
+			content:   strings.Repeat("日", CommentAttachmentThreshold+1),
+			threshold: CommentAttachmentThreshold,
+			expected:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := contentNeedsAttachment(tt.content)
+			result := contentNeedsAttachment(tt.content, tt.threshold)
 			if result != tt.expected {
-				t.Errorf("contentNeedsAttachment() = %v, want %v (content length: %d runes)",
-					result, tt.expected, len([]rune(tt.content)))
+				t.Errorf("contentNeedsAttachment() = %v, want %v (content length: %d runes, threshold: %d)",
+					result, tt.expected, len([]rune(tt.content)), tt.threshold)
 			}
 		})
 	}
@@ -206,9 +232,17 @@ func TestGistFilename(t *testing.T) {
 	}
 }
 
-func TestAttachmentThreshold(t *testing.T) {
-	// Verify the threshold constant is set correctly
-	if AttachmentThreshold != 500 {
-		t.Errorf("AttachmentThreshold = %d, want 500", AttachmentThreshold)
+func TestAttachmentThresholds(t *testing.T) {
+	// Verify the threshold constants are set correctly
+	if CommentAttachmentThreshold != 1000 {
+		t.Errorf("CommentAttachmentThreshold = %d, want 1000", CommentAttachmentThreshold)
+	}
+	if PlanAttachmentThreshold != 2000 {
+		t.Errorf("PlanAttachmentThreshold = %d, want 2000", PlanAttachmentThreshold)
+	}
+	// Plan threshold should be larger than comment threshold
+	if PlanAttachmentThreshold <= CommentAttachmentThreshold {
+		t.Errorf("PlanAttachmentThreshold (%d) should be > CommentAttachmentThreshold (%d)",
+			PlanAttachmentThreshold, CommentAttachmentThreshold)
 	}
 }
