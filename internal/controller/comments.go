@@ -24,17 +24,31 @@ func (c *Controller) appendSignature(body string) string {
 }
 
 // postPhaseComment posts a progress comment on the GitHub issue for the current task.
+// If the content exceeds the attachment threshold, it creates a gist and posts a summary with link.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, summary string) {
 	if c.activeTaskType != "issue" {
 		return
 	}
 
-	body := fmt.Sprintf("### Phase: %s (iteration %d)\n\n%s", phase, iteration, summary)
+	var body string
+	if contentNeedsAttachment(summary, CommentAttachmentThreshold) {
+		filename := gistFilename("phase", phase, iteration, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, summary); gistURL != "" {
+			excerpt := extractSummary(summary, 200)
+			body = fmt.Sprintf("### Phase: %s (iteration %d)\n\n%s\n\n[View full output](%s)", phase, iteration, excerpt, gistURL)
+		} else {
+			// Fallback to truncation if gist creation fails
+			body = fmt.Sprintf("### Phase: %s (iteration %d)\n\n%s", phase, iteration, truncateForComment(summary))
+		}
+	} else {
+		body = fmt.Sprintf("### Phase: %s (iteration %d)\n\n%s", phase, iteration, summary)
+	}
 	c.postIssueComment(ctx, body)
 }
 
 // postJudgeComment posts a judge verdict comment on the GitHub issue.
+// If feedback exceeds the attachment threshold, it creates a gist and posts a summary with link.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, result JudgeResult) {
 	if c.activeTaskType != "issue" {
@@ -46,12 +60,26 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, resu
 	case VerdictAdvance:
 		body = fmt.Sprintf("**Judge:** Phase `%s` — ADVANCE", phase)
 	case VerdictIterate:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
+		body = c.formatJudgeFeedback(ctx, phase, "ITERATE", result.Feedback)
 	case VerdictBlocked:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+		body = c.formatJudgeFeedback(ctx, phase, "BLOCKED", result.Feedback)
 	}
 
 	c.postIssueComment(ctx, body)
+}
+
+// formatJudgeFeedback formats judge feedback, using gist attachment for long content.
+func (c *Controller) formatJudgeFeedback(ctx context.Context, phase TaskPhase, verdict, feedback string) string {
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
+		filename := gistFilename("judge", phase, 0, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
+			excerpt := extractSummary(feedback, 200)
+			return fmt.Sprintf("**Judge:** Phase `%s` — %s\n\n> %s\n\n[View full feedback](%s)", phase, verdict, excerpt, gistURL)
+		}
+		// Fallback to truncation
+		return fmt.Sprintf("**Judge:** Phase `%s` — %s\n\n> %s", phase, verdict, truncateForComment(feedback))
+	}
+	return fmt.Sprintf("**Judge:** Phase `%s` — %s\n\n> %s", phase, verdict, feedback)
 }
 
 // postIssueComment posts a comment on the active issue. Best-effort.
@@ -94,28 +122,55 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 }
 
 // postReviewerFeedback posts reviewer feedback as a comment on the issue.
+// If feedback exceeds the attachment threshold, it creates a gist and posts a summary with link.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) postReviewerFeedback(ctx context.Context, phase TaskPhase, iteration int, feedback string) {
 	if c.activeTaskType != "issue" {
 		return
 	}
 
-	body := fmt.Sprintf("### Reviewer Feedback: %s (iteration %d)\n\n%s", phase, iteration, truncateForComment(feedback))
+	var body string
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
+		filename := gistFilename("review", phase, iteration, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
+			excerpt := extractSummary(feedback, 200)
+			body = fmt.Sprintf("### Reviewer Feedback: %s (iteration %d)\n\n%s\n\n[View full feedback](%s)", phase, iteration, excerpt, gistURL)
+		} else {
+			// Fallback to truncation if gist creation fails
+			body = fmt.Sprintf("### Reviewer Feedback: %s (iteration %d)\n\n%s", phase, iteration, truncateForComment(feedback))
+		}
+	} else {
+		body = fmt.Sprintf("### Reviewer Feedback: %s (iteration %d)\n\n%s", phase, iteration, feedback)
+	}
 	c.postIssueComment(ctx, body)
 }
 
 // postPRReviewSummary posts a review summary comment on the associated PR.
+// If feedback exceeds the attachment threshold, it creates a gist and posts a summary with link.
 // This includes reviewer feedback and is posted during the IMPLEMENT phase.
 func (c *Controller) postPRReviewSummary(ctx context.Context, prNumber string, phase TaskPhase, iteration int, reviewFeedback string) {
 	if prNumber == "" {
 		return
 	}
 
-	body := fmt.Sprintf("### Review Summary: %s (iteration %d)\n\n%s", phase, iteration, truncateForComment(reviewFeedback))
+	var body string
+	if contentNeedsAttachment(reviewFeedback, CommentAttachmentThreshold) {
+		filename := gistFilename("review", phase, iteration, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, reviewFeedback); gistURL != "" {
+			excerpt := extractSummary(reviewFeedback, 200)
+			body = fmt.Sprintf("### Review Summary: %s (iteration %d)\n\n%s\n\n[View full feedback](%s)", phase, iteration, excerpt, gistURL)
+		} else {
+			// Fallback to truncation if gist creation fails
+			body = fmt.Sprintf("### Review Summary: %s (iteration %d)\n\n%s", phase, iteration, truncateForComment(reviewFeedback))
+		}
+	} else {
+		body = fmt.Sprintf("### Review Summary: %s (iteration %d)\n\n%s", phase, iteration, reviewFeedback)
+	}
 	c.postPRComment(ctx, prNumber, body)
 }
 
 // postPRJudgeVerdict posts a judge verdict comment on the associated PR.
+// If feedback exceeds the attachment threshold, it creates a gist and posts a summary with link.
 // This is called when the verdict is ITERATE or BLOCKED to make it visible on the PR.
 func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, phase TaskPhase, result JudgeResult) {
 	if prNumber == "" {
@@ -130,18 +185,33 @@ func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, ph
 	var body string
 	switch result.Verdict {
 	case VerdictIterate:
-		body = fmt.Sprintf("**🔄 Judge Verdict:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
+		body = c.formatPRJudgeFeedback(ctx, phase, "🔄", "ITERATE", result.Feedback)
 	case VerdictBlocked:
-		body = fmt.Sprintf("**⛔ Judge Verdict:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+		body = c.formatPRJudgeFeedback(ctx, phase, "⛔", "BLOCKED", result.Feedback)
 	}
 
 	c.postPRComment(ctx, prNumber, body)
+}
+
+// formatPRJudgeFeedback formats judge feedback for PR comments, using gist attachment for long content.
+func (c *Controller) formatPRJudgeFeedback(ctx context.Context, phase TaskPhase, emoji, verdict, feedback string) string {
+	if contentNeedsAttachment(feedback, CommentAttachmentThreshold) {
+		filename := gistFilename("judge", phase, 0, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, feedback); gistURL != "" {
+			excerpt := extractSummary(feedback, 200)
+			return fmt.Sprintf("**%s Judge Verdict:** Phase `%s` — %s\n\n> %s\n\n[View full feedback](%s)", emoji, phase, verdict, excerpt, gistURL)
+		}
+		// Fallback to truncation
+		return fmt.Sprintf("**%s Judge Verdict:** Phase `%s` — %s\n\n> %s", emoji, phase, verdict, truncateForComment(feedback))
+	}
+	return fmt.Sprintf("**%s Judge Verdict:** Phase `%s` — %s\n\n> %s", emoji, phase, verdict, feedback)
 }
 
 // planMarker is the delimiter used to identify the AGENTIUM PLAN section in issue bodies.
 const planMarker = "<!-- #AGENTIUM PLAN# -->"
 
 // updateIssuePlan updates the GitHub issue body to append or update the AGENTIUM PLAN section.
+// If the plan exceeds the attachment threshold, it creates a gist and includes a summary with link.
 // The original issue description is preserved above the plan marker.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
@@ -166,14 +236,29 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 
 	currentBody := strings.TrimSpace(string(output))
 
+	// Prepare plan content - use gist for long plans
+	var planContent string
+	if contentNeedsAttachment(plan, PlanAttachmentThreshold) {
+		filename := gistFilename("plan", PhasePlan, 0, c.activeTask)
+		if gistURL := c.createGistAttachment(ctx, filename, plan); gistURL != "" {
+			excerpt := extractSummary(plan, 500)
+			planContent = fmt.Sprintf("%s\n\n[View full implementation plan](%s)", excerpt, gistURL)
+		} else {
+			// Fallback to truncation if gist creation fails
+			planContent = truncateForPlan(plan)
+		}
+	} else {
+		planContent = plan
+	}
+
 	// Build new body: preserve original content, update/add plan section
 	var newBody string
 	if idx := strings.Index(currentBody, planMarker); idx >= 0 {
 		// Replace existing plan section
-		newBody = strings.TrimSpace(currentBody[:idx]) + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + plan
+		newBody = strings.TrimSpace(currentBody[:idx]) + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + planContent
 	} else {
 		// Append new plan section
-		newBody = currentBody + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + plan
+		newBody = currentBody + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + planContent
 	}
 
 	// Update issue body

@@ -305,8 +305,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 			}
 
-			// Post phase comment
-			c.postPhaseComment(ctx, currentPhase, iter, truncateForComment(phaseOutput))
+			// Post phase comment (postPhaseComment handles attachment/truncation internally)
+			c.postPhaseComment(ctx, currentPhase, iter, phaseOutput)
 
 			// Create draft PR after first IMPLEMENT iteration with commits
 			if currentPhase == PhaseImplement && !state.DraftPRCreated {
@@ -344,9 +344,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (SIMPLE path, iteration %d)", currentPhase, iter)},
 						}, c.iteration, taskID)
 					}
-					// Update issue with plan
+					// Update issue with plan (updateIssuePlan handles attachment/truncation internally)
 					if phaseOutput != "" {
-						c.updateIssuePlan(ctx, truncateForPlan(phaseOutput))
+						c.updateIssuePlan(ctx, phaseOutput)
 					}
 					advanced = true
 					break
@@ -448,8 +448,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 
 				// Update issue with plan after PLAN phase advances
+				// (updateIssuePlan handles attachment/truncation internally)
 				if currentPhase == PhasePlan && phaseOutput != "" {
-					c.updateIssuePlan(ctx, truncateForPlan(phaseOutput))
+					c.updateIssuePlan(ctx, phaseOutput)
 				}
 
 				advanced = true
