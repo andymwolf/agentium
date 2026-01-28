@@ -852,8 +852,8 @@ func (c *Controller) loadPrompts() error {
 			MaxEntries:    c.config.Memory.MaxEntries,
 			ContextBudget: c.config.Memory.ContextBudget,
 		})
-		if err := c.memoryStore.Load(); err != nil {
-			c.logWarning("failed to load memory store: %v", err)
+		if loadErr := c.memoryStore.Load(); loadErr != nil {
+			c.logWarning("failed to load memory store: %v", loadErr)
 		} else {
 			c.logInfo("Memory store initialized (%d entries)", len(c.memoryStore.Entries()))
 		}
