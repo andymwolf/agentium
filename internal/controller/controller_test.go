@@ -1291,6 +1291,51 @@ func TestBranchPrefixForLabels(t *testing.T) {
 			labels: []issueLabel{{Name: "Help Wanted"}},
 			want:   "help-wanted",
 		},
+		{
+			name:   "label with colon - sanitized",
+			labels: []issueLabel{{Name: "type: bug"}},
+			want:   "type-bug",
+		},
+		{
+			name:   "label with question mark - sanitized",
+			labels: []issueLabel{{Name: "priority?high"}},
+			want:   "priority-high",
+		},
+		{
+			name:   "label with slash - sanitized",
+			labels: []issueLabel{{Name: "ui/ux"}},
+			want:   "ui-ux",
+		},
+		{
+			name:   "label with multiple special chars - sanitized",
+			labels: []issueLabel{{Name: "type: bug [critical]"}},
+			want:   "type-bug-critical",
+		},
+		{
+			name:   "label with consecutive special chars - collapsed",
+			labels: []issueLabel{{Name: "type::bug"}},
+			want:   "type-bug",
+		},
+		{
+			name:   "label starting with special char - trimmed",
+			labels: []issueLabel{{Name: ":bug"}},
+			want:   "bug",
+		},
+		{
+			name:   "label ending with special char - trimmed",
+			labels: []issueLabel{{Name: "bug:"}},
+			want:   "bug",
+		},
+		{
+			name:   "label that becomes empty after sanitization - default to feature",
+			labels: []issueLabel{{Name: ":::"}},
+			want:   "feature",
+		},
+		{
+			name:   "label with numbers",
+			labels: []issueLabel{{Name: "priority-1"}},
+			want:   "priority-1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1298,6 +1343,37 @@ func TestBranchPrefixForLabels(t *testing.T) {
 			got := branchPrefixForLabels(tt.labels)
 			if got != tt.want {
 				t.Errorf("branchPrefixForLabels() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeBranchPrefix(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"bug", "bug"},
+		{"Bug", "bug"},
+		{"type: bug", "type-bug"},
+		{"priority?high", "priority-high"},
+		{"ui/ux", "ui-ux"},
+		{"good first issue", "good-first-issue"},
+		{"type::bug", "type-bug"},
+		{":bug", "bug"},
+		{"bug:", "bug"},
+		{":::", ""},
+		{"a~b^c", "a-b-c"},
+		{"test*case", "test-case"},
+		{"feature[1]", "feature-1"},
+		{"path\\name", "path-name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sanitizeBranchPrefix(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizeBranchPrefix(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

@@ -938,13 +938,43 @@ type issueDetail struct {
 }
 
 // branchPrefixForLabels returns the branch prefix based on the first issue label.
-// Returns "feature" as default when no labels are present.
+// Returns "feature" as default when no labels are present or if sanitization yields empty string.
 func branchPrefixForLabels(labels []issueLabel) string {
 	if len(labels) > 0 {
-		// Use first label, sanitized for branch name (lowercase, no spaces)
-		return strings.ToLower(strings.ReplaceAll(labels[0].Name, " ", "-"))
+		prefix := sanitizeBranchPrefix(labels[0].Name)
+		if prefix != "" {
+			return prefix
+		}
 	}
-	return "feature" // Default when no labels
+	return "feature" // Default when no labels or invalid label
+}
+
+// sanitizeBranchPrefix converts a label name to a valid git branch prefix.
+// It handles characters that are invalid in git refs: ~ ^ : ? * [ \ space and more.
+func sanitizeBranchPrefix(label string) string {
+	// Lowercase first
+	result := strings.ToLower(label)
+
+	// Replace any character that's not alphanumeric or hyphen with hyphen
+	var sanitized strings.Builder
+	for _, r := range result {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			sanitized.WriteRune(r)
+		} else {
+			sanitized.WriteRune('-')
+		}
+	}
+	result = sanitized.String()
+
+	// Collapse consecutive hyphens
+	for strings.Contains(result, "--") {
+		result = strings.ReplaceAll(result, "--", "-")
+	}
+
+	// Trim leading and trailing hyphens
+	result = strings.Trim(result, "-")
+
+	return result
 }
 
 type prDetail struct {
@@ -1181,12 +1211,13 @@ func (c *Controller) buildPromptForPR(pr prWithReviews) string {
 // It searches for branches matching the pattern */issue-<N>-* (any prefix).
 func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string) *agent.ExistingWork {
 	// Check for existing open PRs with branch matching */issue-<N>-*
-	// Use --search to find matching PRs regardless of age (avoids missing older PRs beyond default limit)
+	// Use --limit to ensure we scan enough PRs in repos with many open PRs
 	// Search pattern matches any prefix (feature, bug, enhancement, agentium, etc.)
 	branchPattern := fmt.Sprintf("/issue-%s-", issueNumber)
 	cmd := c.execCommand(ctx, "gh", "pr", "list",
 		"--repo", c.config.Repository,
 		"--state", "open",
+		"--limit", "200",
 		"--json", "number,title,headRefName",
 	)
 	cmd.Dir = c.workDir
