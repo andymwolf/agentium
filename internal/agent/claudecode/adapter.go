@@ -182,7 +182,9 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	// Populate structured fields
 	result.RawTextContent = parsed.TextContent
 	if parsed.TotalTokens != nil {
-		result.TokensUsed = parsed.TotalTokens.InputTokens + parsed.TotalTokens.OutputTokens
+		result.InputTokens = parsed.TotalTokens.InputTokens
+		result.OutputTokens = parsed.TotalTokens.OutputTokens
+		result.TokensUsed = result.InputTokens + result.OutputTokens
 	}
 
 	// Convert events for controller access

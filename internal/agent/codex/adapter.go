@@ -312,6 +312,8 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	result.Events = events
 
 	// Set token usage
+	result.InputTokens = totalInput
+	result.OutputTokens = totalOutput
 	result.TokensUsed = totalInput + totalOutput
 
 	// Fallback: if no JSONL events were parsed or no text was extracted,
