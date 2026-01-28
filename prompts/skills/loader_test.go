@@ -20,7 +20,7 @@ func TestLoadManifest(t *testing.T) {
 		"safety", "environment", "status_signals",
 		"planning", "plan", "implement", "test",
 		"pr_update", "docs", "pr_review",
-		"plan_reviewer", "code_reviewer", "judge",
+		"plan_reviewer", "code_reviewer", "docs_reviewer", "judge",
 	}
 
 	names := make(map[string]bool)
@@ -56,7 +56,8 @@ func TestLoadManifest_Phases(t *testing.T) {
 		{"docs", []string{"DOCS"}},
 		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},
-		{"code_reviewer", []string{"IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
+		{"code_reviewer", []string{"IMPLEMENT_REVIEW"}},
+		{"docs_reviewer", []string{"DOCS_REVIEW"}},
 		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "DOCS_JUDGE"}},
 	}
 
@@ -160,6 +161,7 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 		"pr_review":      "PR REVIEW SESSIONS",
 		"plan_reviewer":  "PLAN REVIEWER",
 		"code_reviewer":  "CODE REVIEWER",
+		"docs_reviewer":  "DOCS REVIEWER",
 		"judge":          "JUDGE",
 	}
 
