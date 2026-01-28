@@ -263,6 +263,35 @@ type Controller struct {
 	cmdRunner func(ctx context.Context, name string, args ...string) *exec.Cmd
 }
 
+// taskKey creates a composite key from task type and ID (e.g., "issue:123" or "pr:456").
+func taskKey(typ, id string) string {
+	return typ + ":" + id
+}
+
+// envWithGitHubToken returns os.Environ() with the GITHUB_TOKEN appended.
+func (c *Controller) envWithGitHubToken() []string {
+	return append(os.Environ(), "GITHUB_TOKEN="+c.gitHubToken)
+}
+
+// checkoutBranch checks out the given branch, fetching from origin first if needed.
+func (c *Controller) checkoutBranch(ctx context.Context, branch string) error {
+	checkoutCmd := c.execCommand(ctx, "git", "checkout", branch)
+	checkoutCmd.Dir = c.workDir
+	if err := checkoutCmd.Run(); err != nil {
+		// Fetch and retry (ignore fetch error - checkout will fail if needed)
+		fetchCmd := c.execCommand(ctx, "git", "fetch", "origin", branch)
+		fetchCmd.Dir = c.workDir
+		_ = fetchCmd.Run()
+
+		checkoutCmd = c.execCommand(ctx, "git", "checkout", branch)
+		checkoutCmd.Dir = c.workDir
+		if err := checkoutCmd.Run(); err != nil {
+			return fmt.Errorf("failed to checkout branch %s: %w", branch, err)
+		}
+	}
+	return nil
+}
+
 // New creates a new session controller
 func New(config SessionConfig) (*Controller, error) {
 	// Get the agent adapter
@@ -333,7 +362,7 @@ func New(config SessionConfig) (*Controller, error) {
 
 	// Initialize task states and build unified task queue (PRs first, then issues)
 	for _, pr := range config.PRs {
-		c.taskStates[fmt.Sprintf("pr:%s", pr)] = &TaskState{
+		c.taskStates[taskKey("pr", pr)] = &TaskState{
 			ID:    pr,
 			Type:  "pr",
 			Phase: PhaseAnalyze,
@@ -345,7 +374,7 @@ func New(config SessionConfig) (*Controller, error) {
 		initialIssuePhase = PhasePlan
 	}
 	for _, task := range config.Tasks {
-		c.taskStates[fmt.Sprintf("issue:%s", task)] = &TaskState{
+		c.taskStates[taskKey("issue", task)] = &TaskState{
 			ID:    task,
 			Type:  "issue",
 			Phase: initialIssuePhase,
@@ -432,7 +461,7 @@ func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentNam
 		return
 	}
 
-	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	taskID := taskKey(c.activeTaskType, c.activeTask)
 	phase := ""
 	if state, ok := c.taskStates[taskID]; ok && state != nil {
 		phase = string(state.Phase)
@@ -563,7 +592,7 @@ func (c *Controller) Run(ctx context.Context) error {
 			if err := c.preparePRTask(ctx, nextTask.ID); err != nil {
 				c.logError("Failed to prepare PR #%s: %v", nextTask.ID, err)
 				// Mark as blocked and continue to next task
-				taskID := fmt.Sprintf("pr:%s", nextTask.ID)
+				taskID := taskKey("pr", nextTask.ID)
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseBlocked
 				}
@@ -573,7 +602,7 @@ func (c *Controller) Run(ctx context.Context) error {
 			c.logInfo("Focusing on issue #%s", nextTask.ID)
 
 			// Resolve parent branch for dependency chains
-			taskID := fmt.Sprintf("issue:%s", nextTask.ID)
+			taskID := taskKey("issue", nextTask.ID)
 			state := c.taskStates[taskID]
 			parentBranch, err := c.resolveParentBranch(ctx, nextTask.ID)
 			if err != nil {
@@ -622,7 +651,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 
 		// Update task phase for the active task
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		taskID := taskKey(c.activeTaskType, c.activeTask)
 		c.updateTaskPhase(taskID, result)
 
 		// Update instance metadata with current session status
@@ -961,7 +990,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 			"--repo", c.config.Repository,
 			"--json", "number,title,body",
 		)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		cmd.Env = c.envWithGitHubToken()
 
 		output, err := cmd.Output()
 		if err != nil {
@@ -998,7 +1027,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 			"--repo", c.config.Repository,
 			"--json", "number,title,body,headRefName",
 		)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		cmd.Env = c.envWithGitHubToken()
 
 		output, err := cmd.Output()
 		if err != nil {
@@ -1020,7 +1049,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 			fmt.Sprintf("repos/%s/pulls/%s/reviews", repoPath, prNumber),
 			"--jq", `[.[] | select(.state == "CHANGES_REQUESTED" or .state == "COMMENTED") | {state: .state, body: .body}]`,
 		)
-		reviewCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		reviewCmd.Env = c.envWithGitHubToken()
 
 		if reviewOutput, err := reviewCmd.Output(); err == nil {
 			var reviews []prReview
@@ -1034,7 +1063,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 			fmt.Sprintf("repos/%s/pulls/%s/comments", repoPath, prNumber),
 			"--jq", `[.[] | {path: .path, line: .line, body: .body, diffHunk: .diff_hunk}]`,
 		)
-		commentCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		commentCmd.Env = c.envWithGitHubToken()
 
 		if commentOutput, err := commentCmd.Output(); err == nil {
 			var comments []prComment
@@ -1054,7 +1083,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 func (c *Controller) nextQueuedTask() *TaskQueueItem {
 	for i := range c.taskQueue {
 		item := &c.taskQueue[i]
-		taskID := fmt.Sprintf("%s:%s", item.Type, item.ID)
+		taskID := taskKey(item.Type, item.ID)
 		state := c.taskStates[taskID]
 		if state == nil {
 			return item
@@ -1086,18 +1115,8 @@ func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
 
 	// Checkout PR branch
 	c.logInfo("Checking out PR branch: %s", prData.Detail.HeadRefName)
-	checkoutCmd := c.execCommand(ctx, "git", "checkout", prData.Detail.HeadRefName)
-	checkoutCmd.Dir = c.workDir
-	if err := checkoutCmd.Run(); err != nil {
-		// Try fetching first (ignore error - subsequent checkout will fail if needed)
-		fetchCmd := c.execCommand(ctx, "git", "fetch", "origin", prData.Detail.HeadRefName)
-		fetchCmd.Dir = c.workDir
-		_ = fetchCmd.Run()
-		checkoutCmd = c.execCommand(ctx, "git", "checkout", prData.Detail.HeadRefName)
-		checkoutCmd.Dir = c.workDir
-		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("failed to checkout PR branch %s: %w", prData.Detail.HeadRefName, err)
-		}
+	if err := c.checkoutBranch(ctx, prData.Detail.HeadRefName); err != nil {
+		return err
 	}
 
 	// Build prompt for this single PR
@@ -1173,7 +1192,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 		"--json", "number,title,headRefName",
 	)
 	cmd.Dir = c.workDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 
 	if output, err := cmd.Output(); err == nil {
 		var prs []struct {
@@ -1297,7 +1316,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		} else {
 			// No existing work — fresh start
 			// Check if this issue depends on a parent issue's branch
-			taskID := fmt.Sprintf("issue:%s", issueNumber)
+			taskID := taskKey("issue", issueNumber)
 			parentBranch := ""
 			if state, ok := c.taskStates[taskID]; ok && state.ParentBranch != "" {
 				parentBranch = state.ParentBranch
@@ -1556,7 +1575,7 @@ func (c *Controller) resolveParentBranch(ctx context.Context, childID string) (s
 	parentID := parents[0]
 
 	// Check if parent is in our batch
-	parentTaskID := fmt.Sprintf("issue:%s", parentID)
+	parentTaskID := taskKey("issue", parentID)
 	parentState, inBatch := c.taskStates[parentTaskID]
 
 	if inBatch {
@@ -1634,7 +1653,7 @@ func (c *Controller) isPRMerged(ctx context.Context, prNumber string) (bool, err
 		"--json", "state",
 	)
 	cmd.Dir = c.workDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -1672,7 +1691,7 @@ func (c *Controller) propagateBlocked(issueID string) {
 
 		children := c.depGraph.ChildrenOf(current)
 		for _, childID := range children {
-			taskID := fmt.Sprintf("issue:%s", childID)
+			taskID := taskKey("issue", childID)
 			if state, ok := c.taskStates[taskID]; ok {
 				if state.Phase != PhaseBlocked && state.Phase != PhaseComplete && state.Phase != PhaseNothingToDo {
 					state.Phase = PhaseBlocked
@@ -1719,7 +1738,7 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 // - PhaseAnalyze for PR tasks (agent starts by reading review comments)
 // - PhaseImplement for issue tasks (agent starts by writing code)
 func (c *Controller) determineActivePhase() TaskPhase {
-	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	taskID := taskKey(c.activeTaskType, c.activeTask)
 	if state, ok := c.taskStates[taskID]; ok {
 		return state.Phase
 	}
@@ -1779,7 +1798,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// Inject structured handoff context if enabled
 	handoffInjected := false
 	if c.isHandoffEnabled() {
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		taskID := taskKey(c.activeTaskType, c.activeTask)
 		phase := handoff.Phase(c.determineActivePhase())
 		phaseInput, err := c.handoffBuilder.BuildMarkdownContext(taskID, phase)
 		if err != nil {
@@ -1797,7 +1816,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// Inject memory context as fallback if handoff wasn't injected
 	// This ensures PR tasks and unsupported phases still get context
 	if c.memoryStore != nil && !handoffInjected {
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		taskID := taskKey(c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
 			if session.IterationContext == nil {
