@@ -65,12 +65,10 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 				c.logWarning("Failed to write Claude auth file: %v", err)
 			} else if authPath != "" {
 				args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
-				c.logInfo("Mounting Claude OAuth credentials from %s", authPath)
 			}
 		} else {
 			// In cloud mode, mount from VM path set up by provisioner
 			args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
-			c.logInfo("Mounting Claude OAuth credentials from /etc/agentium/claude-auth.json")
 		}
 	} else if c.config.ClaudeAuth.AuthMode != "" {
 		c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
@@ -161,6 +159,8 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 	if err := cmd.Start(); err != nil {
 		return nil, nil, 0, fmt.Errorf("%s start: %w", logTag, err)
 	}
+
+	c.logInfo("%s: prompt delivered, awaiting response", logTag)
 
 	// Read stdout and stderr concurrently to avoid deadlock.
 	// If either pipe's OS buffer fills while the other is being read sequentially,

@@ -66,6 +66,8 @@ func (c *Controller) postIssueComment(ctx context.Context, body string) {
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to post issue comment: %v (output: %s)", err, string(output))
+	} else {
+		c.logInfo("Posted comment to issue #%s", c.activeTask)
 	}
 }
 
@@ -86,6 +88,8 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to post PR comment: %v (output: %s)", err, string(output))
+	} else {
+		c.logInfo("Posted comment to PR #%s", prNumber)
 	}
 }
 
