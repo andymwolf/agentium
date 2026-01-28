@@ -27,14 +27,14 @@ func (c *Controller) createGistAttachment(ctx context.Context, filename, content
 		c.logWarning("failed to create temp file for gist: %v", err)
 		return ""
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
-	if _, err := tmpFile.WriteString(content); err != nil {
-		c.logWarning("failed to write content to temp file for gist: %v", err)
-		tmpFile.Close()
+	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
+		c.logWarning("failed to write content to temp file for gist: %v", writeErr)
+		_ = tmpFile.Close()
 		return ""
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Build gist create command - use --public only for public repos
 	args := []string{"gist", "create", "--filename", filename}

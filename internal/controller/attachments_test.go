@@ -87,11 +87,11 @@ func TestContentNeedsAttachment(t *testing.T) {
 
 func TestExtractSummary(t *testing.T) {
 	tests := []struct {
-		name      string
-		content   string
-		maxRunes  int
-		wantLen   int
-		wantEnds  string
+		name     string
+		content  string
+		maxRunes int
+		wantLen  int
+		wantEnds string
 	}{
 		{
 			name:     "short content unchanged",
@@ -153,14 +153,9 @@ func TestExtractSummary(t *testing.T) {
 
 func TestExtractSummary_BreaksAtNewline(t *testing.T) {
 	// Content with a newline in the middle half
-	content := "Line one is here.\nLine two is longer and continues past the limit."
-	result := extractSummary(content, 40)
-
-	// Should break at the newline (position 17) since it's after position 20 (40/2)
-	// Actually position 17 is less than 20, so it won't break there
-	// Let's use a different test case
-	content = strings.Repeat("a", 30) + "\n" + strings.Repeat("b", 50)
-	result = extractSummary(content, 50)
+	// Content with a newline in the second half of the excerpt
+	content := strings.Repeat("a", 30) + "\n" + strings.Repeat("b", 50)
+	result := extractSummary(content, 50)
 
 	// The newline is at position 30, which is > 25 (50/2), so it should break there
 	if !strings.HasSuffix(result, "...") {

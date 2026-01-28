@@ -797,10 +797,17 @@ func TestBuildPromptForTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Build issueDetailsByNumber map for O(1) lookup
+			issueDetailsByNumber := make(map[string]*issueDetail, len(tt.issueDetails))
+			for i := range tt.issueDetails {
+				issueDetailsByNumber[fmt.Sprintf("%d", tt.issueDetails[i].Number)] = &tt.issueDetails[i]
+			}
+
 			c := &Controller{
-				config:       SessionConfig{Repository: "github.com/org/repo"},
-				issueDetails: tt.issueDetails,
-				workDir:      "/workspace",
+				config:               SessionConfig{Repository: "github.com/org/repo"},
+				issueDetails:         tt.issueDetails,
+				issueDetailsByNumber: issueDetailsByNumber,
+				workDir:              "/workspace",
 			}
 			got := c.buildPromptForTask(tt.issueNumber, tt.existingWork, tt.phase)
 
