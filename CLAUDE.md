@@ -49,9 +49,16 @@ When implementing any GitHub issue:
 
 ### Branch Naming Convention
 
-- `feature/issue-<number>-<short-description>` - New features
-- `fix/issue-<number>-<short-description>` - Bug fixes
-- `docs/issue-<number>-<short-description>` - Documentation
+Branch prefixes are determined by the first label on the issue:
+- `<label>/issue-<number>-<short-description>` - Based on first issue label
+- Examples: `bug/issue-123-fix-auth`, `enhancement/issue-456-add-cache`, `feature/issue-789-new-api`
+- Default: `feature/issue-<number>-*` when no labels are present
+
+For agentium internal work, common prefixes include:
+- `feature/` - New features
+- `fix/` or `bug/` - Bug fixes
+- `docs/` - Documentation
+- `enhancement/` - Improvements to existing features
 
 ### Before Starting Work
 

@@ -11,13 +11,15 @@ func TestExtractIssueNumber(t *testing.T) {
 		branchName string
 		want       string
 	}{
-		{"standard branch", "agentium/issue-123-add-feature", "123"},
-		{"branch with short number", "agentium/issue-1-fix", "1"},
-		{"branch with long number", "agentium/issue-99999-big-change", "99999"},
-		{"non-agentium branch", "feature/issue-123-test", ""},
+		{"agentium prefix", "agentium/issue-123-add-feature", "123"},
+		{"feature prefix", "feature/issue-123-test", "123"},
+		{"bug prefix", "bug/issue-456-fix-auth", "456"},
+		{"enhancement prefix", "enhancement/issue-789-add-cache", "789"},
+		{"branch with short number", "feature/issue-1-fix", "1"},
+		{"branch with long number", "bug/issue-99999-big-change", "99999"},
 		{"main branch", "main", ""},
 		{"develop branch", "develop", ""},
-		{"agentium without issue", "agentium/feature-test", ""},
+		{"branch without issue pattern", "feature/something-else", ""},
 		{"empty string", "", ""},
 	}
 

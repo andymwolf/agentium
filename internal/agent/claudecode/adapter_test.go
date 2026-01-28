@@ -149,6 +149,7 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 				"Issue #12",
 				"Issue #17",
 				"Create a new branch",
+				"prefix based on issue labels",
 				"Create a pull request",
 			},
 		},
@@ -231,7 +232,7 @@ func TestAdapter_BuildPrompt_ActiveTaskSkipsGenericInstructions(t *testing.T) {
 
 	// Should NOT contain generic multi-issue instructions
 	genericPhrases := []string{
-		"Create a new branch: agentium/issue-<number>",
+		"<prefix>/issue-<number>",
 		"For each issue:",
 		"Issue #7", // Only issue #6 should be referenced
 	}

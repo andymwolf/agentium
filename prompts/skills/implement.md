@@ -3,11 +3,11 @@
 Before creating any branch or PR, ALWAYS check for existing work:
 
 ```bash
-# Check for existing remote branches for this issue
-git branch -r --list "origin/agentium/issue-<number>-*"
+# Check for existing remote branches for this issue (any prefix)
+git branch -r | grep "/issue-<number>-"
 
 # Check for existing open PRs for this issue
-gh pr list --search "head:agentium/issue-<number>" --state open
+gh pr list --state open --json headRefName | grep "issue-<number>-"
 ```
 
 **If an existing branch or PR is found:**
@@ -20,9 +20,10 @@ gh pr list --search "head:agentium/issue-<number>" --state open
 
 ### Step 4: Create Feature Branch (Only If No Existing Work)
 ```bash
-git checkout -b agentium/issue-<number>-<short-description>
+git checkout -b <prefix>/issue-<number>-<short-description>
 ```
-Use a short, descriptive suffix (e.g., `agentium/issue-42-add-login-button`)
+Use the branch prefix from your context (e.g., `feature`, `bug`, `enhancement`).
+Example: `feature/issue-42-add-login-button` or `bug/issue-123-fix-auth`
 
 ### Step 5: Implement Changes
 - Make focused, minimal changes that address the issue
@@ -35,7 +36,7 @@ After implementing changes and running tests, push your commits:
 
 **First iteration (no existing PR):**
 ```bash
-git push -u origin agentium/issue-<number>-<short-description>
+git push -u origin <prefix>/issue-<number>-<short-description>
 gh pr create --draft \
   --title "Issue #<number>: <brief description>" \
   --body "Closes #<issue-number>
@@ -50,7 +51,7 @@ This is a draft PR - implementation is in progress."
 **Subsequent iterations (PR already exists):**
 ```bash
 # Just push new commits - PR is automatically updated
-git push origin agentium/issue-<number>-<short-description>
+git push origin <prefix>/issue-<number>-<short-description>
 ```
 
 **Note:** The draft PR is created once during the first iteration with commits.
@@ -63,7 +64,7 @@ When implementation is complete and tests pass, emit a structured handoff signal
 
 ```
 AGENTIUM_HANDOFF: {
-  "branch_name": "agentium/issue-<number>-<description>",
+  "branch_name": "<prefix>/issue-<number>-<description>",
   "commits": [
     {"hash": "abc1234", "message": "Add feature X"},
     {"hash": "def5678", "message": "Add tests for feature X"}

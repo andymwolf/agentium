@@ -42,9 +42,9 @@ func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) erro
 		if err != nil {
 			return fmt.Errorf("failed to detect branch: %w", err)
 		}
-		// Only create draft PR for agentium/ branches
-		if !strings.HasPrefix(detected, "agentium/") {
-			c.logInfo("Skipping draft PR creation: branch %q is not an agentium branch", detected)
+		// Only create draft PR for branches matching */issue-*-* pattern
+		if !strings.Contains(detected, "/issue-") {
+			c.logInfo("Skipping draft PR creation: branch %q does not match */issue-* pattern", detected)
 			return nil
 		}
 		branchName = detected
@@ -313,9 +313,10 @@ func (c *Controller) branchHasUnpushedCommits(ctx context.Context, branch string
 	return count != "0", nil
 }
 
-// extractIssueNumber extracts the issue number from a branch name like "agentium/issue-123-description".
+// extractIssueNumber extracts the issue number from a branch name like "<prefix>/issue-123-description".
+// Supports any prefix (feature, bug, enhancement, agentium, etc.).
 func extractIssueNumber(branchName string) string {
-	re := regexp.MustCompile(`agentium/issue-(\d+)`)
+	re := regexp.MustCompile(`\w+/issue-(\d+)`)
 	matches := re.FindStringSubmatch(branchName)
 	if len(matches) >= 2 {
 		return matches[1]
