@@ -126,9 +126,12 @@ func detectNodeBuild(rootDir string) buildSystemInfo {
 		info.name = "bun"
 	}
 
+	// Determine the command prefix for running package.json scripts.
+	// npm and bun require "run" to execute scripts (e.g., "npm run test", "bun run test").
+	// yarn and pnpm can run scripts directly (e.g., "yarn test", "pnpm test").
 	runner := info.name
-	if runner == "npm" {
-		runner = "npm run"
+	if runner == "npm" || runner == "bun" {
+		runner = info.name + " run"
 	}
 
 	// Detect build commands

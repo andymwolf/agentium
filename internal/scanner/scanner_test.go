@@ -258,6 +258,85 @@ func TestDetectCI(t *testing.T) {
 	}
 }
 
+func TestGoFrameworkDetection_Deterministic(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create go.mod with multiple frameworks (gin + cobra)
+	// gin should be detected since it comes first in priority order
+	goMod := `module example.com/myapp
+
+go 1.19
+
+require (
+	github.com/gin-gonic/gin v1.9.0
+	github.com/spf13/cobra v1.7.0
+)
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run detection multiple times to verify determinism
+	for i := 0; i < 10; i++ {
+		framework, deps := detectGoFramework(tmpDir)
+		if framework != "gin" {
+			t.Errorf("iteration %d: expected framework 'gin' (first in priority), got %s", i, framework)
+		}
+		// Both dependencies should be detected
+		hasGin, hasCobra := false, false
+		for _, dep := range deps {
+			if dep == "github.com/gin-gonic/gin" {
+				hasGin = true
+			}
+			if dep == "github.com/spf13/cobra" {
+				hasCobra = true
+			}
+		}
+		if !hasGin || !hasCobra {
+			t.Errorf("iteration %d: expected both gin and cobra in deps, got %v", i, deps)
+		}
+	}
+}
+
+func TestBunProjectUsesRunCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create package.json with scripts
+	pkgJSON := `{
+	"name": "bun-app",
+	"scripts": {
+		"build": "bun build ./src/index.ts",
+		"test": "bun test",
+		"lint": "eslint ."
+	}
+}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create bun.lockb to indicate Bun is the package manager
+	if err := os.WriteFile(filepath.Join(tmpDir, "bun.lockb"), []byte{}, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	buildSystem, buildCmds, testCmds, lintCmds := detectBuildSystem(tmpDir)
+
+	if buildSystem != "bun" {
+		t.Errorf("expected build system 'bun', got %s", buildSystem)
+	}
+
+	// Verify commands use "bun run" not just "bun"
+	if len(buildCmds) == 0 || buildCmds[0] != "bun run build" {
+		t.Errorf("expected 'bun run build', got %v", buildCmds)
+	}
+	if len(testCmds) == 0 || testCmds[0] != "bun run test" {
+		t.Errorf("expected 'bun run test', got %v", testCmds)
+	}
+	if len(lintCmds) == 0 || lintCmds[0] != "bun run lint" {
+		t.Errorf("expected 'bun run lint', got %v", lintCmds)
+	}
+}
+
 func TestPrimaryLanguage(t *testing.T) {
 	info := &ProjectInfo{
 		Languages: []LanguageInfo{

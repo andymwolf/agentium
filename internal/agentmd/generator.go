@@ -78,8 +78,8 @@ func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) er
 		return fmt.Errorf("failed to parse existing AGENT.md: %w", err)
 	}
 
-	// Combine new generated content with preserved custom content
-	finalContent := newContent
+	// Combine preserved pre-content, new generated content, and preserved custom content
+	finalContent := parsed.PreContent + newContent
 	if parsed.CustomContent != "" {
 		finalContent += parsed.CustomContent
 	} else {
