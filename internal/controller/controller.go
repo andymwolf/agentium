@@ -226,8 +226,9 @@ type Controller struct {
 	startTime              time.Time
 	maxDuration            time.Duration
 	gitHubToken            string
-	pushedChanges          bool // Tracks if changes were pushed (for PR review sessions)
-	dockerAuthed           bool // Tracks if docker login to GHCR was done
+	tokenManager           *github.TokenManager // Manages token refresh for long-running sessions (nil for static tokens)
+	pushedChanges          bool                 // Tracks if changes were pushed (for PR review sessions)
+	dockerAuthed           bool                 // Tracks if docker login to GHCR was done
 	taskStates             map[string]*TaskState
 	logger                 *log.Logger
 	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
@@ -586,6 +587,18 @@ func (c *Controller) Run(ctx context.Context) error {
 		c.activeTask = nextTask.ID
 		c.activeTaskType = nextTask.Type
 
+		// Refresh GitHub token if needed before starting work on this task
+		// This ensures a fresh token (~1 hour validity) at the start of each task
+		if err := c.refreshGitHubTokenIfNeeded(); err != nil {
+			c.logError("Failed to refresh GitHub token: %v", err)
+			// Mark task as blocked and continue to next task
+			taskID := fmt.Sprintf("%s:%s", nextTask.Type, nextTask.ID)
+			if state, ok := c.taskStates[taskID]; ok {
+				state.Phase = PhaseBlocked
+			}
+			continue
+		}
+
 		// Build prompt based on task type
 		if nextTask.Type == "pr" {
 			c.logInfo("Focusing on PR #%s", nextTask.ID)
@@ -733,13 +746,47 @@ func (c *Controller) fetchGitHubToken(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch private key: %w", err)
 	}
 
-	// Generate installation access token
-	token, err := c.generateInstallationToken(privateKey)
+	// Initialize TokenManager for automatic refresh
+	appID := strconv.FormatInt(c.config.GitHub.AppID, 10)
+	tm, err := github.NewTokenManager(appID, c.config.GitHub.InstallationID, []byte(privateKey))
 	if err != nil {
-		return fmt.Errorf("failed to generate installation token: %w", err)
+		return fmt.Errorf("failed to create token manager: %w", err)
+	}
+	c.tokenManager = tm
+
+	// Get initial token
+	token, err := tm.Token()
+	if err != nil {
+		return fmt.Errorf("failed to get initial token: %w", err)
 	}
 
 	c.gitHubToken = token
+	c.logInfo("GitHub token obtained (expires at %s)", tm.ExpiresAt().Format(time.RFC3339))
+	return nil
+}
+
+// refreshGitHubTokenIfNeeded checks if the GitHub token needs to be refreshed and refreshes it if so.
+// This should be called before starting work on each task to ensure a fresh token (~1 hour validity).
+// For static tokens (from GITHUB_TOKEN env var), this is a no-op.
+func (c *Controller) refreshGitHubTokenIfNeeded() error {
+	// Skip if no token manager (static token from env var)
+	if c.tokenManager == nil {
+		return nil
+	}
+
+	// Check if refresh is needed
+	if !c.tokenManager.NeedsRefresh() {
+		return nil
+	}
+
+	c.logInfo("GitHub token expiring soon, refreshing...")
+	token, err := c.tokenManager.Refresh()
+	if err != nil {
+		return fmt.Errorf("failed to refresh GitHub token: %w", err)
+	}
+
+	c.gitHubToken = token
+	c.logInfo("GitHub token refreshed (expires at %s)", c.tokenManager.ExpiresAt().Format(time.RFC3339))
 	return nil
 }
 
@@ -764,32 +811,6 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 	}
 
 	return string(output), nil
-}
-
-func (c *Controller) generateInstallationToken(privateKey string) (string, error) {
-	appID := strconv.FormatInt(c.config.GitHub.AppID, 10)
-	installationID := c.config.GitHub.InstallationID
-
-	// Generate JWT for GitHub App authentication
-	jwtGen, err := github.NewJWTGenerator(appID, []byte(privateKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create JWT generator: %w", err)
-	}
-
-	jwt, err := jwtGen.GenerateToken()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate JWT: %w", err)
-	}
-
-	// Exchange JWT for installation access token
-	exchanger := github.NewTokenExchanger()
-	token, err := exchanger.ExchangeToken(jwt, installationID)
-	if err != nil {
-		return "", fmt.Errorf("failed to exchange token: %w", err)
-	}
-
-	c.logger.Printf("Generated installation token (expires at %s)", token.ExpiresAt.Format(time.RFC3339))
-	return token.Token, nil
 }
 
 func (c *Controller) loadPrompts() error {
