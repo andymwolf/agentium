@@ -163,7 +163,8 @@ Different reviewers are used for different phases:
 | Skill | Phases | Purpose |
 |-------|--------|---------|
 | `plan_reviewer` | PLAN_REVIEW | Reviews implementation plans |
-| `code_reviewer` | IMPLEMENT_REVIEW, REVIEW_REVIEW, DOCS_REVIEW | Reviews code changes |
+| `code_reviewer` | IMPLEMENT_REVIEW | Reviews code changes |
+| `docs_reviewer` | DOCS_REVIEW | Reviews documentation changes |
 
 ### Complexity Assessor
 
