@@ -924,11 +924,57 @@ func (c *Controller) configureGitSafeDirectory(ctx context.Context) error {
 	return nil
 }
 
+// issueLabel represents a GitHub issue label.
+type issueLabel struct {
+	Name string `json:"name"`
+}
+
 type issueDetail struct {
-	Number    int      `json:"number"`
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	DependsOn []string // Parsed dependency issue IDs (populated by buildDependencyGraph)
+	Number    int          `json:"number"`
+	Title     string       `json:"title"`
+	Body      string       `json:"body"`
+	Labels    []issueLabel `json:"labels"`
+	DependsOn []string     // Parsed dependency issue IDs (populated by buildDependencyGraph)
+}
+
+// branchPrefixForLabels returns the branch prefix based on the first issue label.
+// Returns "feature" as default when no labels are present or if sanitization yields empty string.
+func branchPrefixForLabels(labels []issueLabel) string {
+	if len(labels) > 0 {
+		prefix := sanitizeBranchPrefix(labels[0].Name)
+		if prefix != "" {
+			return prefix
+		}
+	}
+	return "feature" // Default when no labels or invalid label
+}
+
+// sanitizeBranchPrefix converts a label name to a valid git branch prefix.
+// It handles characters that are invalid in git refs: ~ ^ : ? * [ \ space and more.
+func sanitizeBranchPrefix(label string) string {
+	// Lowercase first
+	result := strings.ToLower(label)
+
+	// Replace any character that's not alphanumeric or hyphen with hyphen
+	var sanitized strings.Builder
+	for _, r := range result {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			sanitized.WriteRune(r)
+		} else {
+			sanitized.WriteRune('-')
+		}
+	}
+	result = sanitized.String()
+
+	// Collapse consecutive hyphens
+	for strings.Contains(result, "--") {
+		result = strings.ReplaceAll(result, "--", "-")
+	}
+
+	// Trim leading and trailing hyphens
+	result = strings.Trim(result, "-")
+
+	return result
 }
 
 type prDetail struct {
@@ -959,7 +1005,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 		// Use gh CLI to fetch issue
 		cmd := c.execCommand(ctx, "gh", "issue", "view", taskID,
 			"--repo", c.config.Repository,
-			"--json", "number,title,body",
+			"--json", "number,title,body,labels",
 		)
 		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
 
@@ -1162,14 +1208,16 @@ func (c *Controller) buildPromptForPR(pr prWithReviews) string {
 }
 
 // detectExistingWork checks GitHub for existing branches and PRs related to an issue.
+// It searches for branches matching the pattern */issue-<N>-* (any prefix).
 func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string) *agent.ExistingWork {
-	// Check for existing open PRs with branch matching agentium/issue-<N>
-	// Use --search to find matching PRs regardless of age (avoids missing older PRs beyond default limit)
-	branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
+	// Check for existing open PRs with branch matching */issue-<N>-*
+	// Use --limit to ensure we scan enough PRs in repos with many open PRs
+	// Search pattern matches any prefix (feature, bug, enhancement, agentium, etc.)
+	branchPattern := fmt.Sprintf("/issue-%s-", issueNumber)
 	cmd := c.execCommand(ctx, "gh", "pr", "list",
 		"--repo", c.config.Repository,
 		"--state", "open",
-		"--search", fmt.Sprintf("head:%s", branchPrefix),
+		"--limit", "200",
 		"--json", "number,title,headRefName",
 	)
 	cmd.Dir = c.workDir
@@ -1182,9 +1230,9 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 			HeadRefName string `json:"headRefName"`
 		}
 		if unmarshalErr := json.Unmarshal(output, &prs); unmarshalErr == nil {
-			// The search should already filter for matching branches, but double-check to be safe
+			// Filter for branches matching */issue-<N>-*
 			for _, pr := range prs {
-				if strings.HasPrefix(pr.HeadRefName, branchPrefix) {
+				if strings.Contains(pr.HeadRefName, branchPattern) {
 					c.logInfo("Found existing PR #%d for issue #%s on branch %s",
 						pr.Number, issueNumber, pr.HeadRefName)
 					return &agent.ExistingWork{
@@ -1199,22 +1247,22 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 		c.logWarning("failed to list PRs for existing work detection on issue #%s: %v", issueNumber, err)
 	}
 
-	// No PR found; check for existing remote branches
-	cmd = c.execCommand(ctx, "git", "branch", "-r", "--list",
-		fmt.Sprintf("origin/agentium/issue-%s-*", issueNumber),
-	)
+	// No PR found; check for existing remote branches matching */issue-<N>-*
+	// First, list all remote branches
+	cmd = c.execCommand(ctx, "git", "branch", "-r")
 	cmd.Dir = c.workDir
 
 	if output, err := cmd.Output(); err == nil {
-		branches := strings.TrimSpace(string(output))
-		if branches != "" {
-			// Take the first matching branch
-			lines := strings.Split(branches, "\n")
-			branch := strings.TrimSpace(lines[0])
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			branch := strings.TrimSpace(line)
 			branch = strings.TrimPrefix(branch, "origin/")
-			c.logInfo("Found existing branch for issue #%s: %s", issueNumber, branch)
-			return &agent.ExistingWork{
-				Branch: branch,
+			// Match pattern: */issue-<N>-*
+			if strings.Contains(branch, branchPattern) {
+				c.logInfo("Found existing branch for issue #%s: %s", issueNumber, branch)
+				return &agent.ExistingWork{
+					Branch: branch,
+				}
 			}
 		}
 	} else {
@@ -1303,11 +1351,17 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 				parentBranch = state.ParentBranch
 			}
 
+			// Determine branch prefix from issue labels
+			branchPrefix := "feature" // Default
+			if issue != nil {
+				branchPrefix = branchPrefixForLabels(issue.Labels)
+			}
+
 			sb.WriteString("### Instructions\n\n")
 			if parentBranch != "" {
 				sb.WriteString(fmt.Sprintf("**NOTE:** This issue depends on work from another issue. You must branch from: `%s`\n\n", parentBranch))
 				sb.WriteString(fmt.Sprintf("1. First, check out the parent branch: `git checkout %s`\n", parentBranch))
-				sb.WriteString(fmt.Sprintf("2. Create your new branch from it: `git checkout -b agentium/issue-%s-<short-description>`\n", issueNumber))
+				sb.WriteString(fmt.Sprintf("2. Create your new branch from it: `git checkout -b %s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
 				sb.WriteString("3. Implement the fix or feature\n")
 				sb.WriteString("4. Run tests to verify correctness\n")
 				sb.WriteString("5. Commit your changes with a descriptive message\n")
@@ -1318,7 +1372,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 				sb.WriteString("- The PR diff will include parent changes until the parent PR is merged\n")
 				sb.WriteString("- After the parent PR merges, GitHub will auto-resolve the diff\n")
 			} else {
-				sb.WriteString(fmt.Sprintf("1. Create a new branch: `agentium/issue-%s-<short-description>`\n", issueNumber))
+				sb.WriteString(fmt.Sprintf("1. Create a new branch: `%s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
 				sb.WriteString("2. Implement the fix or feature\n")
 				sb.WriteString("3. Run tests to verify correctness\n")
 				sb.WriteString("4. Commit your changes with a descriptive message\n")

@@ -577,7 +577,7 @@ func TestBuildPromptForPR(t *testing.T) {
 		Detail: prDetail{
 			Number:      57,
 			Title:       "Fix authentication flow",
-			HeadRefName: "agentium/issue-5-fix-auth",
+			HeadRefName: "bug/issue-5-fix-auth",
 		},
 		Reviews: []prReview{
 			{State: "CHANGES_REQUESTED", Body: "Please add error handling"},
@@ -594,7 +594,7 @@ func TestBuildPromptForPR(t *testing.T) {
 		"PR REVIEW SESSION",
 		"PR #57",
 		"Fix authentication flow",
-		"agentium/issue-5-fix-auth",
+		"bug/issue-5-fix-auth",
 		"Please add error handling",
 		"auth/handler.go",
 		"Missing nil check here",
@@ -619,7 +619,7 @@ func TestBuildPromptForTask(t *testing.T) {
 		notContains  []string
 	}{
 		{
-			name:        "fresh start - no existing work (IMPLEMENT phase)",
+			name:        "fresh start - no existing work (IMPLEMENT phase) - default prefix",
 			issueNumber: "42",
 			issueDetails: []issueDetail{
 				{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
@@ -631,12 +631,29 @@ func TestBuildPromptForTask(t *testing.T) {
 				"Fix login bug",
 				"login page crashes",
 				"Create a new branch",
+				"feature/issue-42", // Default prefix when no labels
 				"Create a pull request",
 			},
 			notContains: []string{
 				"Existing Work Detected",
 				"Do NOT create a new branch",
 				"Follow the instructions in your system prompt",
+			},
+		},
+		{
+			name:        "fresh start - uses bug label prefix",
+			issueNumber: "42",
+			issueDetails: []issueDetail{
+				{Number: 42, Title: "Fix login bug", Body: "The login page crashes", Labels: []issueLabel{{Name: "bug"}}},
+			},
+			existingWork: nil,
+			phase:        PhaseImplement,
+			contains: []string{
+				"Issue #42",
+				"bug/issue-42", // Uses label-based prefix
+			},
+			notContains: []string{
+				"feature/issue-42",
 			},
 		},
 		{
@@ -662,7 +679,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				{Number: 6, Title: "Add cloud logging", Body: "Integrate GCP logging"},
 			},
 			existingWork: &agent.ExistingWork{
-				Branch:   "agentium/issue-6-cloud-logging",
+				Branch:   "feature/issue-6-cloud-logging",
 				PRNumber: "87",
 				PRTitle:  "Add Cloud Logging integration",
 			},
@@ -671,7 +688,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				"Issue #6",
 				"Existing Work Detected",
 				"PR #87",
-				"agentium/issue-6-cloud-logging",
+				"feature/issue-6-cloud-logging",
 				"Do NOT create a new branch",
 				"Do NOT create a new PR",
 			},
@@ -687,13 +704,13 @@ func TestBuildPromptForTask(t *testing.T) {
 				{Number: 7, Title: "Graceful shutdown", Body: "Implement shutdown"},
 			},
 			existingWork: &agent.ExistingWork{
-				Branch: "agentium/issue-7-graceful-shutdown",
+				Branch: "enhancement/issue-7-graceful-shutdown",
 			},
 			phase: PhaseImplement,
 			contains: []string{
 				"Issue #7",
 				"Existing Work Detected",
-				"agentium/issue-7-graceful-shutdown",
+				"enhancement/issue-7-graceful-shutdown",
 				"Do NOT create a new branch",
 				"Create a PR linking to the issue",
 			},
@@ -704,7 +721,7 @@ func TestBuildPromptForTask(t *testing.T) {
 			},
 		},
 		{
-			name:         "issue not in details (IMPLEMENT phase)",
+			name:         "issue not in details (IMPLEMENT phase) - default prefix",
 			issueNumber:  "99",
 			issueDetails: []issueDetail{},
 			existingWork: nil,
@@ -712,6 +729,7 @@ func TestBuildPromptForTask(t *testing.T) {
 			contains: []string{
 				"Issue #99",
 				"Create a new branch",
+				"feature/issue-99", // Default prefix when issue not found
 			},
 		},
 		{
@@ -757,7 +775,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				{Number: 6, Title: "Add cloud logging", Body: "Integrate GCP logging"},
 			},
 			existingWork: &agent.ExistingWork{
-				Branch:   "agentium/issue-6-cloud-logging",
+				Branch:   "feature/issue-6-cloud-logging",
 				PRNumber: "87",
 				PRTitle:  "Add Cloud Logging integration",
 			},
@@ -766,7 +784,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				"Issue #6",
 				"Existing Work Detected",
 				"PR #87",
-				"agentium/issue-6-cloud-logging",
+				"feature/issue-6-cloud-logging",
 				"Follow the instructions in your system prompt",
 			},
 			notContains: []string{
@@ -1222,6 +1240,140 @@ func TestSanitizeGitError(t *testing.T) {
 			// Ensure token is not present in output
 			if tt.token != "" && containsString(got.Error(), tt.token) {
 				t.Errorf("sanitizeGitError() output still contains token %q", tt.token)
+			}
+		})
+	}
+}
+
+func TestBranchPrefixForLabels(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels []issueLabel
+		want   string
+	}{
+		{
+			name:   "no labels - default to feature",
+			labels: nil,
+			want:   "feature",
+		},
+		{
+			name:   "empty labels - default to feature",
+			labels: []issueLabel{},
+			want:   "feature",
+		},
+		{
+			name:   "bug label",
+			labels: []issueLabel{{Name: "bug"}},
+			want:   "bug",
+		},
+		{
+			name:   "enhancement label",
+			labels: []issueLabel{{Name: "enhancement"}},
+			want:   "enhancement",
+		},
+		{
+			name:   "multiple labels - use first",
+			labels: []issueLabel{{Name: "bug"}, {Name: "urgent"}},
+			want:   "bug",
+		},
+		{
+			name:   "label with space - sanitized",
+			labels: []issueLabel{{Name: "good first issue"}},
+			want:   "good-first-issue",
+		},
+		{
+			name:   "uppercase label - lowercased",
+			labels: []issueLabel{{Name: "Feature"}},
+			want:   "feature",
+		},
+		{
+			name:   "mixed case with space",
+			labels: []issueLabel{{Name: "Help Wanted"}},
+			want:   "help-wanted",
+		},
+		{
+			name:   "label with colon - sanitized",
+			labels: []issueLabel{{Name: "type: bug"}},
+			want:   "type-bug",
+		},
+		{
+			name:   "label with question mark - sanitized",
+			labels: []issueLabel{{Name: "priority?high"}},
+			want:   "priority-high",
+		},
+		{
+			name:   "label with slash - sanitized",
+			labels: []issueLabel{{Name: "ui/ux"}},
+			want:   "ui-ux",
+		},
+		{
+			name:   "label with multiple special chars - sanitized",
+			labels: []issueLabel{{Name: "type: bug [critical]"}},
+			want:   "type-bug-critical",
+		},
+		{
+			name:   "label with consecutive special chars - collapsed",
+			labels: []issueLabel{{Name: "type::bug"}},
+			want:   "type-bug",
+		},
+		{
+			name:   "label starting with special char - trimmed",
+			labels: []issueLabel{{Name: ":bug"}},
+			want:   "bug",
+		},
+		{
+			name:   "label ending with special char - trimmed",
+			labels: []issueLabel{{Name: "bug:"}},
+			want:   "bug",
+		},
+		{
+			name:   "label that becomes empty after sanitization - default to feature",
+			labels: []issueLabel{{Name: ":::"}},
+			want:   "feature",
+		},
+		{
+			name:   "label with numbers",
+			labels: []issueLabel{{Name: "priority-1"}},
+			want:   "priority-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := branchPrefixForLabels(tt.labels)
+			if got != tt.want {
+				t.Errorf("branchPrefixForLabels() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeBranchPrefix(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"bug", "bug"},
+		{"Bug", "bug"},
+		{"type: bug", "type-bug"},
+		{"priority?high", "priority-high"},
+		{"ui/ux", "ui-ux"},
+		{"good first issue", "good-first-issue"},
+		{"type::bug", "type-bug"},
+		{":bug", "bug"},
+		{"bug:", "bug"},
+		{":::", ""},
+		{"a~b^c", "a-b-c"},
+		{"test*case", "test-case"},
+		{"feature[1]", "feature-1"},
+		{"path\\name", "path-name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sanitizeBranchPrefix(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizeBranchPrefix(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

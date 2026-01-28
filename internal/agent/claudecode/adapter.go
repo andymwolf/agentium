@@ -152,7 +152,7 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 
 	sb.WriteString("\n")
 	sb.WriteString("For each issue:\n")
-	sb.WriteString("1. Create a new branch: agentium/issue-<number>-<short-description>\n")
+	sb.WriteString("1. Create a new branch: <prefix>/issue-<number>-<short-description> (prefix based on issue labels, default: feature)\n")
 	sb.WriteString("2. Implement the fix or feature\n")
 	sb.WriteString("3. Run any relevant tests\n")
 	sb.WriteString("4. Commit your changes with a descriptive message\n")

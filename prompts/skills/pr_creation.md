@@ -1,6 +1,6 @@
 ### Step 7: Push and Create PR
 ```bash
-git push -u origin agentium/issue-<number>-<short-description>
+git push -u origin <prefix>/issue-<number>-<short-description>
 gh pr create --title "..." --body "Closes #<issue-number>
 
 ## Summary

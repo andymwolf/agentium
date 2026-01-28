@@ -314,19 +314,22 @@ func (g *DependencyGraph) HasDependencies() bool {
 	return false
 }
 
-// parseIssueNumberFromBranch extracts an issue number from an agentium branch name.
-// Branch format: agentium/issue-<number>-<description>
-// Returns empty string if not an agentium branch or no issue number found.
+// parseIssueNumberFromBranch extracts an issue number from a branch name.
+// Branch format: <prefix>/issue-<number>-<description>
+// Supports any prefix (feature, bug, enhancement, agentium, etc.).
+// Returns empty string if the branch doesn't match the pattern or no issue number found.
 func parseIssueNumberFromBranch(branch string) string {
 	// Handle "origin/" prefix
 	branch = strings.TrimPrefix(branch, "origin/")
 
-	if !strings.HasPrefix(branch, "agentium/issue-") {
+	// Look for /issue-<number>- pattern anywhere in the branch name
+	idx := strings.Index(branch, "/issue-")
+	if idx == -1 {
 		return ""
 	}
 
-	// Extract the number after "agentium/issue-"
-	rest := strings.TrimPrefix(branch, "agentium/issue-")
+	// Extract the number after "/issue-"
+	rest := branch[idx+len("/issue-"):]
 	parts := strings.SplitN(rest, "-", 2)
 	if len(parts) == 0 {
 		return ""

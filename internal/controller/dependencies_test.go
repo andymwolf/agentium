@@ -275,14 +275,16 @@ func TestParseIssueNumberFromBranch(t *testing.T) {
 		expected string
 	}{
 		{"agentium/issue-123-feature", "123"},
-		{"agentium/issue-456-bug-fix", "456"},
-		{"origin/agentium/issue-789-test", "789"},
+		{"feature/issue-123-test", "123"},
+		{"bug/issue-456-fix-auth", "456"},
+		{"enhancement/issue-789-add-cache", "789"},
+		{"origin/feature/issue-789-test", "789"},
+		{"origin/agentium/issue-101-legacy", "101"},
 		{"feature/something", ""},
-		{"agentium/other-123", ""},
 		{"main", ""},
 		{"", ""},
-		{"agentium/issue-abc-invalid", ""},
-		{"agentium/issue--empty", ""},
+		{"feature/issue-abc-invalid", ""},
+		{"bug/issue--empty", ""},
 	}
 
 	for _, tt := range tests {

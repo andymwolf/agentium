@@ -4,7 +4,7 @@ These constraints are non-negotiable. Violating them will result in session term
 
 ### 1. Branch Protection
 - NEVER commit directly to `main` or `master` branches
-- ALWAYS create a feature branch: `agentium/issue-<number>-<short-description>`
+- ALWAYS create a feature branch: `<prefix>/issue-<number>-<short-description>` (prefix based on issue labels: feature, bug, enhancement, etc.)
 - ALWAYS verify your current branch before committing: `git branch --show-current`
 - If you find yourself on main/master, switch to a new branch IMMEDIATELY
 

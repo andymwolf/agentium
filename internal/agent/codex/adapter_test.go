@@ -445,6 +445,7 @@ func TestAdapter_BuildPrompt(t *testing.T) {
 				"Issue #12",
 				"Issue #17",
 				"Create a new branch",
+				"prefix based on issue labels",
 				"Create a pull request",
 			},
 		},
