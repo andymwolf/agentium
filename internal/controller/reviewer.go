@@ -150,7 +150,14 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 
 	sb.WriteString("## Your Task\n\n")
 	sb.WriteString("Provide constructive, actionable review feedback on the phase output above.\n")
-	sb.WriteString("Be specific about what to improve. Do NOT emit any verdict — your role is to provide feedback only.\n")
+	sb.WriteString("Be specific about what to improve. Do NOT emit any verdict — your role is to provide feedback only.\n\n")
+
+	sb.WriteString("## Output Format\n\n")
+	sb.WriteString("**CRITICAL:** Output ONLY your feedback. Do NOT include:\n")
+	sb.WriteString("- Preamble or planning statements (e.g., \"I need to review...\", \"Let me examine...\")\n")
+	sb.WriteString("- Descriptions of your process or reasoning\n")
+	sb.WriteString("- Issue or PR metadata\n\n")
+	sb.WriteString("Start directly with your feedback content. Use concise bullet points or short paragraphs.\n")
 
 	// Add comparison task if we have previous feedback
 	if params.Iteration > 1 && params.PreviousFeedback != "" {
