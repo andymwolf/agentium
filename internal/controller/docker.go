@@ -128,7 +128,7 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		signalSource := result.RawTextContent + "\n" + string(stderrBytes)
 		signals := memory.ParseSignals(signalSource)
 		if len(signals) > 0 {
-			taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+			taskID := taskKey(c.activeTaskType, c.activeTask)
 			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
 			if pruned > 0 {
 				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/andywolf/agentium/internal/agent/claudecode"
 	"github.com/andywolf/agentium/internal/agent/codex"
@@ -18,7 +17,7 @@ func (c *Controller) emitAuditEvents(events []interface{}, agentName string) {
 		return
 	}
 
-	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	taskID := taskKey(c.activeTaskType, c.activeTask)
 
 	var auditEvents []audit.Event
 

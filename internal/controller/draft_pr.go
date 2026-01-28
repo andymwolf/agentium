@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -108,7 +107,7 @@ This is a draft PR - implementation is in progress.
 		"--repo", c.config.Repository,
 	)
 	createCmd.Dir = c.workDir
-	createCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	createCmd.Env = c.envWithGitHubToken()
 
 	createOutput, createErr := createCmd.CombinedOutput()
 	if createErr != nil {
@@ -156,7 +155,7 @@ func (c *Controller) findExistingPRForBranch(ctx context.Context, branchName str
 		"--json", "number,url",
 	)
 	cmd.Dir = c.workDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 
 	output, cmdErr := cmd.Output()
 	if cmdErr != nil {
@@ -206,7 +205,7 @@ func (c *Controller) ensureBranchPushed(ctx context.Context, branchName string) 
 		c.logInfo("Pushing branch %s to origin", branchName)
 		pushCmd := exec.CommandContext(ctx, "git", "push", "-u", "origin", branchName)
 		pushCmd.Dir = c.workDir
-		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+		pushCmd.Env = c.envWithGitHubToken()
 		pushOutput, pushErr := pushCmd.CombinedOutput()
 		if pushErr != nil {
 			return fmt.Errorf("push failed: %w (output: %s)", pushErr, string(pushOutput))
@@ -269,7 +268,7 @@ func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 		"--repo", c.config.Repository,
 	)
 	readyCmd.Dir = c.workDir
-	readyCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	readyCmd.Env = c.envWithGitHubToken()
 
 	output, err := readyCmd.CombinedOutput()
 	if err != nil {

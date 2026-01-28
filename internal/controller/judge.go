@@ -88,7 +88,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	// Use iteration-scoped context so judge only sees current iteration's feedback
 	if c.memoryStore != nil {
 		// Build context scoped to the current task and phase iteration
-		taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+		taskID := taskKey(c.activeTaskType, c.activeTask)
 		evalCtx := c.memoryStore.BuildCurrentIterationEvalContext(taskID, params.PhaseIteration)
 		if evalCtx != "" {
 			if session.IterationContext == nil {
@@ -154,7 +154,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	if judgeResult.Verdict == VerdictIterate && params.ReviewFeedback != "" && c.memoryStore != nil {
 		c.memoryStore.UpdateWithPhaseIteration([]memory.Signal{
 			{Type: memory.EvalFeedback, Content: params.ReviewFeedback},
-		}, c.iteration, params.PhaseIteration, fmt.Sprintf("issue:%s", c.activeTask))
+		}, c.iteration, params.PhaseIteration, taskKey("issue", c.activeTask))
 	}
 
 	return judgeResult, nil

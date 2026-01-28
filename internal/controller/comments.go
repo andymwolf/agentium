@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -62,7 +61,7 @@ func (c *Controller) postIssueComment(ctx context.Context, body string) {
 		"--repo", c.config.Repository,
 		"--body", body,
 	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -82,7 +81,7 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 		"--repo", c.config.Repository,
 		"--body", body,
 	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -152,7 +151,7 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 		"--json", "body",
 		"--jq", ".body",
 	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
 
 	output, err := cmd.Output()
@@ -178,7 +177,7 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 		"--repo", c.config.Repository,
 		"--body", newBody,
 	)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", c.gitHubToken))
+	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -203,7 +202,7 @@ func (c *Controller) getPRNumberForTask() string {
 	}
 
 	// Check task state for newly created PR
-	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
+	taskID := taskKey(c.activeTaskType, c.activeTask)
 	if state, ok := c.taskStates[taskID]; ok && state.PRNumber != "" {
 		return state.PRNumber
 	}

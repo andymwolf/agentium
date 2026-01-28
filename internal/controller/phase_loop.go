@@ -184,7 +184,7 @@ func advancePhase(current TaskPhase) TaskPhase {
 // runPhaseLoop executes the controller-as-judge phase loop for the active issue task.
 // It iterates through phases, running the agent and judge at each step.
 func (c *Controller) runPhaseLoop(ctx context.Context) error {
-	taskID := fmt.Sprintf("issue:%s", c.activeTask)
+	taskID := taskKey("issue", c.activeTask)
 	state := c.taskStates[taskID]
 	if state == nil {
 		return fmt.Errorf("no task state for %s", taskID)
