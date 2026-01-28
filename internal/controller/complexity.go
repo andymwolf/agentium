@@ -101,7 +101,12 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 		stdinPrompt = provider.GetStdinPrompt(session, 0)
 	}
 
-	c.logInfo("Running complexity assessor for PLAN (iteration %d/%d)", params.Iteration, params.MaxIterations)
+	modelName := ""
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		modelName = session.IterationContext.ModelOverride
+	}
+	c.logInfo("Running complexity assessor for PLAN (iteration %d/%d): adapter=%s model=%s",
+		params.Iteration, params.MaxIterations, activeAgent.Name(), modelName)
 
 	result, err := c.runAgentContainer(ctx, containerRunParams{
 		Agent:       activeAgent,

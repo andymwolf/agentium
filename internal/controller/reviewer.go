@@ -86,7 +86,12 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		stdinPrompt = provider.GetStdinPrompt(session, 0)
 	}
 
-	c.logInfo("Running reviewer for phase %s (iteration %d/%d)", params.CompletedPhase, params.Iteration, params.MaxIterations)
+	modelName := ""
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		modelName = session.IterationContext.ModelOverride
+	}
+	c.logInfo("Running reviewer for phase %s (iteration %d/%d): adapter=%s model=%s",
+		params.CompletedPhase, params.Iteration, params.MaxIterations, activeAgent.Name(), modelName)
 
 	result, err := c.runAgentContainer(ctx, containerRunParams{
 		Agent:       activeAgent,

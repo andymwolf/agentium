@@ -1927,8 +1927,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	env := activeAgent.BuildEnv(session, c.iteration)
 	command := activeAgent.BuildCommand(session, c.iteration)
 
-	c.logger.Printf("Running agent: %s %v", activeAgent.ContainerImage(), command)
-
 	// Check if agent supports stdin-based prompt delivery (for non-interactive mode)
 	stdinPrompt := ""
 	if !c.config.Interactive {
