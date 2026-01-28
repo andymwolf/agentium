@@ -904,8 +904,8 @@ func TestDetermineActivePhase_Routing(t *testing.T) {
 	}
 
 	phase := c.determineActivePhase()
-	if phase != "IMPLEMENT" {
-		t.Errorf("determineActivePhase() = %q, want %q", phase, "IMPLEMENT")
+	if phase != PhaseImplement {
+		t.Errorf("determineActivePhase() = %q, want %q", phase, PhaseImplement)
 	}
 }
 

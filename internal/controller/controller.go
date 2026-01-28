@@ -47,6 +47,15 @@ const (
 	// AgentiumGID is the group ID for the agentium group in agent containers.
 	// This must match the GID in the agent Dockerfiles (defaults to same as UID).
 	AgentiumGID = 1000
+
+	// MaxReviewBodyLen is the maximum length for review body text before truncation.
+	MaxReviewBodyLen = 500
+
+	// MaxCommentBodyLen is the maximum length for inline comment text before truncation.
+	MaxCommentBodyLen = 300
+
+	// MaxIssueBodyLen is the maximum length for issue body text before truncation.
+	MaxIssueBodyLen = 1000
 )
 
 // Version is the controller version, set at build time via ldflags.
@@ -93,8 +102,8 @@ type TaskState struct {
 	TestRetries        int
 	LastStatus         string
 	PRNumber           string       // Linked PR number (for issues that create PRs)
-	PhaseIteration     int          // Current iteration within the active phase (phase loop)
-	MaxPhaseIter       int          // Max iterations for current phase (phase loop)
+	PhaseIteration     int // Current iteration within the active phase (phase loop)
+	MaxPhaseIterations int // Max iterations for current phase (phase loop)
 	LastJudgeVerdict   string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
 	LastJudgeFeedback  string       // Last judge feedback text
 	DraftPRCreated     bool         // Whether draft PR has been created for this task
@@ -1095,8 +1104,8 @@ func (c *Controller) buildPromptForPR(pr prWithReviews) string {
 		for _, review := range pr.Reviews {
 			if review.Body != "" {
 				body := review.Body
-				if len(body) > 500 {
-					body = body[:500] + "..."
+				if len(body) > MaxReviewBodyLen {
+					body = body[:MaxReviewBodyLen] + "..."
 				}
 				sb.WriteString(fmt.Sprintf("- [%s] %s\n", review.State, body))
 			}
@@ -1108,8 +1117,8 @@ func (c *Controller) buildPromptForPR(pr prWithReviews) string {
 		sb.WriteString("**Inline Comments:**\n")
 		for _, comment := range pr.Comments {
 			body := comment.Body
-			if len(body) > 300 {
-				body = body[:300] + "..."
+			if len(body) > MaxCommentBodyLen {
+				body = body[:MaxCommentBodyLen] + "..."
 			}
 			sb.WriteString(fmt.Sprintf("- File: %s (line %d)\n", comment.Path, comment.Line))
 			sb.WriteString(fmt.Sprintf("  Comment: %s\n", body))
@@ -1221,8 +1230,8 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		sb.WriteString(fmt.Sprintf("**Title:** %s\n\n", issue.Title))
 		if issue.Body != "" {
 			body := issue.Body
-			if len(body) > 1000 {
-				body = body[:1000] + "..."
+			if len(body) > MaxIssueBodyLen {
+				body = body[:MaxIssueBodyLen] + "..."
 			}
 			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", body))
 		}
@@ -1455,17 +1464,17 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 
 // determineActivePhase returns the current phase for the active task.
 // When no task state exists yet (first iteration), defaults are:
-// - "ANALYZE" for PR tasks (agent starts by reading review comments)
-// - "IMPLEMENT" for issue tasks (agent starts by writing code)
-func (c *Controller) determineActivePhase() string {
+// - PhaseAnalyze for PR tasks (agent starts by reading review comments)
+// - PhaseImplement for issue tasks (agent starts by writing code)
+func (c *Controller) determineActivePhase() TaskPhase {
 	taskID := fmt.Sprintf("%s:%s", c.activeTaskType, c.activeTask)
 	if state, ok := c.taskStates[taskID]; ok {
-		return string(state.Phase)
+		return state.Phase
 	}
 	if c.activeTaskType == "pr" {
-		return "ANALYZE"
+		return PhaseAnalyze
 	}
-	return "IMPLEMENT"
+	return PhaseImplement
 }
 
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
@@ -1473,13 +1482,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// This ensures both delegated and non-delegated paths use the same phase-appropriate prompt
 	prompt := c.config.Prompt
 	if c.activeTaskType == "issue" && c.activeTask != "" {
-		phase := TaskPhase(c.determineActivePhase())
+		phase := c.determineActivePhase()
 		prompt = c.buildPromptForTask(c.activeTask, c.activeTaskExistingWork, phase)
 	}
 
 	// Check delegation AFTER prompt is built
 	if c.orchestrator != nil {
-		phase := TaskPhase(c.determineActivePhase())
+		phase := c.determineActivePhase()
 		if subCfg := c.orchestrator.ConfigForPhase(phase); subCfg != nil {
 			c.logInfo("Phase %s: delegating to sub-agent config (agent=%s)", phase, subCfg.Agent)
 			return c.runDelegatedIteration(ctx, phase, subCfg, prompt)
@@ -1507,11 +1516,12 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// Compose phase-aware skills if selector is available
 	if c.skillSelector != nil {
 		phase := c.determineActivePhase()
+		phaseStr := string(phase)
 		session.IterationContext = &agent.IterationContext{
-			Phase:        phase,
-			SkillsPrompt: c.skillSelector.SelectForPhase(phase),
+			Phase:        phaseStr,
+			SkillsPrompt: c.skillSelector.SelectForPhase(phaseStr),
 		}
-		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phase))
+		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phaseStr))
 	}
 
 	// Inject structured handoff context if enabled
@@ -1549,7 +1559,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	activeAgent := c.agent
 	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
 		phase := c.determineActivePhase()
-		modelCfg := c.modelRouter.ModelForPhase(phase)
+		phaseStr := string(phase)
+		modelCfg := c.modelRouter.ModelForPhase(phaseStr)
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
 				activeAgent = a
