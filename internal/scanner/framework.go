@@ -34,6 +34,24 @@ func detectFramework(rootDir string, languages []LanguageInfo) (framework string
 	return "", nil
 }
 
+// goFramework represents a framework with its detection patterns.
+type goFramework struct {
+	name     string
+	patterns []string
+}
+
+// goFrameworks defines frameworks in priority order (first match wins).
+// Web frameworks are prioritized over CLI frameworks since they're more
+// specific to the project's purpose.
+var goFrameworks = []goFramework{
+	{name: "gin", patterns: []string{"github.com/gin-gonic/gin"}},
+	{name: "echo", patterns: []string{"github.com/labstack/echo"}},
+	{name: "fiber", patterns: []string{"github.com/gofiber/fiber"}},
+	{name: "chi", patterns: []string{"github.com/go-chi/chi"}},
+	{name: "gorilla", patterns: []string{"github.com/gorilla/mux"}},
+	{name: "cobra", patterns: []string{"github.com/spf13/cobra"}},
+}
+
 func detectGoFramework(rootDir string) (string, []string) {
 	goModPath := filepath.Join(rootDir, "go.mod")
 	data, err := os.ReadFile(goModPath)
@@ -44,22 +62,16 @@ func detectGoFramework(rootDir string) (string, []string) {
 	content := string(data)
 	var deps []string
 
-	// Framework detection patterns
-	frameworks := map[string][]string{
-		"gin":     {"github.com/gin-gonic/gin"},
-		"echo":    {"github.com/labstack/echo"},
-		"fiber":   {"github.com/gofiber/fiber"},
-		"chi":     {"github.com/go-chi/chi"},
-		"gorilla": {"github.com/gorilla/mux"},
-		"cobra":   {"github.com/spf13/cobra"},
-	}
-
+	// Detect framework using ordered list (first match wins for determinism)
 	var detected string
-	for name, patterns := range frameworks {
-		for _, pattern := range patterns {
+	for _, fw := range goFrameworks {
+		for _, pattern := range fw.patterns {
 			if strings.Contains(content, pattern) {
-				detected = name
+				if detected == "" {
+					detected = fw.name
+				}
 				deps = append(deps, pattern)
+				break // Found this framework, check next
 			}
 		}
 	}

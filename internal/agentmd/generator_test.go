@@ -182,6 +182,111 @@ Generated content
 	}
 }
 
+func TestParser_PreservesPreContent(t *testing.T) {
+	content := `# My Project Header
+
+Some intro text before the generated section.
+
+<!-- agentium:generated:start -->
+Generated content here
+<!-- agentium:generated:end -->
+
+## Custom Section
+My custom content`
+
+	parser := &Parser{}
+	parsed, err := parser.Parse(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !parsed.HasMarkers {
+		t.Error("expected HasMarkers to be true")
+	}
+
+	expectedPre := `# My Project Header
+
+Some intro text before the generated section.
+
+`
+	if parsed.PreContent != expectedPre {
+		t.Errorf("PreContent = %q, want %q", parsed.PreContent, expectedPre)
+	}
+
+	if !strings.Contains(parsed.CustomContent, "My custom content") {
+		t.Error("CustomContent should contain content after end marker")
+	}
+}
+
+func TestGenerator_PreservesPreContentOnRefresh(t *testing.T) {
+	gen, err := NewGenerator()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpDir := t.TempDir()
+
+	info := &scanner.ProjectInfo{
+		Name:          "test-project",
+		BuildSystem:   "go",
+		Languages:     []scanner.LanguageInfo{{Name: "Go", FileCount: 10, Percentage: 100}},
+		BuildCommands: []string{"go build ./..."},
+		TestCommands:  []string{"go test ./..."},
+	}
+
+	// First write
+	err = gen.WriteToProject(tmpDir, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agentMDPath := filepath.Join(tmpDir, AgentiumDir, AgentMDFile)
+
+	// Read and add content BEFORE the generated section
+	content, err := os.ReadFile(agentMDPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	modifiedContent := "# My Custom Header\n\nThis should be preserved.\n\n" + string(content)
+	err = os.WriteFile(agentMDPath, []byte(modifiedContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Regenerate
+	info.Name = "updated-project"
+	err = gen.WriteToProject(tmpDir, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updatedContent, err := os.ReadFile(agentMDPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify pre-content is preserved
+	if !strings.Contains(string(updatedContent), "My Custom Header") {
+		t.Error("content before generated section was not preserved")
+	}
+	if !strings.Contains(string(updatedContent), "This should be preserved.") {
+		t.Error("content before generated section was not preserved")
+	}
+
+	// Verify it comes before the generated content
+	headerIdx := strings.Index(string(updatedContent), "My Custom Header")
+	markerIdx := strings.Index(string(updatedContent), GeneratedStartMarker)
+	if headerIdx > markerIdx {
+		t.Error("pre-content should appear before the generated section")
+	}
+
+	// Verify new generated content is present
+	if !strings.Contains(string(updatedContent), "updated-project") {
+		t.Error("generated content was not updated")
+	}
+}
+
 func TestGenerateGreenfield(t *testing.T) {
 	gen, err := NewGenerator()
 	if err != nil {

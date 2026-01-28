@@ -6,8 +6,9 @@ import (
 
 // ParsedContent represents the parsed sections of an AGENT.md file.
 type ParsedContent struct {
+	PreContent       string // Content before the generated section
 	GeneratedContent string
-	CustomContent    string
+	CustomContent    string // Content after the generated section
 	HasMarkers       bool
 }
 
@@ -29,6 +30,11 @@ func (p *Parser) Parse(content string) (*ParsedContent, error) {
 	}
 
 	result.HasMarkers = true
+
+	// Extract content before the generated section
+	if startIdx > 0 {
+		result.PreContent = content[:startIdx]
+	}
 
 	// Extract generated content (including markers)
 	result.GeneratedContent = content[startIdx : endIdx+len(GeneratedEndMarker)]
