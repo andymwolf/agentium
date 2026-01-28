@@ -231,27 +231,27 @@ type Controller struct {
 	logger                 *log.Logger
 	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
-	systemPrompt           string                 // Loaded SYSTEM.md content
-	projectPrompt          string                 // Loaded .agentium/AGENT.md content (may be empty)
-	taskQueue              []TaskQueueItem        // Ordered queue: PRs first, then issues
-	issueDetails           []issueDetail          // Fetched issue details for prompt building
-	prDetails              []prWithReviews        // Fetched PR details for prompt building
-	prDetailsByNumber      map[string]*prWithReviews  // O(1) lookup by PR number string
-	issueDetailsByNumber   map[string]*issueDetail    // O(1) lookup by issue number string
-	activeTask             string                 // Current task ID being focused on
-	activeTaskType         string                 // "pr" or "issue"
-	activeTaskExistingWork *agent.ExistingWork    // Existing work detected for active task (issues only)
-	skillSelector          *skills.Selector       // Phase-aware skill selector (nil = legacy mode)
-	memoryStore            *memory.Store          // Persistent memory store (nil = disabled)
-	handoffStore           *handoff.Store         // Structured handoff store (nil = disabled)
-	handoffBuilder         *handoff.Builder       // Phase input builder (nil = disabled)
-	handoffParser          *handoff.Parser        // Handoff signal parser (nil = disabled)
-	handoffValidator       *handoff.Validator     // Handoff validation (nil = disabled)
-	modelRouter            *routing.Router        // Phase-to-model routing (nil = no routing)
-	depGraph               *DependencyGraph       // Inter-issue dependency graph (nil = no dependencies)
-	adapters               map[string]agent.Agent // All initialized adapters (for multi-adapter routing)
-	orchestrator           *SubTaskOrchestrator   // Sub-task delegation orchestrator (nil = disabled)
-	metadataUpdater        gcp.MetadataUpdater    // Instance metadata updater (nil if unavailable)
+	systemPrompt           string                    // Loaded SYSTEM.md content
+	projectPrompt          string                    // Loaded .agentium/AGENT.md content (may be empty)
+	taskQueue              []TaskQueueItem           // Ordered queue: PRs first, then issues
+	issueDetails           []issueDetail             // Fetched issue details for prompt building
+	prDetails              []prWithReviews           // Fetched PR details for prompt building
+	prDetailsByNumber      map[string]*prWithReviews // O(1) lookup by PR number string
+	issueDetailsByNumber   map[string]*issueDetail   // O(1) lookup by issue number string
+	activeTask             string                    // Current task ID being focused on
+	activeTaskType         string                    // "pr" or "issue"
+	activeTaskExistingWork *agent.ExistingWork       // Existing work detected for active task (issues only)
+	skillSelector          *skills.Selector          // Phase-aware skill selector (nil = legacy mode)
+	memoryStore            *memory.Store             // Persistent memory store (nil = disabled)
+	handoffStore           *handoff.Store            // Structured handoff store (nil = disabled)
+	handoffBuilder         *handoff.Builder          // Phase input builder (nil = disabled)
+	handoffParser          *handoff.Parser           // Handoff signal parser (nil = disabled)
+	handoffValidator       *handoff.Validator        // Handoff validation (nil = disabled)
+	modelRouter            *routing.Router           // Phase-to-model routing (nil = no routing)
+	depGraph               *DependencyGraph          // Inter-issue dependency graph (nil = no dependencies)
+	adapters               map[string]agent.Agent    // All initialized adapters (for multi-adapter routing)
+	orchestrator           *SubTaskOrchestrator      // Sub-task delegation orchestrator (nil = disabled)
+	metadataUpdater        gcp.MetadataUpdater       // Instance metadata updater (nil if unavailable)
 
 	// Repo visibility cache (for gist creation)
 	repoVisibilityChecked bool // True after first visibility check
