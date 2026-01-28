@@ -245,13 +245,24 @@ agentium destroy agentium-abc12345
 
 ## Project-Specific Agent Instructions
 
-You can provide custom instructions to the AI agent by creating a `.agentium/AGENT.md` file in your repository root. This file is automatically included in the agent's system prompt when a session runs.
+The `agentium init` command automatically generates a `.agentium/AGENT.md` file by scanning your project. This file is included in the agent's system prompt when a session runs.
 
-Common things to include:
-- Build and test commands for your project
+Auto-detected information includes:
+- Primary language and framework
+- Build, test, and lint commands
+- Project structure (source dirs, test dirs, entry points)
+- CI/CD configuration
+
+You can customize the generated file by adding your own sections:
 - Coding conventions and style preferences
 - Architecture notes and important patterns
 - Off-limits areas (files the agent should not modify)
+
+To regenerate AGENT.md after making project changes:
+
+```bash
+agentium refresh
+```
 
 See the [Configuration Reference](configuration.md#project-specific-agent-instructions) for a detailed example.
 
