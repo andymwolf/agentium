@@ -11,6 +11,7 @@ import (
 	"github.com/andywolf/agentium/internal/agentmd"
 	"github.com/andywolf/agentium/internal/cli/wizard"
 	"github.com/andywolf/agentium/internal/scanner"
+	"github.com/andywolf/agentium/internal/skills"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -104,6 +105,12 @@ func initProject(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to generate AGENT.md: %w", err)
 		}
 	}
+
+	// Install Claude Code skills
+	if err := skills.InstallProjectSkills(cwd, force); err != nil {
+		return fmt.Errorf("failed to install skills: %w", err)
+	}
+	fmt.Println("Installed Claude Code skills to .claude/skills/")
 
 	// Check CLI availability
 	checkCLIAvailability()
@@ -290,4 +297,7 @@ func printNextSteps(skippedAgentMD bool) {
 		fmt.Println("  4. Review and customize .agentium/AGENT.md")
 	}
 	fmt.Println("  5. Run 'agentium run --issues 1,2,3' to start a session")
+	fmt.Println()
+	fmt.Println("Installed skills:")
+	fmt.Println("  - /gh-issues: Create GitHub issues instead of implementing code")
 }
