@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     build-essential \
     sudo \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
