@@ -216,7 +216,6 @@ type Controller struct {
 	startTime              time.Time
 	maxDuration            time.Duration
 	gitHubToken            string
-	completed              map[string]bool
 	pushedChanges          bool // Tracks if changes were pushed (for PR review sessions)
 	dockerAuthed           bool // Tracks if docker login to GHCR was done
 	taskStates             map[string]*TaskState
@@ -313,7 +312,6 @@ func New(config SessionConfig) (*Controller, error) {
 		workDir:         workDir,
 		iteration:       0,
 		maxDuration:     maxDuration,
-		completed:       make(map[string]bool),
 		taskStates:      make(map[string]*TaskState),
 		logger:          log.New(os.Stdout, "[controller] ", log.LstdFlags),
 		cloudLogger:     cloudLogger,
@@ -597,11 +595,6 @@ func (c *Controller) Run(ctx context.Context) error {
 		// Update instance metadata with current session status
 		c.updateInstanceMetadata(ctx)
 
-		// Update completion state (legacy)
-		for _, task := range result.TasksCompleted {
-			c.completed[task] = true
-		}
-
 		// Check PRs created (for issue sessions)
 		if len(result.PRsCreated) > 0 {
 			c.logInfo("PRs created: %v", result.PRsCreated)
@@ -699,7 +692,7 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 	}
 
 	// Fallback to gcloud CLI
-	cmd := exec.CommandContext(ctx, "gcloud", "secrets", "versions", "access", "latest",
+	cmd := c.execCommand(ctx, "gcloud", "secrets", "versions", "access", "latest",
 		"--secret", filepath.Base(secretPath),
 	)
 
@@ -820,12 +813,12 @@ func (c *Controller) cloneRepository(ctx context.Context) error {
 		// Use credential helper to pass token securely via environment variable
 		// GitHub App installation tokens require x-access-token username format
 		credentialHelper := "!f() { echo username=x-access-token; echo \"password=$GIT_TOKEN\"; }; f"
-		cmd = exec.CommandContext(ctx, "git",
+		cmd = c.execCommand(ctx, "git",
 			"-c", fmt.Sprintf("credential.helper=%s", credentialHelper),
 			"clone", repo, c.workDir)
 		cmd.Env = append(os.Environ(), "GIT_TOKEN="+c.gitHubToken)
 	} else {
-		cmd = exec.CommandContext(ctx, "git", "clone", repo, c.workDir)
+		cmd = c.execCommand(ctx, "git", "clone", repo, c.workDir)
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -889,7 +882,7 @@ func (c *Controller) ensureWorkspaceOwnership() error {
 // configureGitSafeDirectory adds the workspace to git's safe.directory config
 // as a fallback for ownership issues.
 func (c *Controller) configureGitSafeDirectory(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "git", "config", "--global", "--add", "safe.directory", c.workDir)
+	cmd := c.execCommand(ctx, "git", "config", "--global", "--add", "safe.directory", c.workDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to configure git safe.directory: %v (%s)", err, string(output))
 		return err
@@ -930,7 +923,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 
 	for _, taskID := range c.config.Tasks {
 		// Use gh CLI to fetch issue
-		cmd := exec.CommandContext(ctx, "gh", "issue", "view", taskID,
+		cmd := c.execCommand(ctx, "gh", "issue", "view", taskID,
 			"--repo", c.config.Repository,
 			"--json", "number,title,body",
 		)
@@ -967,7 +960,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 
 	for _, prNumber := range c.config.PRs {
 		// Fetch basic PR info
-		cmd := exec.CommandContext(ctx, "gh", "pr", "view", prNumber,
+		cmd := c.execCommand(ctx, "gh", "pr", "view", prNumber,
 			"--repo", c.config.Repository,
 			"--json", "number,title,body,headRefName",
 		)
@@ -989,7 +982,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 
 		// Fetch reviews requesting changes
 		repoPath := c.config.Repository
-		reviewCmd := exec.CommandContext(ctx, "gh", "api",
+		reviewCmd := c.execCommand(ctx, "gh", "api",
 			fmt.Sprintf("repos/%s/pulls/%s/reviews", repoPath, prNumber),
 			"--jq", `[.[] | select(.state == "CHANGES_REQUESTED" or .state == "COMMENTED") | {state: .state, body: .body}]`,
 		)
@@ -1003,7 +996,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 		}
 
 		// Fetch inline review comments
-		commentCmd := exec.CommandContext(ctx, "gh", "api",
+		commentCmd := c.execCommand(ctx, "gh", "api",
 			fmt.Sprintf("repos/%s/pulls/%s/comments", repoPath, prNumber),
 			"--jq", `[.[] | {path: .path, line: .line, body: .body, diffHunk: .diff_hunk}]`,
 		)
@@ -1059,14 +1052,14 @@ func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
 
 	// Checkout PR branch
 	c.logInfo("Checking out PR branch: %s", prData.Detail.HeadRefName)
-	checkoutCmd := exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
+	checkoutCmd := c.execCommand(ctx, "git", "checkout", prData.Detail.HeadRefName)
 	checkoutCmd.Dir = c.workDir
 	if err := checkoutCmd.Run(); err != nil {
 		// Try fetching first (ignore error - subsequent checkout will fail if needed)
-		fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin", prData.Detail.HeadRefName)
+		fetchCmd := c.execCommand(ctx, "git", "fetch", "origin", prData.Detail.HeadRefName)
 		fetchCmd.Dir = c.workDir
 		_ = fetchCmd.Run()
-		checkoutCmd = exec.CommandContext(ctx, "git", "checkout", prData.Detail.HeadRefName)
+		checkoutCmd = c.execCommand(ctx, "git", "checkout", prData.Detail.HeadRefName)
 		checkoutCmd.Dir = c.workDir
 		if err := checkoutCmd.Run(); err != nil {
 			return fmt.Errorf("failed to checkout PR branch %s: %w", prData.Detail.HeadRefName, err)
@@ -1139,7 +1132,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 	// Check for existing open PRs with branch matching agentium/issue-<N>
 	// Use --search to find matching PRs regardless of age (avoids missing older PRs beyond default limit)
 	branchPrefix := fmt.Sprintf("agentium/issue-%s-", issueNumber)
-	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
+	cmd := c.execCommand(ctx, "gh", "pr", "list",
 		"--repo", c.config.Repository,
 		"--state", "open",
 		"--search", fmt.Sprintf("head:%s", branchPrefix),
@@ -1173,7 +1166,7 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 	}
 
 	// No PR found; check for existing remote branches
-	cmd = exec.CommandContext(ctx, "git", "branch", "-r", "--list",
+	cmd = c.execCommand(ctx, "git", "branch", "-r", "--list",
 		fmt.Sprintf("origin/agentium/issue-%s-*", issueNumber),
 	)
 	cmd.Dir = c.workDir
@@ -1407,19 +1400,6 @@ func (c *Controller) shouldTerminate() bool {
 		return true
 	}
 
-	// Legacy fallback: issue sessions check if all tasks are complete
-	allComplete := true
-	for _, task := range c.config.Tasks {
-		if !c.completed[task] {
-			allComplete = false
-			break
-		}
-	}
-	if allComplete && len(c.config.Tasks) > 0 {
-		c.logger.Println("All tasks completed (legacy detection)")
-		return true
-	}
-
 	return false
 }
 
@@ -1606,13 +1586,14 @@ func (c *Controller) emitFinalLogs() {
 	c.logInfo("Duration: %s", time.Since(c.startTime).Round(time.Second))
 	c.logInfo("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
 
+	// Count completed tasks using taskStates
 	completedCount := 0
-	for _, task := range c.config.Tasks {
-		if c.completed[task] {
+	for _, state := range c.taskStates {
+		if state.Phase == PhaseComplete || state.Phase == PhaseNothingToDo {
 			completedCount++
 		}
 	}
-	c.logInfo("Tasks completed: %d/%d", completedCount, len(c.config.Tasks))
+	c.logInfo("Tasks completed: %d/%d", completedCount, len(c.taskStates))
 
 	// Log task state summary
 	for taskID, state := range c.taskStates {
