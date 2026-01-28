@@ -209,15 +209,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		default:
 		}
 
-		// Check global termination conditions
-		if c.shouldTerminate() {
-			c.logInfo("Phase loop: global termination condition met")
-			return nil
-		}
-
 		currentPhase := state.Phase
 
-		// Terminal phases end the loop
+		// Terminal phases end the loop - check BEFORE shouldTerminate() to ensure
+		// finalizeDraftPR() is called when PhaseComplete is reached. shouldTerminate()
+		// also returns true for terminal phases, so if we checked it first, we'd exit
+		// the loop without finalizing the PR. See issue #284.
 		if currentPhase == PhaseComplete || currentPhase == PhaseBlocked || currentPhase == PhaseNothingToDo {
 			// Finalize draft PR when completing successfully
 			if currentPhase == PhaseComplete && state.PRNumber != "" {
@@ -226,6 +223,15 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 			}
 			c.logInfo("Phase loop: reached terminal phase %s", currentPhase)
+			return nil
+		}
+
+		// Check global termination conditions (iteration limits, time limits)
+		// Note: This is checked AFTER terminal phase handling to avoid the race
+		// condition where shouldTerminate() sees PhaseComplete and exits before
+		// finalizeDraftPR() can run.
+		if c.shouldTerminate() {
+			c.logInfo("Phase loop: global termination condition met")
 			return nil
 		}
 
