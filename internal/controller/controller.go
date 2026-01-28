@@ -236,6 +236,8 @@ type Controller struct {
 	taskQueue              []TaskQueueItem        // Ordered queue: PRs first, then issues
 	issueDetails           []issueDetail          // Fetched issue details for prompt building
 	prDetails              []prWithReviews        // Fetched PR details for prompt building
+	prDetailsByNumber      map[string]*prWithReviews  // O(1) lookup by PR number string
+	issueDetailsByNumber   map[string]*issueDetail    // O(1) lookup by issue number string
 	activeTask             string                 // Current task ID being focused on
 	activeTaskType         string                 // "pr" or "issue"
 	activeTaskExistingWork *agent.ExistingWork    // Existing work detected for active task (issues only)
@@ -1050,6 +1052,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 	c.logInfo("Fetching issue details")
 
 	issues := make([]issueDetail, 0, len(c.config.Tasks))
+	c.issueDetailsByNumber = make(map[string]*issueDetail, len(c.config.Tasks))
 
 	for _, taskID := range c.config.Tasks {
 		// Use gh CLI to fetch issue
@@ -1074,6 +1077,12 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 		issues = append(issues, issue)
 	}
 
+	// Build O(1) lookup map after collecting all issues
+	for i := range issues {
+		issueNumStr := fmt.Sprintf("%d", issues[i].Number)
+		c.issueDetailsByNumber[issueNumStr] = &issues[i]
+	}
+
 	return issues
 }
 
@@ -1087,6 +1096,7 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 	c.logInfo("Fetching PR details")
 
 	prs := make([]prWithReviews, 0, len(c.config.PRs))
+	c.prDetailsByNumber = make(map[string]*prWithReviews, len(c.config.PRs))
 
 	for _, prNumber := range c.config.PRs {
 		// Fetch basic PR info
@@ -1142,6 +1152,12 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 		prs = append(prs, prWithRev)
 	}
 
+	// Build O(1) lookup map after collecting all PRs
+	for i := range prs {
+		prNumStr := fmt.Sprintf("%d", prs[i].Detail.Number)
+		c.prDetailsByNumber[prNumStr] = &prs[i]
+	}
+
 	return prs
 }
 
@@ -1167,15 +1183,8 @@ func (c *Controller) nextQueuedTask() *TaskQueueItem {
 
 // preparePRTask checks out the PR branch and builds the prompt for a single PR review task.
 func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
-	// Find the PR detail from pre-fetched data
-	var prData *prWithReviews
-	for i := range c.prDetails {
-		if fmt.Sprintf("%d", c.prDetails[i].Detail.Number) == prNumber {
-			prData = &c.prDetails[i]
-			break
-		}
-	}
-
+	// O(1) lookup for PR detail from pre-fetched data
+	prData := c.prDetailsByNumber[prNumber]
 	if prData == nil {
 		return fmt.Errorf("PR #%s not found in fetched details", prNumber)
 	}
@@ -1322,14 +1331,8 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 
 	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
 
-	// Find the issue detail
-	var issue *issueDetail
-	for i := range c.issueDetails {
-		if fmt.Sprintf("%d", c.issueDetails[i].Number) == issueNumber {
-			issue = &c.issueDetails[i]
-			break
-		}
-	}
+	// O(1) lookup for issue detail
+	issue := c.issueDetailsByNumber[issueNumber]
 
 	sb.WriteString(fmt.Sprintf("## Your Task: Issue #%s\n\n", issueNumber))
 	if issue != nil {
@@ -1794,18 +1797,17 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 		return nil
 	}
 
-	// Find the issue in issueDetails
-	for _, issue := range c.issueDetails {
-		if fmt.Sprintf("%d", issue.Number) == c.activeTask {
-			return &handoff.IssueContext{
-				Number:     issue.Number,
-				Title:      issue.Title,
-				Body:       issue.Body,
-				Repository: c.config.Repository,
-			}
-		}
+	// O(1) lookup for issue in issueDetails
+	issue := c.issueDetailsByNumber[c.activeTask]
+	if issue == nil {
+		return nil
 	}
-	return nil
+	return &handoff.IssueContext{
+		Number:     issue.Number,
+		Title:      issue.Title,
+		Body:       issue.Body,
+		Repository: c.config.Repository,
+	}
 }
 
 // determineActivePhase returns the current phase for the active task.
@@ -1841,32 +1843,32 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
+	// Initialize IterationContext once at session creation to avoid repeated nil checks
 	session := &agent.Session{
-		ID:             c.config.ID,
-		Repository:     c.config.Repository,
-		Tasks:          c.config.Tasks,
-		WorkDir:        c.workDir,
-		GitHubToken:    c.gitHubToken,
-		MaxIterations:  c.config.MaxIterations,
-		MaxDuration:    c.config.MaxDuration,
-		Prompt:         prompt,
-		Metadata:       make(map[string]string),
-		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
-		SystemPrompt:   c.systemPrompt,
-		ProjectPrompt:  c.projectPrompt,
-		ActiveTask:     c.activeTask,
-		ExistingWork:   c.activeTaskExistingWork,
-		Interactive:    c.config.Interactive,
+		ID:               c.config.ID,
+		Repository:       c.config.Repository,
+		Tasks:            c.config.Tasks,
+		WorkDir:          c.workDir,
+		GitHubToken:      c.gitHubToken,
+		MaxIterations:    c.config.MaxIterations,
+		MaxDuration:      c.config.MaxDuration,
+		Prompt:           prompt,
+		Metadata:         make(map[string]string),
+		ClaudeAuthMode:   c.config.ClaudeAuth.AuthMode,
+		SystemPrompt:     c.systemPrompt,
+		ProjectPrompt:    c.projectPrompt,
+		ActiveTask:       c.activeTask,
+		ExistingWork:     c.activeTaskExistingWork,
+		Interactive:      c.config.Interactive,
+		IterationContext: &agent.IterationContext{},
 	}
 
 	// Compose phase-aware skills if selector is available
 	if c.skillSelector != nil {
 		phase := c.determineActivePhase()
 		phaseStr := string(phase)
-		session.IterationContext = &agent.IterationContext{
-			Phase:        phaseStr,
-			SkillsPrompt: c.skillSelector.SelectForPhase(phaseStr),
-		}
+		session.IterationContext.Phase = phaseStr
+		session.IterationContext.SkillsPrompt = c.skillSelector.SelectForPhase(phaseStr)
 		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phaseStr))
 	}
 
@@ -1879,9 +1881,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		if err != nil {
 			c.logWarning("Failed to build handoff context for phase %s: %v (falling back to memory)", phase, err)
 		} else if phaseInput != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
 			session.IterationContext.PhaseInput = phaseInput
 			handoffInjected = true
 			c.logInfo("Injected handoff context for phase %s (%d chars)", phase, len(phaseInput))
@@ -1894,9 +1893,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
 			session.IterationContext.MemoryContext = memCtx
 		}
 	}
@@ -1915,9 +1911,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			}
 		}
 		if modelCfg.Model != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
 			session.IterationContext.ModelOverride = modelCfg.Model
 		}
 		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
