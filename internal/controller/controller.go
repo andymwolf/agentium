@@ -156,9 +156,7 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Handoff struct {
-		Enabled bool `json:"enabled,omitempty"`
-	} `json:"handoff,omitempty"`
+	Handoff struct{} `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
 	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
@@ -859,18 +857,16 @@ func (c *Controller) loadPrompts() error {
 		}
 	}
 
-	// Initialize structured handoff store if enabled
-	if c.config.Handoff.Enabled {
-		store, err := handoff.NewStore(c.workDir)
-		if err != nil {
-			c.logWarning("failed to initialize handoff store: %v", err)
-		} else {
-			c.handoffStore = store
-			c.handoffBuilder = handoff.NewBuilder(store)
-			c.handoffParser = handoff.NewParser()
-			c.handoffValidator = handoff.NewValidator()
-			c.logInfo("Handoff store initialized")
-		}
+	// Initialize structured handoff store (always enabled for reviewer context)
+	store, err := handoff.NewStore(c.workDir)
+	if err != nil {
+		c.logWarning("failed to initialize handoff store: %v", err)
+	} else {
+		c.handoffStore = store
+		c.handoffBuilder = handoff.NewBuilder(store)
+		c.handoffParser = handoff.NewParser()
+		c.handoffValidator = handoff.NewValidator()
+		c.logInfo("Handoff store initialized")
 	}
 
 	return nil
@@ -1787,9 +1783,9 @@ func (c *Controller) isPhaseLoopEnabled() bool {
 	return c.config.PhaseLoop != nil && c.config.PhaseLoop.Enabled
 }
 
-// isHandoffEnabled returns true if structured handoff is configured and enabled.
+// isHandoffEnabled returns true if the handoff store is initialized.
 func (c *Controller) isHandoffEnabled() bool {
-	return c.config.Handoff.Enabled && c.handoffStore != nil
+	return c.handoffStore != nil
 }
 
 // buildIssueContext creates a handoff.IssueContext from the active issue details.

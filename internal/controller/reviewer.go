@@ -147,7 +147,7 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	budget := c.judgeContextBudget()
 	output := params.PhaseOutput
 	if len(output) > budget {
-		output = output[:budget] + "\n\n... (output truncated)"
+		output = "... (earlier output truncated)\n\n" + output[len(output)-budget:]
 	}
 	sb.WriteString("```\n")
 	sb.WriteString(output)

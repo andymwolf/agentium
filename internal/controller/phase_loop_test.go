@@ -291,29 +291,9 @@ func TestTruncateForPlan_UTF8Safety(t *testing.T) {
 	}
 }
 
-func TestBuildWorkerHandoffSummary_DisabledHandoff(t *testing.T) {
-	c := &Controller{
-		config: SessionConfig{
-			Handoff: struct {
-				Enabled bool `json:"enabled,omitempty"`
-			}{Enabled: false},
-		},
-		handoffStore: nil,
-	}
-
-	result := c.buildWorkerHandoffSummary("issue:123", PhasePlan, 1)
-	if result != "" {
-		t.Errorf("expected empty result when handoff disabled, got %q", result)
-	}
-}
-
 func TestBuildWorkerHandoffSummary_NoHandoffStore(t *testing.T) {
 	c := &Controller{
-		config: SessionConfig{
-			Handoff: struct {
-				Enabled bool `json:"enabled,omitempty"`
-			}{Enabled: true},
-		},
+		config:       SessionConfig{},
 		handoffStore: nil,
 	}
 
@@ -337,11 +317,7 @@ func TestBuildWorkerHandoffSummary_SkipsStaleIteration(t *testing.T) {
 	})
 
 	c := &Controller{
-		config: SessionConfig{
-			Handoff: struct {
-				Enabled bool `json:"enabled,omitempty"`
-			}{Enabled: true},
-		},
+		config:       SessionConfig{},
 		handoffStore: store,
 	}
 
