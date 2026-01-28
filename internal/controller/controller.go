@@ -784,32 +784,6 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 	return string(output), nil
 }
 
-func (c *Controller) generateInstallationToken(privateKey string) (string, error) {
-	appID := strconv.FormatInt(c.config.GitHub.AppID, 10)
-	installationID := c.config.GitHub.InstallationID
-
-	// Generate JWT for GitHub App authentication
-	jwtGen, err := github.NewJWTGenerator(appID, []byte(privateKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create JWT generator: %w", err)
-	}
-
-	jwt, err := jwtGen.GenerateToken()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate JWT: %w", err)
-	}
-
-	// Exchange JWT for installation access token
-	exchanger := github.NewTokenExchanger()
-	token, err := exchanger.ExchangeToken(jwt, installationID)
-	if err != nil {
-		return "", fmt.Errorf("failed to exchange token: %w", err)
-	}
-
-	c.logger.Printf("Generated installation token (expires at %s)", token.ExpiresAt.Format(time.RFC3339))
-	return token.Token, nil
-}
-
 func (c *Controller) loadPrompts() error {
 	// Load skills manifest (required)
 	manifest, err := skills.LoadManifest()
