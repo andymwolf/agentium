@@ -42,7 +42,8 @@ func refreshAgentMD(cmd *cobra.Command, args []string) error {
 
 	// Check that .agentium.yaml exists
 	configPath := filepath.Join(cwd, ".agentium.yaml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+	_, err = os.Stat(configPath)
+	if os.IsNotExist(err) {
 		return fmt.Errorf(".agentium.yaml not found. Run 'agentium init' first")
 	}
 
@@ -53,17 +54,19 @@ func refreshAgentMD(cmd *cobra.Command, args []string) error {
 	agentMDPath := filepath.Join(cwd, agentmd.AgentiumDir, agentmd.AgentMDFile)
 	var hasCustomContent bool
 
-	if existingContent, err := os.ReadFile(agentMDPath); err == nil {
+	existingContent, readErr := os.ReadFile(agentMDPath)
+	if readErr == nil {
 		parser := &agentmd.Parser{}
-		parsed, err := parser.Parse(string(existingContent))
-		if err == nil {
+		parsed, parseErr := parser.Parse(string(existingContent))
+		if parseErr == nil {
 			hasCustomContent = parsed.HasCustomContent()
 		}
 	}
 
 	// Confirm regeneration if custom content exists
 	if hasCustomContent && !force && !nonInteractive {
-		confirmed, err := wizard.ConfirmRegeneration(hasCustomContent)
+		var confirmed bool
+		confirmed, err = wizard.ConfirmRegeneration(hasCustomContent)
 		if err != nil {
 			return err
 		}
@@ -95,7 +98,8 @@ func refreshAgentMD(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := gen.WriteToProject(cwd, info); err != nil {
+	err = gen.WriteToProject(cwd, info)
+	if err != nil {
 		return fmt.Errorf("failed to write AGENT.md: %w", err)
 	}
 

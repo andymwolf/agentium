@@ -86,7 +86,8 @@ func TestGenerator_WriteToProject(t *testing.T) {
 	}
 
 	// First write - should create file with custom section
-	if err := gen.WriteToProject(tmpDir, info); err != nil {
+	err = gen.WriteToProject(tmpDir, info)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,13 +103,15 @@ func TestGenerator_WriteToProject(t *testing.T) {
 
 	// Modify custom section
 	modifiedContent := string(content) + "\n\n## My Custom Section\n\nThis should be preserved."
-	if err := os.WriteFile(agentMDPath, []byte(modifiedContent), 0644); err != nil {
+	err = os.WriteFile(agentMDPath, []byte(modifiedContent), 0644)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Regenerate - should preserve custom content
 	info.Name = "updated-project"
-	if err := gen.WriteToProject(tmpDir, info); err != nil {
+	err = gen.WriteToProject(tmpDir, info)
+	if err != nil {
 		t.Fatal(err)
 	}
 

@@ -108,7 +108,7 @@ func initProject(cmd *cobra.Command, args []string) error {
 	// Check CLI availability
 	checkCLIAvailability()
 
-	printNextSteps(configExists, skipAgentMD)
+	printNextSteps(skipAgentMD)
 
 	return nil
 }
@@ -171,13 +171,15 @@ func generateAgentMD(rootDir string, greenfield, nonInteractive bool) error {
 
 		// Write greenfield AGENT.md
 		agentiumDir := filepath.Join(rootDir, agentmd.AgentiumDir)
-		if err := os.MkdirAll(agentiumDir, 0755); err != nil {
+		err = os.MkdirAll(agentiumDir, 0755)
+		if err != nil {
 			return err
 		}
 
 		content := gen.GenerateGreenfield(info.Name)
 		agentMDPath := filepath.Join(agentiumDir, agentmd.AgentMDFile)
-		if err := os.WriteFile(agentMDPath, []byte(content), 0644); err != nil {
+		err = os.WriteFile(agentMDPath, []byte(content), 0644)
+		if err != nil {
 			return err
 		}
 
@@ -276,7 +278,7 @@ func getShellConfig(shell string) string {
 	}
 }
 
-func printNextSteps(configExisted, skippedAgentMD bool) {
+func printNextSteps(skippedAgentMD bool) {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Update the repository URL in .agentium.yaml")

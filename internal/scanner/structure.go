@@ -21,14 +21,14 @@ var sourceDirNames = map[string]bool{
 
 // Common test directory names
 var testDirNames = map[string]bool{
-	"test":       true,
-	"tests":      true,
-	"spec":       true,
-	"specs":      true,
-	"__tests__":  true,
-	"test_data":  true,
-	"testdata":   true,
-	"e2e":        true,
+	"test":        true,
+	"tests":       true,
+	"spec":        true,
+	"specs":       true,
+	"__tests__":   true,
+	"test_data":   true,
+	"testdata":    true,
+	"e2e":         true,
 	"integration": true,
 }
 

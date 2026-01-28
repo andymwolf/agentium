@@ -221,7 +221,7 @@ func TestDetectCI(t *testing.T) {
 		{
 			name: "GitHub Actions",
 			setup: func(dir string) {
-				os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0755)
+				_ = os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0755)
 			},
 			wantHasCI:  true,
 			wantSystem: "github-actions",
@@ -229,7 +229,7 @@ func TestDetectCI(t *testing.T) {
 		{
 			name: "GitLab CI",
 			setup: func(dir string) {
-				os.WriteFile(filepath.Join(dir, ".gitlab-ci.yml"), []byte(""), 0644)
+				_ = os.WriteFile(filepath.Join(dir, ".gitlab-ci.yml"), []byte(""), 0644)
 			},
 			wantHasCI:  true,
 			wantSystem: "gitlab-ci",

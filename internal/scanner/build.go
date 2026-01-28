@@ -192,7 +192,7 @@ func parseMakefileTargets(rootDir string) []string {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var targets []string
 	targetRegex := regexp.MustCompile(`^([a-zA-Z_][a-zA-Z0-9_-]*):`)

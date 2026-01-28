@@ -4,21 +4,21 @@ package scanner
 
 // LanguageInfo contains information about a detected programming language.
 type LanguageInfo struct {
-	Name       string  `json:"name"`
-	FileCount  int     `json:"file_count"`
-	Percentage float64 `json:"percentage"`
+	Name       string   `json:"name"`
+	FileCount  int      `json:"file_count"`
+	Percentage float64  `json:"percentage"`
 	Extensions []string `json:"extensions"`
 }
 
 // ProjectStructure contains information about the project's directory layout.
 type ProjectStructure struct {
-	SourceDirs   []string `json:"source_dirs"`
-	TestDirs     []string `json:"test_dirs"`
-	ConfigFiles  []string `json:"config_files"`
-	EntryPoints  []string `json:"entry_points"`
-	HasDocker    bool     `json:"has_docker"`
-	HasCI        bool     `json:"has_ci"`
-	CISystem     string   `json:"ci_system,omitempty"`
+	SourceDirs  []string `json:"source_dirs"`
+	TestDirs    []string `json:"test_dirs"`
+	ConfigFiles []string `json:"config_files"`
+	EntryPoints []string `json:"entry_points"`
+	HasDocker   bool     `json:"has_docker"`
+	HasCI       bool     `json:"has_ci"`
+	CISystem    string   `json:"ci_system,omitempty"`
 }
 
 // ProjectInfo contains all detected information about a project.

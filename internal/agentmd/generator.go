@@ -17,8 +17,8 @@ const (
 	GeneratedEndMarker   = "<!-- agentium:generated:end -->"
 
 	// Directory and file names
-	AgentiumDir  = ".agentium"
-	AgentMDFile  = "AGENT.md"
+	AgentiumDir = ".agentium"
+	AgentMDFile = "AGENT.md"
 )
 
 // Generator creates AGENT.md files from project info.
