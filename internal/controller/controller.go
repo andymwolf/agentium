@@ -156,7 +156,7 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Handoff struct{} `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
+	Handoff    struct{}              `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
 	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
