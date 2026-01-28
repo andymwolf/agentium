@@ -558,7 +558,7 @@ func TestNextQueuedTask_FullSequence(t *testing.T) {
 				i, got.Type, got.ID, expected.typ, expected.id)
 		}
 		// Mark current task as complete to advance
-		taskID := fmt.Sprintf("%s:%s", got.Type, got.ID)
+		taskID := taskKey(got.Type, got.ID)
 		c.taskStates[taskID].Phase = PhaseComplete
 	}
 
@@ -1055,7 +1055,7 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			taskID := fmt.Sprintf("%s:24", tt.taskType)
+			taskID := taskKey(tt.taskType, "24")
 			c := &Controller{
 				taskStates: map[string]*TaskState{
 					taskID: {ID: "24", Type: tt.taskType, Phase: tt.initialPhase},
