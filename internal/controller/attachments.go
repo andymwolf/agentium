@@ -16,7 +16,8 @@ const CommentAttachmentThreshold = 1000
 // is uploaded as a gist attachment instead of being posted directly.
 const PlanAttachmentThreshold = 2000
 
-// createGistAttachment uploads content as a public gist using `gh gist create`.
+// createGistAttachment uploads content as a gist using `gh gist create`.
+// For public repos, creates a public gist. For private repos, creates a secret gist.
 // Returns the gist URL on success, or an empty string on failure (graceful fallback).
 // This is best-effort: failures are logged but never cause the controller to crash.
 func (c *Controller) createGistAttachment(ctx context.Context, filename, content string) string {
@@ -35,12 +36,14 @@ func (c *Controller) createGistAttachment(ctx context.Context, filename, content
 	}
 	tmpFile.Close()
 
-	// Create gist via gh CLI
-	cmd := exec.CommandContext(ctx, "gh", "gist", "create",
-		"--public",
-		"--filename", filename,
-		tmpFile.Name(),
-	)
+	// Build gist create command - use --public only for public repos
+	args := []string{"gist", "create", "--filename", filename}
+	if c.isRepoPublic(ctx) {
+		args = append(args, "--public")
+	}
+	args = append(args, tmpFile.Name())
+
+	cmd := exec.CommandContext(ctx, "gh", args...)
 	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
 
@@ -55,6 +58,44 @@ func (c *Controller) createGistAttachment(ctx context.Context, filename, content
 		c.logInfo("Created gist attachment: %s", gistURL)
 	}
 	return gistURL
+}
+
+// isRepoPublic checks if the configured repository is public.
+// The result is cached after the first check since repo visibility doesn't change during a session.
+// Returns false if the check fails (fail-safe: default to secret gists).
+func (c *Controller) isRepoPublic(ctx context.Context) bool {
+	// Return cached result if already checked
+	if c.repoVisibilityChecked {
+		return c.repoIsPublic
+	}
+
+	cmd := exec.CommandContext(ctx, "gh", "repo", "view", c.config.Repository,
+		"--json", "visibility",
+		"--jq", ".visibility",
+	)
+	cmd.Env = c.envWithGitHubToken()
+	cmd.Dir = c.workDir
+
+	output, err := cmd.Output()
+	if err != nil {
+		c.logWarning("failed to check repo visibility: %v (defaulting to secret gist)", err)
+		// Cache the failure result to avoid repeated failed API calls
+		c.repoVisibilityChecked = true
+		c.repoIsPublic = false
+		return false // Fail-safe: default to secret gist
+	}
+
+	visibility := strings.TrimSpace(strings.ToUpper(string(output)))
+	c.repoIsPublic = visibility == "PUBLIC"
+	c.repoVisibilityChecked = true
+
+	if c.repoIsPublic {
+		c.logInfo("Repository %s is public, gists will be public", c.config.Repository)
+	} else {
+		c.logInfo("Repository %s is private, gists will be secret", c.config.Repository)
+	}
+
+	return c.repoIsPublic
 }
 
 // contentNeedsAttachment returns true if the content length (in runes)
