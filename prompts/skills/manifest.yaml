@@ -84,6 +84,11 @@ skills:
     priority: 91
     phases:
       - IMPLEMENT_REVIEW
+
+  - name: docs_reviewer
+    file: docs_reviewer.md
+    priority: 92
+    phases:
       - DOCS_REVIEW
 
   - name: judge

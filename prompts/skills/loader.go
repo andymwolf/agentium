@@ -50,6 +50,9 @@ var embeddedPlanReviewer string
 //go:embed code_reviewer.md
 var embeddedCodeReviewer string
 
+//go:embed docs_reviewer.md
+var embeddedDocsReviewer string
+
 //go:embed judge.md
 var embeddedJudge string
 
@@ -68,6 +71,7 @@ var skillFiles = map[string]string{
 	"pr_review.md":      embeddedPRReview,
 	"plan_reviewer.md":  embeddedPlanReviewer,
 	"code_reviewer.md":  embeddedCodeReviewer,
+	"docs_reviewer.md":  embeddedDocsReviewer,
 	"judge.md":          embeddedJudge,
 }
 

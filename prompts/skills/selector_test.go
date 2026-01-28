@@ -39,6 +39,14 @@ func newTestSkills() []Skill {
 			Entry:   SkillEntry{Name: "pr_review", File: "pr_review.md", Priority: 80, Phases: []string{"ANALYZE", "PUSH"}},
 			Content: "PR REVIEW CONTENT",
 		},
+		{
+			Entry:   SkillEntry{Name: "code_reviewer", File: "code_reviewer.md", Priority: 91, Phases: []string{"IMPLEMENT_REVIEW"}},
+			Content: "CODE REVIEWER CONTENT",
+		},
+		{
+			Entry:   SkillEntry{Name: "docs_reviewer", File: "docs_reviewer.md", Priority: 92, Phases: []string{"DOCS_REVIEW"}},
+			Content: "DOCS REVIEWER CONTENT",
+		},
 	}
 }
 
@@ -132,6 +140,48 @@ func TestSelector_SelectForPhase_Push(t *testing.T) {
 	}
 }
 
+func TestSelector_SelectForPhase_DocsReview(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectForPhase("DOCS_REVIEW")
+
+	// Should include universal skills + docs_reviewer
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "DOCS REVIEWER CONTENT"}
+	for _, exp := range expected {
+		if !strings.Contains(result, exp) {
+			t.Errorf("SelectForPhase(DOCS_REVIEW) missing %q", exp)
+		}
+	}
+
+	// Should NOT include code_reviewer - this is the key assertion for issue #285
+	excluded := []string{"CODE REVIEWER CONTENT", "PLANNING CONTENT", "IMPLEMENT CONTENT"}
+	for _, exc := range excluded {
+		if strings.Contains(result, exc) {
+			t.Errorf("SelectForPhase(DOCS_REVIEW) should not contain %q", exc)
+		}
+	}
+}
+
+func TestSelector_SelectForPhase_ImplementReview(t *testing.T) {
+	s := NewSelector(newTestSkills())
+	result := s.SelectForPhase("IMPLEMENT_REVIEW")
+
+	// Should include universal skills + code_reviewer
+	expected := []string{"SAFETY CONTENT", "ENVIRONMENT CONTENT", "STATUS_SIGNALS CONTENT", "CODE REVIEWER CONTENT"}
+	for _, exp := range expected {
+		if !strings.Contains(result, exp) {
+			t.Errorf("SelectForPhase(IMPLEMENT_REVIEW) missing %q", exp)
+		}
+	}
+
+	// Should NOT include docs_reviewer
+	excluded := []string{"DOCS REVIEWER CONTENT", "PLANNING CONTENT", "IMPLEMENT CONTENT"}
+	for _, exc := range excluded {
+		if strings.Contains(result, exc) {
+			t.Errorf("SelectForPhase(IMPLEMENT_REVIEW) should not contain %q", exc)
+		}
+	}
+}
+
 func TestSelector_SelectForPhase_UnknownPhase(t *testing.T) {
 	s := NewSelector(newTestSkills())
 	result := s.SelectForPhase("UNKNOWN")
@@ -193,6 +243,8 @@ func TestSelector_SkillsForPhase(t *testing.T) {
 		{"ANALYZE", []string{"safety", "environment", "status_signals", "planning", "pr_review"}},
 		{"PR_CREATION", []string{"safety", "environment", "status_signals", "pr_creation"}},
 		{"PUSH", []string{"safety", "environment", "status_signals", "pr_review"}},
+		{"IMPLEMENT_REVIEW", []string{"safety", "environment", "status_signals", "code_reviewer"}},
+		{"DOCS_REVIEW", []string{"safety", "environment", "status_signals", "docs_reviewer"}},
 		{"UNKNOWN", []string{"safety", "environment", "status_signals"}},
 	}
 
