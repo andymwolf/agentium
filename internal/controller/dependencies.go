@@ -222,7 +222,7 @@ func (g *DependencyGraph) detectAndBreakCycles() []IssueDependency {
 
 // topologicalSort performs Kahn's algorithm to produce a topological ordering.
 // Must be called after detectAndBreakCycles to ensure the graph is a DAG.
-func (g *DependencyGraph) topologicalSort() error {
+func (g *DependencyGraph) topologicalSort() {
 	// Calculate in-degree for each node
 	inDegree := make(map[string]int)
 	for node := range g.parents {
@@ -282,7 +282,6 @@ func (g *DependencyGraph) topologicalSort() error {
 	}
 
 	g.sortedOrder = sorted
-	return nil
 }
 
 // SortedIssueIDs returns the topologically sorted list of issue IDs.
