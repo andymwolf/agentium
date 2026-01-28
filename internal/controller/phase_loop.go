@@ -248,6 +248,14 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				return nil
 			}
 
+			// Refresh GitHub token if needed before each phase iteration
+			// This handles long-running phases that might exceed token lifetime
+			if err := c.refreshGitHubTokenIfNeeded(); err != nil {
+				c.logError("Phase %s: failed to refresh GitHub token: %v", currentPhase, err)
+				state.Phase = PhaseBlocked
+				return fmt.Errorf("failed to refresh GitHub token: %w", err)
+			}
+
 			state.PhaseIteration = iter
 			c.logInfo("Phase %s: iteration %d/%d", currentPhase, iter, maxIter)
 
