@@ -67,12 +67,7 @@ Based on open issues:
 - AWS and Azure support
 - Multi-instance Terraform workspaces
 
-**Agent Ecosystem**
-- Codex CLI adapter
-- Custom agent templates
-
 **Intelligence & Routing**
-- Per-phase cost tracking
 - Capability-based model selection
 
 **Developer Experience**
@@ -83,10 +78,12 @@ See all [open issues](https://github.com/andymwolf/agentium/issues) for the comp
 
 ## Limitations
 
-- **No Dependency Management** — Issues are processed independently
 - **Single Cloud Provider** — Currently GCP only (AWS/Azure planned)
 - **MacOS-Only OAuth Export** — Claude Code auth export is MacOS-specific
 - **No Interactive Feedback** — Agents work autonomously until completion
+
+## Token Requirements
+Works effectively with a Claude Max account and a OpenAI pro account where Claude is configured to plan, implement and judge completion and Codex reviews the plan and the code.
 
 ## Development
 
@@ -102,7 +99,7 @@ See [CLAUDE.md](CLAUDE.md) for development workflow and [Contributing Guide](doc
 
 ## Disclaimer
 
-This application was entirely vibe-coded with Claude Code. A number of issues have been dogfooded through Agentium itself. Expect rough edges in the current alpha state.
+This application was entirely vibe-coded. A number of issues have been dogfooded through Agentium itself. Expect rough edges in the current state. Not all implemented features have been thoroughly tested (e.g., Aider support).
 
 ## License
 
