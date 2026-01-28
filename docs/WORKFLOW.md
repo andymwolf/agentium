@@ -256,7 +256,7 @@ type TaskState struct {
     LastStatus         string       // Last agent status signal
     PRNumber           string       // Linked PR for issues
     PhaseIteration     int          // Current iteration within phase
-    MaxPhaseIter       int          // Max iterations for current phase
+    MaxPhaseIterations int          // Max iterations for current phase
     LastJudgeVerdict   string       // "ADVANCE", "ITERATE", "BLOCKED"
     LastJudgeFeedback  string       // Judge's feedback text
     DraftPRCreated     bool         // Whether draft PR has been created

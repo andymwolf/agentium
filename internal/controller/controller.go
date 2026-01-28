@@ -102,8 +102,8 @@ type TaskState struct {
 	TestRetries        int
 	LastStatus         string
 	PRNumber           string       // Linked PR number (for issues that create PRs)
-	PhaseIteration     int // Current iteration within the active phase (phase loop)
-	MaxPhaseIterations int // Max iterations for current phase (phase loop)
+	PhaseIteration     int          // Current iteration within the active phase (phase loop)
+	MaxPhaseIterations int          // Max iterations for current phase (phase loop)
 	LastJudgeVerdict   string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
 	LastJudgeFeedback  string       // Last judge feedback text
 	DraftPRCreated     bool         // Whether draft PR has been created for this task
