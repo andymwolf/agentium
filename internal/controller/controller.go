@@ -253,10 +253,6 @@ type Controller struct {
 	orchestrator           *SubTaskOrchestrator      // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater       // Instance metadata updater (nil if unavailable)
 
-	// Repo visibility cache (for gist creation)
-	repoVisibilityChecked bool // True after first visibility check
-	repoIsPublic          bool // Cached result of visibility check
-
 	// Shutdown management
 	shutdownHooks []ShutdownHook
 	shutdownOnce  sync.Once
