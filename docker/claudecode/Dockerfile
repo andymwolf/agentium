@@ -36,9 +36,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Install Claude Code CLI and symlink to system path for non-root user access
+# Install Claude Code CLI and copy to system path for non-root user access
+# Copy instead of symlink to avoid needing /root directory access
 RUN bun add -g @anthropic-ai/claude-code && \
-    ln -s /root/.bun/bin/claude /usr/local/bin/claude
+    cp /root/.bun/bin/claude /usr/local/bin/claude
 
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
