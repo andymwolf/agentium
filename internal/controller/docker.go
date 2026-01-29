@@ -41,10 +41,8 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	}
 
 	// Build Docker arguments
-	// Use --pull always to ensure we get the latest image, avoiding stale cached images
-	// that may be missing critical fixes (e.g., bun CLI symlink fix in PR #295)
 	args := []string{
-		"run", "--rm", "--pull", "always",
+		"run", "--rm",
 		"-v", fmt.Sprintf("%s:/workspace", c.workDir),
 		"-w", "/workspace",
 	}
