@@ -94,6 +94,28 @@ func TestParseComplexityVerdict(t *testing.T) {
 			wantFeedback: "",
 			wantSignal:   true,
 		},
+		// Markdown fence stripping tests
+		{
+			name:         "verdict inside markdown code fence is detected",
+			output:       "Here is my assessment:\n```\nAGENTIUM_EVAL: SIMPLE one file change\n```",
+			wantVerdict:  ComplexitySimple,
+			wantFeedback: "one file change",
+			wantSignal:   true,
+		},
+		{
+			name:         "verdict inside markdown fence with language tag",
+			output:       "```text\nAGENTIUM_EVAL: COMPLEX multiple components\n```",
+			wantVerdict:  ComplexityComplex,
+			wantFeedback: "multiple components",
+			wantSignal:   true,
+		},
+		{
+			name:         "raw verdict preferred over fenced verdict",
+			output:       "AGENTIUM_EVAL: SIMPLE quick fix\n```\nAGENTIUM_EVAL: COMPLEX should not match\n```",
+			wantVerdict:  ComplexitySimple,
+			wantFeedback: "quick fix",
+			wantSignal:   true,
+		},
 	}
 
 	for _, tt := range tests {

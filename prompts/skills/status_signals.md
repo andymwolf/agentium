@@ -107,6 +107,21 @@ Format: `AGENTIUM_EVAL: VERDICT [optional feedback]`
 - `AGENTIUM_EVAL: ITERATE <feedback>` - Phase needs another iteration with the given feedback
 - `AGENTIUM_EVAL: BLOCKED <reason>` - Cannot proceed without human intervention
 
+### Critical Formatting Rules
+
+**IMPORTANT:** Emit the verdict on its own line with NO surrounding markdown formatting.
+Do NOT wrap in code blocks or backticks. The signal must appear at the start of a line.
+
+Correct:
+```
+AGENTIUM_EVAL: ADVANCE
+```
+
+Wrong (will not be detected):
+- `` `AGENTIUM_EVAL: ADVANCE` `` - wrapped in backticks
+- Inside a markdown code fence with other content before it
+- `Here is my verdict: AGENTIUM_EVAL: ADVANCE` - not at line start
+
 ### Examples
 
 ```

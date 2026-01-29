@@ -39,10 +39,26 @@ type judgeRunParams struct {
 // judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
 var judgePattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(ADVANCE|ITERATE|BLOCKED)[ \t]*(.*)$`)
 
+// markdownFencePattern matches markdown code fences (```...```) with optional language tag
+var markdownFencePattern = regexp.MustCompile("(?s)```[a-z]*\\n?(.*?)```")
+
+// stripMarkdownFences removes markdown code fences that may wrap the signal,
+// keeping their inner content. This handles cases where the agent wraps the
+// verdict in a code block.
+func stripMarkdownFences(s string) string {
+	return markdownFencePattern.ReplaceAllString(s, "$1")
+}
+
 // parseJudgeVerdict extracts the judge verdict from agent output.
 // If no verdict line is found, defaults to BLOCKED (fail-closed).
 func parseJudgeVerdict(output string) JudgeResult {
+	// First try matching the raw output
 	matches := judgePattern.FindStringSubmatch(output)
+	if matches == nil {
+		// Fallback: strip markdown fences and try again
+		cleaned := stripMarkdownFences(output)
+		matches = judgePattern.FindStringSubmatch(cleaned)
+	}
 	if matches == nil {
 		return JudgeResult{Verdict: VerdictBlocked, SignalFound: false}
 	}
