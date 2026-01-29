@@ -312,6 +312,9 @@ func New(config SessionConfig) (*Controller, error) {
 		workDir = "/workspace"
 	}
 
+	// Create logger early so we can use it during initialization
+	logger := log.New(os.Stdout, "[controller] ", log.LstdFlags)
+
 	// In interactive mode, skip cloud client initialization
 	var secretManager gcp.SecretFetcher
 	var cloudLogger *gcp.CloudLogger
@@ -322,7 +325,7 @@ func New(config SessionConfig) (*Controller, error) {
 		secretManager, err = gcp.NewSecretManagerClient(context.Background())
 		if err != nil {
 			// Log warning but don't fail - allow fallback to gcloud CLI
-			log.Printf("[controller] Warning: failed to initialize Secret Manager client: %v", err)
+			logger.Printf("Warning: failed to initialize Secret Manager client: %v", err)
 		}
 
 		// Initialize Cloud Logging (non-fatal if unavailable)
@@ -331,7 +334,7 @@ func New(config SessionConfig) (*Controller, error) {
 			Repository: config.Repository,
 		})
 		if err != nil {
-			log.Printf("[controller] Warning: Cloud Logging unavailable, using local logs only: %v", err)
+			logger.Printf("Warning: Cloud Logging unavailable, using local logs only: %v", err)
 		} else {
 			cloudLogger = cloudLoggerInstance
 		}
@@ -340,7 +343,7 @@ func New(config SessionConfig) (*Controller, error) {
 		if gcp.IsRunningOnGCP() {
 			metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
 			if err != nil {
-				log.Printf("[controller] Warning: metadata updater unavailable, session status will not be reported: %v", err)
+				logger.Printf("Warning: metadata updater unavailable, session status will not be reported: %v", err)
 			} else {
 				metadataUpdater = metadataUpdaterInstance
 			}
@@ -354,7 +357,7 @@ func New(config SessionConfig) (*Controller, error) {
 		iteration:       0,
 		maxDuration:     maxDuration,
 		taskStates:      make(map[string]*TaskState),
-		logger:          log.New(os.Stdout, "[controller] ", log.LstdFlags),
+		logger:          logger,
 		cloudLogger:     cloudLogger,
 		secretManager:   secretManager,
 		metadataUpdater: metadataUpdater,
@@ -797,7 +800,7 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 		if err == nil {
 			return secret, nil
 		}
-		c.logger.Printf("Warning: Secret Manager client failed: %v, falling back to gcloud CLI", err)
+		c.logWarning("Secret Manager client failed: %v, falling back to gcloud CLI", err)
 	}
 
 	// Fallback to gcloud CLI
@@ -1060,13 +1063,13 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 
 		output, err := cmd.Output()
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch issue #%s: %v", taskID, err)
+			c.logWarning("failed to fetch issue #%s: %v", taskID, err)
 			continue
 		}
 
 		var issue issueDetail
 		if err := json.Unmarshal(output, &issue); err != nil {
-			c.logger.Printf("Warning: failed to parse issue #%s: %v", taskID, err)
+			c.logWarning("failed to parse issue #%s: %v", taskID, err)
 			continue
 		}
 
@@ -1104,13 +1107,13 @@ func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
 
 		output, err := cmd.Output()
 		if err != nil {
-			c.logger.Printf("Warning: failed to fetch PR #%s: %v", prNumber, err)
+			c.logWarning("failed to fetch PR #%s: %v", prNumber, err)
 			continue
 		}
 
 		var pr prDetail
 		if err := json.Unmarshal(output, &pr); err != nil {
-			c.logger.Printf("Warning: failed to parse PR #%s: %v", prNumber, err)
+			c.logWarning("failed to parse PR #%s: %v", prNumber, err)
 			continue
 		}
 
@@ -1453,7 +1456,7 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 		state.TestRetries++
 		if state.TestRetries >= 3 {
 			state.Phase = PhaseBlocked
-			c.logger.Printf("Task %s blocked after %d test failures", taskID, state.TestRetries)
+			c.logWarning("Task %s blocked after %d test failures", taskID, state.TestRetries)
 			// Propagate blocked state to dependent issues
 			if state.Type == "issue" {
 				c.propagateBlocked(state.ID)
@@ -1484,11 +1487,11 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 	if result.AgentStatus == "" && state.Type == "issue" && len(result.PRsCreated) > 0 {
 		state.Phase = PhaseComplete
 		state.PRNumber = result.PRsCreated[0]
-		c.logger.Printf("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
+		c.logInfo("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
 	}
 
 	state.LastStatus = result.AgentStatus
-	c.logger.Printf("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
+	c.logInfo("Task %s phase: %s (status: %s)", taskID, state.Phase, result.AgentStatus)
 }
 
 // updateInstanceMetadata writes the current session status to GCP instance metadata.
@@ -1523,13 +1526,13 @@ func (c *Controller) updateInstanceMetadata(ctx context.Context) {
 func (c *Controller) shouldTerminate() bool {
 	// Check iteration limit
 	if c.iteration >= c.config.MaxIterations {
-		c.logger.Println("Max iterations reached")
+		c.logInfo("Max iterations reached")
 		return true
 	}
 
 	// Check time limit
 	if time.Since(c.startTime) >= c.maxDuration {
-		c.logger.Println("Max duration reached")
+		c.logInfo("Max duration reached")
 		return true
 	}
 
@@ -1539,22 +1542,16 @@ func (c *Controller) shouldTerminate() bool {
 		for taskID, state := range c.taskStates {
 			switch state.Phase {
 			case PhaseComplete, PhaseNothingToDo, PhaseBlocked:
-				c.logger.Printf("Task %s in terminal phase: %s", taskID, state.Phase)
+				c.logInfo("Task %s in terminal phase: %s", taskID, state.Phase)
 				continue
 			default:
 				allTerminal = false
 			}
 		}
 		if allTerminal {
-			c.logger.Println("All tasks in terminal phase")
+			c.logInfo("All tasks in terminal phase")
 			return true
 		}
-	}
-
-	// Legacy fallback: PR review sessions check if changes were pushed
-	if len(c.config.PRs) > 0 && c.pushedChanges {
-		c.logger.Println("PR review complete: changes pushed (legacy detection)")
-		return true
 	}
 
 	return false
@@ -2000,21 +1997,21 @@ func (c *Controller) gracefulShutdown() {
 		// Step 4: Close clients
 		if c.metadataUpdater != nil {
 			if err := c.metadataUpdater.Close(); err != nil {
-				c.logger.Printf("Warning: failed to close metadata updater: %v", err)
+				c.logWarning("failed to close metadata updater: %v", err)
 			}
 		}
 		if c.cloudLogger != nil {
 			if err := c.cloudLogger.Close(); err != nil {
-				c.logger.Printf("Warning: failed to close cloud logger: %v", err)
+				c.logWarning("failed to close cloud logger: %v", err)
 			}
 		}
 		if c.secretManager != nil {
 			if err := c.secretManager.Close(); err != nil {
-				c.logger.Printf("Warning: failed to close Secret Manager client: %v", err)
+				c.logWarning("failed to close Secret Manager client: %v", err)
 			}
 		}
 
-		c.logger.Println("Graceful shutdown complete")
+		c.logInfo("Graceful shutdown complete")
 
 		// Step 5: Request VM termination (last action)
 		c.terminateVM()
@@ -2028,7 +2025,7 @@ func (c *Controller) flushLogs(ctx context.Context) {
 		return
 	}
 
-	c.logger.Println("Flushing pending log writes...")
+	c.logInfo("Flushing pending log writes...")
 
 	// Create a sub-context with log flush timeout
 	flushCtx, cancel := context.WithTimeout(ctx, LogFlushTimeout)
@@ -2043,12 +2040,12 @@ func (c *Controller) flushLogs(ctx context.Context) {
 	select {
 	case err := <-done:
 		if err != nil {
-			c.logger.Printf("Warning: log flush completed with error: %v", err)
+			c.logWarning("log flush completed with error: %v", err)
 		} else {
-			c.logger.Println("Log flush completed successfully")
+			c.logInfo("Log flush completed successfully")
 		}
 	case <-flushCtx.Done():
-		c.logger.Println("Warning: log flush timed out, some logs may be lost")
+		c.logWarning("log flush timed out, some logs may be lost")
 	}
 }
 
@@ -2059,25 +2056,25 @@ func (c *Controller) runShutdownHooks(ctx context.Context) {
 		return
 	}
 
-	c.logger.Printf("Running %d shutdown hooks", len(c.shutdownHooks))
+	c.logInfo("Running %d shutdown hooks", len(c.shutdownHooks))
 
 	for i, hook := range c.shutdownHooks {
 		select {
 		case <-ctx.Done():
-			c.logger.Printf("Warning: shutdown timeout reached, skipping remaining %d hooks", len(c.shutdownHooks)-i)
+			c.logWarning("shutdown timeout reached, skipping remaining %d hooks", len(c.shutdownHooks)-i)
 			return
 		default:
 		}
 
 		if err := hook(ctx); err != nil {
-			c.logger.Printf("Warning: shutdown hook %d failed: %v", i+1, err)
+			c.logWarning("shutdown hook %d failed: %v", i+1, err)
 		}
 	}
 }
 
 // clearSensitiveData removes sensitive information from memory
 func (c *Controller) clearSensitiveData() {
-	c.logger.Println("Clearing sensitive data from memory")
+	c.logInfo("Clearing sensitive data from memory")
 
 	// Clear GitHub token
 	c.gitHubToken = ""
@@ -2106,7 +2103,7 @@ func (c *Controller) setupSignalHandler(ctx context.Context) (context.Context, c
 	go func() {
 		select {
 		case sig := <-sigCh:
-			c.logger.Printf("Received signal %v, initiating graceful shutdown", sig)
+			c.logInfo("Received signal %v, initiating graceful shutdown", sig)
 			cancel()
 		case <-ctx.Done():
 			// Context was cancelled by other means
@@ -2128,11 +2125,11 @@ func (c *Controller) execCommand(ctx context.Context, name string, args ...strin
 func (c *Controller) terminateVM() {
 	// Skip VM termination in interactive mode (no VM to terminate)
 	if c.config.Interactive {
-		c.logger.Println("Skipping VM termination (interactive mode)")
+		c.logInfo("Skipping VM termination (interactive mode)")
 		return
 	}
 
-	c.logger.Println("Initiating VM termination")
+	c.logInfo("Initiating VM termination")
 
 	ctx, cancel := context.WithTimeout(context.Background(), VMTerminationTimeout)
 	defer cancel()
@@ -2142,7 +2139,7 @@ func (c *Controller) terminateVM() {
 		"http://metadata.google.internal/computeMetadata/v1/instance/name")
 	instanceName, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Error: failed to get instance name from metadata: %v — VM will not be deleted", err)
+		c.logError("failed to get instance name from metadata: %v — VM will not be deleted", err)
 		return
 	}
 
@@ -2151,14 +2148,14 @@ func (c *Controller) terminateVM() {
 		"http://metadata.google.internal/computeMetadata/v1/instance/zone")
 	zone, err := cmd.Output()
 	if err != nil {
-		c.logger.Printf("Error: failed to get zone from metadata: %v — VM will not be deleted", err)
+		c.logError("failed to get zone from metadata: %v — VM will not be deleted", err)
 		return
 	}
 
 	// Delete instance (blocks until completion or timeout)
 	name := strings.TrimSpace(string(instanceName))
 	zoneName := filepath.Base(strings.TrimSpace(string(zone)))
-	c.logger.Printf("Deleting VM instance %s in zone %s", name, zoneName)
+	c.logInfo("Deleting VM instance %s in zone %s", name, zoneName)
 
 	cmd = c.execCommand(ctx, "gcloud", "compute", "instances", "delete",
 		name,
@@ -2167,9 +2164,9 @@ func (c *Controller) terminateVM() {
 	)
 
 	if err := cmd.Run(); err != nil {
-		c.logger.Printf("Error: VM deletion command failed: %v — VM may remain running until max_run_duration", err)
+		c.logError("VM deletion command failed: %v — VM may remain running until max_run_duration", err)
 		return
 	}
 
-	c.logger.Println("VM deletion command completed successfully")
+	c.logInfo("VM deletion command completed successfully")
 }

@@ -29,7 +29,7 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 			"-u", "x-access-token", "--password-stdin")
 		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
 		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logger.Printf("Warning: docker login to ghcr.io failed: %v (%s)", err, string(out))
+			c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
 		} else {
 			c.dockerAuthed = true
 		}
@@ -61,7 +61,7 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	if c.config.ClaudeAuth.AuthMode == "oauth" {
 		authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
 		if err != nil {
-			c.logger.Printf("Warning: failed to write Claude auth file: %v", err)
+			c.logWarning("failed to write Claude auth file: %v", err)
 		} else if authPath != "" {
 			args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
 		}
@@ -71,7 +71,7 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	if c.config.CodexAuth.AuthJSONBase64 != "" {
 		authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
 		if err != nil {
-			c.logger.Printf("Warning: failed to write Codex auth file: %v", err)
+			c.logWarning("failed to write Codex auth file: %v", err)
 		} else if authPath != "" {
 			args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
 		}
@@ -91,7 +91,7 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 
 	if c.config.Verbose {
-		c.logger.Printf("Running interactive agent: docker %s", strings.Join(args, " "))
+		c.logInfo("Running interactive agent: docker %s", strings.Join(args, " "))
 	}
 
 	// Run the container and wait for completion
