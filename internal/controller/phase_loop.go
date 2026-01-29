@@ -518,28 +518,6 @@ func (c *Controller) judgeNoSignalLimit() int {
 	return defaultJudgeNoSignalLimit
 }
 
-// truncateForComment truncates text for use in GitHub comments.
-// It operates on runes to avoid splitting multi-byte UTF-8 characters.
-func truncateForComment(s string) string {
-	const maxRunes = 500
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "..."
-}
-
-// truncateForPlan truncates plan text for use in GitHub issue bodies.
-// Plans can be longer than comments but still need a reasonable limit.
-func truncateForPlan(s string) string {
-	const maxRunes = 4000
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "\n\n... (plan truncated)"
-}
-
 // processHandoffOutput parses and stores structured handoff output from phase iteration.
 func (c *Controller) processHandoffOutput(taskID string, phase TaskPhase, iteration int, output string) error {
 	if c.handoffParser == nil || c.handoffStore == nil {
