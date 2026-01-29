@@ -86,21 +86,22 @@ const (
 	WorkflowPathComplex WorkflowPath = "COMPLEX" // Multiple components, full review
 )
 
-// ComplexityVerdict represents the outcome of complexity assessment.
-type ComplexityVerdict string
-
-const (
-	ComplexitySimple  ComplexityVerdict = "SIMPLE"
-	ComplexityComplex ComplexityVerdict = "COMPLEX"
-)
-
-// TaskState tracks the current state of a task being worked on
+// TaskState tracks the current state of a task being worked on.
+//
+// Phase vs LastStatus:
+//   - Phase represents the derived workflow state (e.g., PhasePlan, PhaseImplement, PhaseComplete).
+//     It is computed by the controller based on agent signals and phase transitions.
+//   - LastStatus stores the raw agent signal string (e.g., "TESTS_PASSED", "PR_CREATED", "BLOCKED").
+//     This preserves the exact signal emitted by the agent for debugging and audit purposes.
+//
+// Example: When an agent emits "TESTS_PASSED", LastStatus is set to "TESTS_PASSED" while
+// Phase transitions to PhasePRCreation (for issues) or PhasePush (for PRs).
 type TaskState struct {
 	ID                 string
-	Type               string // "issue" or "pr"
-	Phase              TaskPhase
+	Type               string    // "issue" or "pr"
+	Phase              TaskPhase // Derived workflow state (computed from signals and phase transitions)
 	TestRetries        int
-	LastStatus         string
+	LastStatus         string       // Raw agent signal string for debugging/audit (e.g., "TESTS_PASSED")
 	PRNumber           string       // Linked PR number (for issues that create PRs)
 	PhaseIteration     int          // Current iteration within the active phase (phase loop)
 	MaxPhaseIterations int          // Max iterations for current phase (phase loop)
@@ -508,6 +509,34 @@ func (c *Controller) Run(ctx context.Context) error {
 	ctx, cancel := c.setupSignalHandler(ctx)
 	defer cancel()
 
+	// Initialize session (workspace, credentials, repository, prompts, task details)
+	if err := c.initSession(ctx); err != nil {
+		return err
+	}
+
+	// Run main task processing loop
+	if err := c.runMainLoop(ctx); err != nil {
+		return err
+	}
+
+	// Emit final logs
+	c.emitFinalLogs()
+
+	// Cleanup
+	c.cleanup()
+
+	return nil
+}
+
+// initSession performs all initialization steps before the main loop:
+// - Logs session configuration
+// - Initializes workspace directory
+// - Fetches GitHub credentials
+// - Clones repository
+// - Loads prompts and skills
+// - Fetches task details (issues/PRs)
+// - Builds dependency graph
+func (c *Controller) initSession(ctx context.Context) error {
 	c.logInfo("Controller started (version %s)", Version)
 	c.logInfo("Starting session %s", c.config.ID)
 	c.logInfo("Repository: %s", c.config.Repository)
@@ -560,7 +589,13 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	c.logInfo("Task queue: %d issue(s) [%s], %d PR(s)", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
 
-	// Main execution loop - processes tasks sequentially (PRs first, then issues)
+	return nil
+}
+
+// runMainLoop processes tasks sequentially from the unified queue (PRs first, then issues).
+// For each task, it prepares the context, runs agent iterations, and updates task state.
+// Returns nil on normal completion, or ctx.Err() if the context is cancelled.
+func (c *Controller) runMainLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -681,12 +716,6 @@ func (c *Controller) Run(ctx context.Context) error {
 			c.logInfo("Changes pushed to PR branch")
 		}
 	}
-
-	// Emit final logs
-	c.emitFinalLogs()
-
-	// Cleanup
-	c.cleanup()
 
 	return nil
 }

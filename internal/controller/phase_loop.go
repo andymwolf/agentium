@@ -326,7 +326,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					c.logWarning("Complexity assessor error: %v (defaulting to COMPLEX)", complexityErr)
 					state.WorkflowPath = WorkflowPathComplex
 				} else {
-					state.WorkflowPath = WorkflowPath(complexityResult.Verdict)
+					state.WorkflowPath = complexityResult.Verdict
 					c.logInfo("Workflow path set to %s: %s", state.WorkflowPath, complexityResult.Feedback)
 				}
 
