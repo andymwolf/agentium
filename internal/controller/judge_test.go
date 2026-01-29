@@ -108,6 +108,35 @@ func TestParseJudgeVerdict(t *testing.T) {
 			wantFeedback: "real issue",
 			wantSignal:   true,
 		},
+		// Markdown fence stripping tests
+		{
+			name:         "verdict inside markdown code fence is detected",
+			output:       "Here is my verdict:\n```\nAGENTIUM_EVAL: ADVANCE\n```",
+			wantVerdict:  VerdictAdvance,
+			wantFeedback: "",
+			wantSignal:   true,
+		},
+		{
+			name:         "verdict inside markdown fence with language tag",
+			output:       "```text\nAGENTIUM_EVAL: ITERATE fix the tests\n```",
+			wantVerdict:  VerdictIterate,
+			wantFeedback: "fix the tests",
+			wantSignal:   true,
+		},
+		{
+			name:         "verdict inside triple backticks with surrounding text",
+			output:       "Analysis complete.\n```\nAGENTIUM_EVAL: BLOCKED need credentials\n```\nEnd of response.",
+			wantVerdict:  VerdictBlocked,
+			wantFeedback: "need credentials",
+			wantSignal:   true,
+		},
+		{
+			name:         "raw verdict preferred over fenced verdict",
+			output:       "AGENTIUM_EVAL: ADVANCE\n```\nAGENTIUM_EVAL: BLOCKED should not match\n```",
+			wantVerdict:  VerdictAdvance,
+			wantFeedback: "",
+			wantSignal:   true,
+		},
 	}
 
 	for _, tt := range tests {

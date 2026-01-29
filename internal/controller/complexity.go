@@ -29,7 +29,13 @@ var complexityPattern = regexp.MustCompile(`(?m)^AGENTIUM_EVAL:[ \t]+(SIMPLE|COM
 // parseComplexityVerdict extracts the complexity verdict from agent output.
 // If no verdict line is found, defaults to COMPLEX (conservative fail-closed).
 func parseComplexityVerdict(output string) ComplexityResult {
+	// First try matching the raw output
 	matches := complexityPattern.FindStringSubmatch(output)
+	if matches == nil {
+		// Fallback: strip markdown fences and try again
+		cleaned := stripMarkdownFences(output)
+		matches = complexityPattern.FindStringSubmatch(cleaned)
+	}
 	if matches == nil {
 		return ComplexityResult{Verdict: ComplexityComplex, SignalFound: false}
 	}
