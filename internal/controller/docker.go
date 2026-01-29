@@ -34,7 +34,7 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 			"-u", "x-access-token", "--password-stdin")
 		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
 		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logger.Printf("Warning: docker login to ghcr.io failed: %v (%s)", err, string(out))
+			c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
 		} else {
 			c.dockerAuthed = true
 		}
@@ -181,10 +181,10 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 	wg.Wait()
 
 	if stdoutErr != nil {
-		c.logger.Printf("%s warning: reading stdout: %v", logTag, stdoutErr)
+		c.logWarning("%s: reading stdout: %v", logTag, stdoutErr)
 	}
 	if stderrErr != nil {
-		c.logger.Printf("%s warning: reading stderr: %v", logTag, stderrErr)
+		c.logWarning("%s: reading stderr: %v", logTag, stderrErr)
 	}
 
 	waitErr := cmd.Wait()
@@ -203,12 +203,12 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 		if len(stdoutStr) > 500 {
 			stdoutStr = stdoutStr[:500]
 		}
-		c.logger.Printf("%s exited with code %d", logTag, exitCode)
+		c.logWarning("%s exited with code %d", logTag, exitCode)
 		if stderrStr != "" {
-			c.logger.Printf("%s stderr: %s", logTag, stderrStr)
+			c.logWarning("%s stderr: %s", logTag, stderrStr)
 		}
 		if stdoutStr != "" {
-			c.logger.Printf("%s stdout: %s", logTag, stdoutStr)
+			c.logWarning("%s stdout: %s", logTag, stdoutStr)
 		}
 	}
 
