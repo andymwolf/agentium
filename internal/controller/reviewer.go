@@ -28,6 +28,8 @@ type reviewRunParams struct {
 // The reviewer gets fresh context (no memory injection) and provides
 // constructive feedback without deciding the verdict.
 func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (ReviewResult, error) {
+	c.logInfo("Starting reviewer for phase %s (iteration %d/%d)...", params.CompletedPhase, params.Iteration, params.MaxIterations)
+
 	reviewPrompt := c.buildReviewPrompt(params)
 
 	session := &agent.Session{
@@ -102,6 +104,7 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		StdinPrompt: stdinPrompt,
 	})
 	if err != nil {
+		c.logError("Reviewer container failed for phase %s: %v", params.CompletedPhase, err)
 		return ReviewResult{}, fmt.Errorf("reviewer failed: %w", err)
 	}
 
