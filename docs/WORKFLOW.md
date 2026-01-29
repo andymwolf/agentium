@@ -252,9 +252,9 @@ The `TaskState` struct tracks per-task metadata:
 type TaskState struct {
     ID                 string       // Issue/PR number
     Type               string       // "issue" or "pr"
-    Phase              TaskPhase    // Current phase
+    Phase              TaskPhase    // Derived workflow state (computed from signals and phase transitions)
     TestRetries        int          // Count of test failures
-    LastStatus         string       // Last agent status signal
+    LastStatus         string       // Raw agent signal string for debugging/audit (e.g., "TESTS_PASSED")
     PRNumber           string       // Linked PR for issues
     PhaseIteration     int          // Current iteration within phase
     MaxPhaseIterations int          // Max iterations for current phase
@@ -265,6 +265,12 @@ type TaskState struct {
     ControllerOverrode bool         // True if controller forced ADVANCE (triggers NOMERGE)
 }
 ```
+
+**Phase vs LastStatus:**
+- `Phase` represents the derived workflow state (e.g., `PhasePlan`, `PhaseImplement`, `PhaseComplete`). It is computed by the controller based on agent signals and phase transitions.
+- `LastStatus` stores the raw agent signal string (e.g., `"TESTS_PASSED"`, `"PR_CREATED"`, `"BLOCKED"`). This preserves the exact signal emitted by the agent for debugging and audit purposes.
+
+Example: When an agent emits `"TESTS_PASSED"`, `LastStatus` is set to `"TESTS_PASSED"` while `Phase` transitions to `PhasePRCreation` (for issues) or `PhasePush` (for PRs).
 
 ## Model and Adapter Routing
 

@@ -11,7 +11,7 @@ import (
 
 // ComplexityResult holds the parsed complexity verdict and feedback.
 type ComplexityResult struct {
-	Verdict     ComplexityVerdict
+	Verdict     WorkflowPath
 	Feedback    string
 	SignalFound bool // Whether the AGENTIUM_EVAL signal was found in output
 }
@@ -37,10 +37,10 @@ func parseComplexityVerdict(output string) ComplexityResult {
 		matches = complexityPattern.FindStringSubmatch(cleaned)
 	}
 	if matches == nil {
-		return ComplexityResult{Verdict: ComplexityComplex, SignalFound: false}
+		return ComplexityResult{Verdict: WorkflowPathComplex, SignalFound: false}
 	}
 	return ComplexityResult{
-		Verdict:     ComplexityVerdict(matches[1]),
+		Verdict:     WorkflowPath(matches[1]),
 		Feedback:    strings.TrimSpace(matches[2]),
 		SignalFound: true,
 	}
@@ -126,7 +126,7 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 	})
 	if err != nil {
 		c.logError("Complexity assessor container failed: %v", err)
-		return ComplexityResult{Verdict: ComplexityComplex}, fmt.Errorf("complexity assessor failed: %w", err)
+		return ComplexityResult{Verdict: WorkflowPathComplex}, fmt.Errorf("complexity assessor failed: %w", err)
 	}
 
 	parseSource := result.RawTextContent
