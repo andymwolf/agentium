@@ -1,9 +1,11 @@
 package provisioner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -720,12 +722,21 @@ func (p *GCPProvisioner) runTerraform(ctx context.Context, workDir string, args 
 	cmd := exec.CommandContext(ctx, "terraform", args...)
 	cmd.Dir = workDir
 
+	var stderr bytes.Buffer
 	if p.verbose {
 		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	} else {
+		cmd.Stderr = &stderr
 	}
 
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%w: %s", err, stderr.String())
+		}
+		return err
+	}
+	return nil
 }
 
 func (p *GCPProvisioner) getTerraformOutput(ctx context.Context, workDir string) (map[string]string, error) {
