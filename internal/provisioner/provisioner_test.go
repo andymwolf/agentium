@@ -285,26 +285,31 @@ func TestBuildStatusArgs(t *testing.T) {
 		name      string
 		project   string
 		sessionID string
+		zone      string
 		wantArgs  []string
 	}{
 		{
-			name:      "includes project flag when set",
+			name:      "includes project and zone flags when set",
 			project:   "my-gcp-project",
 			sessionID: "agentium-session-123",
+			zone:      "us-central1-a",
 			wantArgs: []string{
 				"compute", "instances", "describe",
 				"agentium-session-123",
+				"--zone=us-central1-a",
 				"--format=json",
 				"--project=my-gcp-project",
 			},
 		},
 		{
-			name:      "no project flag when empty",
+			name:      "no project flag when empty but zone is included",
 			project:   "",
 			sessionID: "agentium-session-123",
+			zone:      "us-east1-b",
 			wantArgs: []string{
 				"compute", "instances", "describe",
 				"agentium-session-123",
+				"--zone=us-east1-b",
 				"--format=json",
 			},
 		},
@@ -313,7 +318,7 @@ func TestBuildStatusArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &GCPProvisioner{project: tt.project}
-			got := p.buildStatusArgs(tt.sessionID)
+			got := p.buildStatusArgs(tt.sessionID, tt.zone)
 			if len(got) != len(tt.wantArgs) {
 				t.Fatalf("buildStatusArgs() returned %d args, want %d\ngot:  %v\nwant: %v", len(got), len(tt.wantArgs), got, tt.wantArgs)
 			}
