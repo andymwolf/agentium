@@ -249,9 +249,11 @@ func (p *GCPProvisioner) List(ctx context.Context) ([]SessionStatus, error) {
 }
 
 // buildStatusArgs constructs the gcloud arguments for describing an instance.
-func (p *GCPProvisioner) buildStatusArgs(sessionID string) []string {
+// The zone parameter is required for gcloud compute instances describe.
+func (p *GCPProvisioner) buildStatusArgs(sessionID, zone string) []string {
 	args := []string{"compute", "instances", "describe",
 		sessionID,
+		fmt.Sprintf("--zone=%s", zone),
 		"--format=json",
 	}
 	if p.project != "" {
@@ -262,8 +264,31 @@ func (p *GCPProvisioner) buildStatusArgs(sessionID string) []string {
 
 // Status gets the current status of a GCP session
 func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*SessionStatus, error) {
-	// Get instance status via gcloud
-	args := p.buildStatusArgs(sessionID)
+	// First, find the zone by listing instances with the agentium label
+	// This is required because gcloud compute instances describe requires a zone
+	sessions, err := p.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list instances to find zone: %w", err)
+	}
+
+	var zone string
+	for _, s := range sessions {
+		if s.SessionID == sessionID {
+			zone = s.Zone
+			break
+		}
+	}
+
+	// If the instance wasn't found in the list, it's likely terminated
+	if zone == "" {
+		return &SessionStatus{
+			SessionID: sessionID,
+			State:     "terminated",
+		}, nil
+	}
+
+	// Get instance status via gcloud with the zone
+	args := p.buildStatusArgs(sessionID, zone)
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
 
 	output, err := cmd.Output()
