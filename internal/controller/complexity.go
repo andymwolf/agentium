@@ -90,6 +90,9 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
 				activeAgent = a
+			} else {
+				c.logWarning("ComplexityAssessor: configured adapter %q not found, using default %q",
+					modelCfg.Adapter, c.agent.Name())
 			}
 		}
 		if modelCfg.Model != "" {

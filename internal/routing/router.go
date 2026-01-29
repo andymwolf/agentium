@@ -60,6 +60,22 @@ func (r *Router) Adapters() []string {
 	return adapters
 }
 
+// UsesAdapter returns true if the given adapter name is used in routing config.
+func (r *Router) UsesAdapter(adapter string) bool {
+	if r.routing == nil {
+		return false
+	}
+	if r.routing.Default.Adapter == adapter {
+		return true
+	}
+	for _, cfg := range r.routing.Overrides {
+		if cfg.Adapter == adapter {
+			return true
+		}
+	}
+	return false
+}
+
 // UnknownPhases returns phase names used in Overrides that are not in ValidPhases.
 // Returns nil if all phases are recognized or if routing is nil.
 func (r *Router) UnknownPhases() []string {

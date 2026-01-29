@@ -127,6 +127,9 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
 				activeAgent = a
+			} else {
+				c.logWarning("Judge: configured adapter %q not found, using default %q",
+					modelCfg.Adapter, c.agent.Name())
 			}
 		}
 		if modelCfg.Model != "" {

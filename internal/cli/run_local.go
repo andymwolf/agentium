@@ -137,18 +137,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		fmt.Printf("Using Claude Max OAuth authentication (%d bytes)\n", len(authJSON))
 	}
 
-	// Handle Codex OAuth authentication
-	var codexAuthBase64 string
-	if cfg.Session.Agent == "codex" {
-		// Try auto-detect from Keychain first
-		if autoAuth := tryAutoDetectCodexOAuth(); autoAuth != nil {
-			codexAuthBase64 = base64.StdEncoding.EncodeToString(autoAuth)
-			fmt.Println("Auto-detected Codex OAuth credentials from macOS Keychain")
-		} else {
-			fmt.Println("No Codex OAuth credentials found - will use interactive auth in container")
-		}
-	}
-
 	// Build controller session config
 	sessionConfig := controller.SessionConfig{
 		ID:                   sessionID,
@@ -169,9 +157,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Use claudeAuthMode which is set to "oauth" when auto-detect succeeds
 	sessionConfig.ClaudeAuth.AuthMode = claudeAuthMode
 	sessionConfig.ClaudeAuth.AuthJSONBase64 = claudeAuthBase64
-
-	// Set Codex auth config
-	sessionConfig.CodexAuth.AuthJSONBase64 = codexAuthBase64
 
 	// Enable phase loop (PLAN → IMPLEMENT → DOCS → PR workflow)
 	if cfg.PhaseLoop.Enabled {
@@ -220,6 +205,19 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 			for phase, spec := range cfg.Routing.Overrides {
 				sessionConfig.Routing.Overrides[phase] = spec
 			}
+		}
+	}
+
+	// Handle Codex OAuth authentication
+	// Check after routing merge so CLI overrides are considered
+	needsCodexAuth := cfg.Session.Agent == "codex" || routing.NewRouter(sessionConfig.Routing).UsesAdapter("codex")
+	if needsCodexAuth {
+		// Try auto-detect from Keychain first
+		if autoAuth := tryAutoDetectCodexOAuth(); autoAuth != nil {
+			sessionConfig.CodexAuth.AuthJSONBase64 = base64.StdEncoding.EncodeToString(autoAuth)
+			fmt.Println("Auto-detected Codex OAuth credentials from macOS Keychain")
+		} else {
+			fmt.Println("No Codex OAuth credentials found - will use interactive auth in container")
 		}
 	}
 

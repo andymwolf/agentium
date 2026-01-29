@@ -69,6 +69,9 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		if modelCfg.Adapter != "" {
 			if a, ok := c.adapters[modelCfg.Adapter]; ok {
 				activeAgent = a
+			} else {
+				c.logWarning("Reviewer: configured adapter %q not found, using default %q",
+					modelCfg.Adapter, c.agent.Name())
 			}
 		}
 		if modelCfg.Model != "" {
