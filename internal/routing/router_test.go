@@ -248,6 +248,69 @@ func TestCompoundPhasesNotFlaggedAsUnknown(t *testing.T) {
 	}
 }
 
+func TestUsesAdapter_NilRouter(t *testing.T) {
+	r := NewRouter(nil)
+	if r.UsesAdapter("codex") {
+		t.Error("nil router should not use any adapter")
+	}
+}
+
+func TestUsesAdapter_DefaultAdapter(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "codex", Model: "gpt-5"},
+	})
+
+	if !r.UsesAdapter("codex") {
+		t.Error("should detect codex in default adapter")
+	}
+	if r.UsesAdapter("claude-code") {
+		t.Error("should not detect claude-code when not configured")
+	}
+}
+
+func TestUsesAdapter_OverrideOnly(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"IMPLEMENT_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+		},
+	})
+
+	if !r.UsesAdapter("codex") {
+		t.Error("should detect codex in overrides")
+	}
+	if !r.UsesAdapter("claude-code") {
+		t.Error("should detect claude-code in default")
+	}
+	if r.UsesAdapter("aider") {
+		t.Error("should not detect aider when not configured")
+	}
+}
+
+func TestUsesAdapter_MultipleOverrides(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
+		Overrides: map[string]ModelConfig{
+			"IMPLEMENT_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+			"PLAN_REVIEW":      {Adapter: "aider", Model: "gpt-4"},
+			"TEST":             {Model: "sonnet"}, // No adapter specified
+		},
+	})
+
+	if !r.UsesAdapter("codex") {
+		t.Error("should detect codex in overrides")
+	}
+	if !r.UsesAdapter("aider") {
+		t.Error("should detect aider in overrides")
+	}
+	if !r.UsesAdapter("claude-code") {
+		t.Error("should detect claude-code in default")
+	}
+	if r.UsesAdapter("gemini") {
+		t.Error("should not detect gemini when not configured")
+	}
+}
+
 func TestAdaptersSorted(t *testing.T) {
 	r := NewRouter(&PhaseRouting{
 		Default: ModelConfig{Adapter: "zeta", Model: "opus"},

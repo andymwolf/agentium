@@ -148,18 +148,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Claude auth mode: %q (no OAuth credentials will be mounted)\n", cfg.Claude.AuthMode)
 	}
 
-	// Handle Codex OAuth authentication
-	var codexAuthBase64 string
-	if cfg.Session.Agent == "codex" {
-		var authJSON []byte
-		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
-		if err != nil {
-			return fmt.Errorf("failed to read Codex auth.json: %w", err)
-		}
-		codexAuthBase64 = base64.StdEncoding.EncodeToString(authJSON)
-		fmt.Println("Using Codex OAuth authentication")
-	}
-
 	// Generate session ID
 	sessionID := fmt.Sprintf("agentium-%s", uuid.New().String()[:8])
 
@@ -211,9 +199,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 			AuthMode:       cfg.Claude.AuthMode,
 			AuthJSONBase64: claudeAuthBase64,
 		},
-		CodexAuth: provisioner.CodexAuthConfig{
-			AuthJSONBase64: codexAuthBase64,
-		},
 	}
 
 	// Handle --model (overrides default for all phases)
@@ -254,6 +239,19 @@ func runSession(cmd *cobra.Command, args []string) error {
 				sessionConfig.Routing.Overrides[phase] = spec
 			}
 		}
+	}
+
+	// Handle Codex OAuth authentication
+	// Check after routing merge so CLI overrides are considered
+	needsCodexAuth := cfg.Session.Agent == "codex" || routing.NewRouter(sessionConfig.Routing).UsesAdapter("codex")
+	if needsCodexAuth {
+		var authJSON []byte
+		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
+		if err != nil {
+			return fmt.Errorf("failed to read Codex auth.json: %w", err)
+		}
+		sessionConfig.CodexAuth.AuthJSONBase64 = base64.StdEncoding.EncodeToString(authJSON)
+		fmt.Println("Using Codex OAuth authentication")
 	}
 
 	// Propagate delegation config from config file
