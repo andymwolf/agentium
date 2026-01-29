@@ -268,11 +268,11 @@ resource "google_compute_instance" "agentium" {
   }
 
   scheduling {
-    preemptible         = var.use_spot
-    automatic_restart   = !var.use_spot
-    on_host_maintenance = var.use_spot ? "TERMINATE" : "MIGRATE"
-    provisioning_model  = var.use_spot ? "SPOT" : "STANDARD"
-    # Removed instance_termination_action - only valid for SPOT, GCP defaults appropriately
+    preemptible                 = var.use_spot
+    automatic_restart           = !var.use_spot
+    on_host_maintenance         = var.use_spot ? "TERMINATE" : "MIGRATE"
+    provisioning_model          = var.use_spot ? "SPOT" : "STANDARD"
+    instance_termination_action = (var.use_spot || var.max_run_duration != "") ? "DELETE" : null
 
     # Hard timeout at cloud level
     dynamic "max_run_duration" {
