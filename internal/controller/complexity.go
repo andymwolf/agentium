@@ -43,6 +43,8 @@ func parseComplexityVerdict(output string) ComplexityResult {
 // runComplexityAssessor runs a complexity assessor agent that determines
 // whether the task is SIMPLE or COMPLEX based on the plan produced by the worker.
 func (c *Controller) runComplexityAssessor(ctx context.Context, params complexityRunParams) (ComplexityResult, error) {
+	c.logInfo("Starting complexity assessor for PLAN (iteration %d/%d)...", params.Iteration, params.MaxIterations)
+
 	assessorPrompt := c.buildComplexityPrompt(params)
 
 	session := &agent.Session{
@@ -117,6 +119,7 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 		StdinPrompt: stdinPrompt,
 	})
 	if err != nil {
+		c.logError("Complexity assessor container failed: %v", err)
 		return ComplexityResult{Verdict: ComplexityComplex}, fmt.Errorf("complexity assessor failed: %w", err)
 	}
 

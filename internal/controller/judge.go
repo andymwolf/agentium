@@ -56,6 +56,8 @@ func parseJudgeVerdict(output string) JudgeResult {
 // runJudge runs a judge agent that interprets reviewer feedback and decides
 // whether to ADVANCE, ITERATE, or BLOCKED.
 func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (JudgeResult, error) {
+	c.logInfo("Starting judge for phase %s (iteration %d/%d)...", params.CompletedPhase, params.Iteration, params.MaxIterations)
+
 	judgePrompt := c.buildJudgePrompt(params)
 
 	session := &agent.Session{
@@ -144,6 +146,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 		StdinPrompt: stdinPrompt,
 	})
 	if err != nil {
+		c.logError("Judge container failed for phase %s: %v", params.CompletedPhase, err)
 		return JudgeResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)
 	}
 
