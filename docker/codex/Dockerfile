@@ -29,8 +29,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Install Codex CLI
-RUN bun add -g @openai/codex
+# Install Codex CLI and symlink to system path for non-root user access
+RUN bun add -g @openai/codex && \
+    ln -s /root/.bun/bin/codex /usr/local/bin/codex
 
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
