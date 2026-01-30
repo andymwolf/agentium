@@ -289,19 +289,17 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 		name          string
 		envValue      string
 		wantNil       bool
-		wantEnabled   bool
 		wantPlan      int
 		wantImplement int
 		wantDocs      int
 	}{
 		{
-			name: "phase_loop present and enabled",
+			name: "phase_loop present with iterations",
 			envValue: `{
 				"id": "test", "repository": "github.com/org/repo",
-				"phase_loop": {"enabled": true, "plan_max_iterations": 2, "implement_max_iterations": 8, "docs_max_iterations": 3}
+				"phase_loop": {"plan_max_iterations": 2, "implement_max_iterations": 8, "docs_max_iterations": 3}
 			}`,
 			wantNil:       false,
-			wantEnabled:   true,
 			wantPlan:      2,
 			wantImplement: 8,
 			wantDocs:      3,
@@ -314,13 +312,12 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name: "phase_loop disabled",
+			name: "phase_loop present but empty",
 			envValue: `{
 				"id": "test", "repository": "github.com/org/repo",
-				"phase_loop": {"enabled": false}
+				"phase_loop": {}
 			}`,
-			wantNil:     false,
-			wantEnabled: false,
+			wantNil: false,
 		},
 	}
 
@@ -350,9 +347,6 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 
 			if config.PhaseLoop == nil {
 				t.Fatal("PhaseLoop is nil, want non-nil")
-			}
-			if config.PhaseLoop.Enabled != tt.wantEnabled {
-				t.Errorf("PhaseLoop.Enabled = %v, want %v", config.PhaseLoop.Enabled, tt.wantEnabled)
 			}
 			if tt.wantPlan > 0 && config.PhaseLoop.PlanMaxIterations != tt.wantPlan {
 				t.Errorf("PlanMaxIterations = %d, want %d", config.PhaseLoop.PlanMaxIterations, tt.wantPlan)
@@ -942,11 +936,20 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 		wantPR       string
 	}{
 		{
-			name:         "no status signal but PR detected for issue - transitions to complete",
+			name:         "no status signal but PR detected in IMPLEMENT - advances to DOCS",
 			taskType:     "issue",
 			agentStatus:  "",
 			prsCreated:   []string{"110"},
 			initialPhase: PhaseImplement,
+			wantPhase:    PhaseDocs,
+			wantPR:       "110",
+		},
+		{
+			name:         "no status signal but PR detected in DOCS - completes",
+			taskType:     "issue",
+			agentStatus:  "",
+			prsCreated:   []string{"110"},
+			initialPhase: PhaseDocs,
 			wantPhase:    PhaseComplete,
 			wantPR:       "110",
 		},
@@ -978,12 +981,21 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 			wantPR:       "",
 		},
 		{
-			name:         "fallback uses first PR number",
+			name:         "fallback in IMPLEMENT uses first PR number and advances to DOCS",
 			taskType:     "issue",
 			agentStatus:  "",
 			prsCreated:   []string{"110", "111"},
 			initialPhase: PhaseImplement,
-			wantPhase:    PhaseComplete,
+			wantPhase:    PhaseDocs,
+			wantPR:       "110",
+		},
+		{
+			name:         "PR detected in PLAN phase - no state change",
+			taskType:     "issue",
+			agentStatus:  "",
+			prsCreated:   []string{"110"},
+			initialPhase: PhasePlan,
+			wantPhase:    PhasePlan,
 			wantPR:       "110",
 		},
 	}

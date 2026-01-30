@@ -148,15 +148,14 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	sessionConfig.ClaudeAuth.AuthJSONBase64 = claudeAuthBase64
 
 	// Enable phase loop (PLAN → IMPLEMENT → DOCS → PR workflow)
-	if cfg.PhaseLoop.Enabled {
-		sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
-			Enabled:                cfg.PhaseLoop.Enabled,
-			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
-			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
-			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
-			JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
-			JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
-		}
+	// Phase loop is always enabled - the config just customizes iteration counts
+	sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
+		SkipPlanIfExists:       cfg.PhaseLoop.SkipPlanIfExists,
+		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
+		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}
 
 	// Enable monorepo support if configured

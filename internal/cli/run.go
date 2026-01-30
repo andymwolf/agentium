@@ -259,16 +259,15 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 
 	// Propagate phase loop config from config file
-	if cfg.PhaseLoop.Enabled {
-		sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
-			Enabled:                cfg.PhaseLoop.Enabled,
-			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
-			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
-			ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
-			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
-			JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
-			JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
-		}
+	// Phase loop is always enabled - the config just customizes iteration counts
+	sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
+		SkipPlanIfExists:       cfg.PhaseLoop.SkipPlanIfExists,
+		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+		ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
+		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
+		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}
 
 	// Propagate monorepo config from config file

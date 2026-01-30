@@ -23,8 +23,8 @@ type DelegationConfigYAML struct {
 }
 
 // PhaseLoopConfig contains phase loop configuration in YAML config.
+// Phase loop is enabled when this config section exists (non-nil) in the YAML.
 type PhaseLoopConfig struct {
-	Enabled                bool `mapstructure:"enabled"`
 	SkipPlanIfExists       bool `mapstructure:"skip_plan_if_exists"`
 	PlanMaxIterations      int  `mapstructure:"plan_max_iterations"`
 	ImplementMaxIterations int  `mapstructure:"implement_max_iterations"`
@@ -188,18 +188,8 @@ func applyDefaults(cfg *Config) {
 		cfg.Codex.AuthJSONPath = "~/.codex/auth.json"
 	}
 
-	// Enable phase loop by default for structured PLAN → IMPLEMENT → REVIEW → PR workflow
-	// This can be disabled in config with phase_loop.enabled: false
-	if !cfg.PhaseLoop.Enabled {
-		// Only set default if not explicitly configured
-		// Check if any phase loop fields are set to detect explicit configuration
-		if cfg.PhaseLoop.PlanMaxIterations == 0 &&
-			cfg.PhaseLoop.ImplementMaxIterations == 0 &&
-			cfg.PhaseLoop.ReviewMaxIterations == 0 &&
-			cfg.PhaseLoop.DocsMaxIterations == 0 {
-			cfg.PhaseLoop.Enabled = true
-		}
-	}
+	// Phase loop is enabled by default - the config section just customizes iteration counts.
+	// No explicit "enabled" field needed since presence of phase_loop config implies it's enabled.
 
 	// Default monorepo label prefix
 	if cfg.Monorepo.LabelPrefix == "" {

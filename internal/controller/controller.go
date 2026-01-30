@@ -113,7 +113,6 @@ type TaskState struct {
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	Enabled                bool `json:"enabled"`
 	SkipPlanIfExists       bool `json:"skip_plan_if_exists,omitempty"`
 	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
@@ -662,64 +661,9 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork, "")
 		c.activeTaskExistingWork = existingWork
 
-		// Use phase loop if enabled for issue tasks
-		if c.isPhaseLoopEnabled() {
-			if err := c.runPhaseLoop(ctx); err != nil {
-				c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
-			}
-			continue
-		}
-
-		c.iteration++
-		if c.cloudLogger != nil {
-			c.cloudLogger.SetIteration(c.iteration)
-		}
-		c.logInfo("Starting iteration %d/%d", c.iteration, c.config.MaxIterations)
-
-		// Run agent iteration
-		result, err := c.runIteration(ctx)
-		if err != nil {
-			c.logError("Iteration %d failed: %v", c.iteration, err)
-			continue
-		}
-
-		// Validate package scope for monorepo issues
-		if c.activeTaskType == "issue" && c.scopeValidator != nil {
-			if scopeErr := c.validatePackageScope(); scopeErr != nil {
-				c.logError("Iteration %d failed scope validation: %v", c.iteration, scopeErr)
-				// Mark task as blocked due to scope violation
-				taskID := taskKey(c.activeTaskType, c.activeTask)
-				if state, ok := c.taskStates[taskID]; ok {
-					state.Phase = PhaseBlocked
-					state.LastStatus = "SCOPE_VIOLATION"
-				}
-				continue
-			}
-		}
-
-		c.logInfo("Iteration %d completed: %s", c.iteration, result.Summary)
-
-		// Log agent status if present
-		if result.AgentStatus != "" {
-			c.logInfo("Agent status: %s %s", result.AgentStatus, result.StatusMessage)
-		}
-
-		// Update task phase for the active task
-		taskID := taskKey(c.activeTaskType, c.activeTask)
-		c.updateTaskPhase(taskID, result)
-
-		// Update instance metadata with current session status
-		c.updateInstanceMetadata(ctx)
-
-		// Check PRs created (for issue sessions)
-		if len(result.PRsCreated) > 0 {
-			c.logInfo("PRs created: %v", result.PRsCreated)
-		}
-
-		// Check if changes were pushed (for PR review sessions)
-		if result.PushedChanges {
-			c.pushedChanges = true
-			c.logInfo("Changes pushed to PR branch")
+		// Run phase loop for issue tasks
+		if err := c.runPhaseLoop(ctx); err != nil {
+			c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
 		}
 	}
 
@@ -1488,13 +1432,18 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 		}
 	}
 
-	// Fallback: if no explicit status signal but PRs were detected for an issue task,
-	// treat the task as complete. This handles agents that create PRs without emitting
-	// the AGENTIUM_STATUS: PR_CREATED signal.
+	// Fallback: if no explicit status signal but PRs were detected for an issue task.
+	// Only complete if already in DOCS phase to avoid skipping documentation updates.
+	// If still in IMPLEMENT, advance to DOCS instead of completing.
 	if result.AgentStatus == "" && state.Type == "issue" && len(result.PRsCreated) > 0 {
-		state.Phase = PhaseComplete
 		state.PRNumber = result.PRsCreated[0]
-		c.logInfo("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
+		if state.Phase == PhaseDocs {
+			state.Phase = PhaseComplete
+			c.logInfo("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
+		} else if state.Phase == PhaseImplement {
+			state.Phase = PhaseDocs
+			c.logInfo("Task %s advancing to DOCS via PR detection (PR #%s)", taskID, state.PRNumber)
+		}
 	}
 
 	state.LastStatus = result.AgentStatus
@@ -1773,9 +1722,9 @@ func (c *Controller) propagateBlocked(issueID string) {
 	}
 }
 
-// isPhaseLoopEnabled returns true if the phase loop is configured and enabled.
+// isPhaseLoopEnabled returns true if the phase loop is configured.
 func (c *Controller) isPhaseLoopEnabled() bool {
-	return c.config.PhaseLoop != nil && c.config.PhaseLoop.Enabled
+	return c.config.PhaseLoop != nil
 }
 
 // isHandoffEnabled returns true if the handoff store is initialized.
