@@ -38,6 +38,7 @@ type Session struct {
 	ExistingWork     *ExistingWork     // Prior work detected on GitHub for the active task
 	IterationContext *IterationContext // Phase-aware skill context (nil = legacy mode)
 	Interactive      bool              // When true, omit auto-accept permission flags
+	PackagePath      string            // Monorepo: relative path from repo root (e.g., "packages/core")
 }
 
 // IterationResult represents the outcome of a single agent iteration

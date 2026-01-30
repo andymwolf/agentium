@@ -38,6 +38,16 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		modelOverride = config.Model.Model
 	}
 
+	// Build project prompt with package scope instructions if applicable
+	projectPrompt := c.projectPrompt
+	if scopeInstructions := c.buildPackageScopeInstructions(); scopeInstructions != "" {
+		if projectPrompt != "" {
+			projectPrompt = projectPrompt + "\n\n" + scopeInstructions
+		} else {
+			projectPrompt = scopeInstructions
+		}
+	}
+
 	// Build session
 	subTaskID := fmt.Sprintf("delegation-%s-%d", phase, c.iteration)
 	session := &agent.Session{
@@ -52,9 +62,10 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		Metadata:       make(map[string]string),
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 		SystemPrompt:   c.systemPrompt,
-		ProjectPrompt:  c.projectPrompt,
+		ProjectPrompt:  projectPrompt,
 		ActiveTask:     c.activeTask,
 		ExistingWork:   c.activeTaskExistingWork,
+		PackagePath:    c.packagePath,
 		IterationContext: &agent.IterationContext{
 			Phase:         string(phase),
 			SkillsPrompt:  skillsPrompt,

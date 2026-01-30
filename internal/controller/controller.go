@@ -26,6 +26,8 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
+	"github.com/andywolf/agentium/internal/scope"
+	"github.com/andywolf/agentium/internal/workspace"
 	"github.com/andywolf/agentium/prompts/skills"
 )
 
@@ -162,6 +164,13 @@ type SessionConfig struct {
 	Delegation *DelegationConfig     `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
 	Verbose    bool                  `json:"verbose,omitempty"`
+	Monorepo   *MonorepoSessionConfig `json:"monorepo,omitempty"`
+}
+
+// MonorepoSessionConfig contains monorepo-specific settings for the session.
+type MonorepoSessionConfig struct {
+	Enabled     bool   `json:"enabled"`
+	LabelPrefix string `json:"label_prefix"` // Default: "pkg"
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -253,6 +262,10 @@ type Controller struct {
 	adapters               map[string]agent.Agent    // All initialized adapters (for multi-adapter routing)
 	orchestrator           *SubTaskOrchestrator      // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater       // Instance metadata updater (nil if unavailable)
+
+	// Monorepo support
+	packagePath    string           // Current package path for monorepo scope (empty if not monorepo)
+	scopeValidator *scope.ScopeValidator // Validates file changes are within package scope (nil if not monorepo)
 
 	// Shutdown management
 	shutdownHooks []ShutdownHook
@@ -652,6 +665,16 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		} else {
 			c.logInfo("Focusing on issue #%s", nextTask.ID)
 
+			// Initialize monorepo package scope for this issue
+			if err := c.initPackageScope(nextTask.ID); err != nil {
+				c.logError("Issue #%s blocked: %v", nextTask.ID, err)
+				taskID := taskKey("issue", nextTask.ID)
+				if state, ok := c.taskStates[taskID]; ok {
+					state.Phase = PhaseBlocked
+				}
+				continue
+			}
+
 			// Resolve parent branch for dependency chains
 			taskID := taskKey("issue", nextTask.ID)
 			state := c.taskStates[taskID]
@@ -692,6 +715,20 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		if err != nil {
 			c.logError("Iteration %d failed: %v", c.iteration, err)
 			continue
+		}
+
+		// Validate package scope for monorepo issues
+		if c.activeTaskType == "issue" && c.scopeValidator != nil {
+			if scopeErr := c.validatePackageScope(); scopeErr != nil {
+				c.logError("Iteration %d failed scope validation: %v", c.iteration, scopeErr)
+				// Mark task as blocked due to scope violation
+				taskID := taskKey(c.activeTaskType, c.activeTask)
+				if state, ok := c.taskStates[taskID]; ok {
+					state.Phase = PhaseBlocked
+					state.LastStatus = "SCOPE_VIOLATION"
+				}
+				continue
+			}
 		}
 
 		c.logInfo("Iteration %d completed: %s", c.iteration, result.Summary)
@@ -1015,6 +1052,152 @@ type issueDetail struct {
 	Body      string       `json:"body"`
 	Labels    []issueLabel `json:"labels"`
 	DependsOn []string     // Parsed dependency issue IDs (populated by buildDependencyGraph)
+}
+
+// extractPackageLabelFromIssue extracts the package path from issue labels using the configured label prefix.
+// Returns the package name and true if found, empty string and false otherwise.
+func (c *Controller) extractPackageLabelFromIssue(issue *issueDetail) (string, bool) {
+	if c.config.Monorepo == nil || !c.config.Monorepo.Enabled {
+		return "", false
+	}
+
+	prefix := c.config.Monorepo.LabelPrefix
+	if prefix == "" {
+		prefix = "pkg" // Default
+	}
+
+	for _, label := range issue.Labels {
+		if pkg, ok := workspace.ExtractPackageFromLabel(label.Name, prefix); ok {
+			return pkg, true
+		}
+	}
+	return "", false
+}
+
+// resolveAndValidatePackage resolves and validates the package for the current issue.
+// It returns the resolved package path, or an error if:
+// - Monorepo is enabled but no package label is found
+// - The package label doesn't match a valid workspace package
+func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, error) {
+	if c.config.Monorepo == nil || !c.config.Monorepo.Enabled {
+		return "", nil
+	}
+
+	// Check if workspace has pnpm-workspace.yaml
+	if !workspace.HasPnpmWorkspace(c.workDir) {
+		return "", fmt.Errorf("monorepo enabled but pnpm-workspace.yaml not found in %s", c.workDir)
+	}
+
+	// Get issue details
+	issue := c.issueDetailsByNumber[issueNumber]
+	if issue == nil {
+		return "", fmt.Errorf("issue #%s not found in fetched details", issueNumber)
+	}
+
+	// Extract package label
+	pkgName, found := c.extractPackageLabelFromIssue(issue)
+	if !found {
+		prefix := c.config.Monorepo.LabelPrefix
+		if prefix == "" {
+			prefix = "pkg"
+		}
+		return "", fmt.Errorf("monorepo requires %s:<package> label on issue #%s", prefix, issueNumber)
+	}
+
+	// Resolve package name to full path (e.g., "core" -> "packages/core")
+	pkgPath, err := workspace.ResolvePackagePath(c.workDir, pkgName)
+	if err != nil {
+		return "", fmt.Errorf("invalid package label on issue #%s: %w", issueNumber, err)
+	}
+
+	return pkgPath, nil
+}
+
+// initPackageScope sets up the package scope for a monorepo issue.
+// It detects the package from issue labels, validates it, and initializes the scope validator.
+// It also reloads the project prompt to include package-specific AGENT.md.
+func (c *Controller) initPackageScope(issueNumber string) error {
+	pkgPath, err := c.resolveAndValidatePackage(issueNumber)
+	if err != nil {
+		return err
+	}
+
+	if pkgPath == "" {
+		// Not a monorepo or package not required
+		c.packagePath = ""
+		c.scopeValidator = nil
+		return nil
+	}
+
+	c.packagePath = pkgPath
+	c.scopeValidator = scope.NewValidator(c.workDir, pkgPath)
+	c.logInfo("Monorepo package scope: %s", pkgPath)
+
+	// Reload project prompt with package-specific AGENT.md merged in
+	projectPrompt, err := prompt.LoadProjectPromptWithPackage(c.workDir, pkgPath)
+	if err != nil {
+		c.logWarning("failed to load hierarchical project prompt: %v", err)
+	} else if projectPrompt != "" {
+		c.projectPrompt = projectPrompt
+		c.logInfo("Project prompt loaded with package context (%s)", pkgPath)
+	}
+
+	return nil
+}
+
+// buildPackageScopeInstructions returns package scope constraint instructions for the agent prompt.
+// Returns empty string if no package scope is active.
+func (c *Controller) buildPackageScopeInstructions() string {
+	if c.packagePath == "" {
+		return ""
+	}
+
+	return fmt.Sprintf(`## PACKAGE SCOPE CONSTRAINT
+
+You are working within monorepo package: %s
+
+STRICT CONSTRAINTS:
+- Only modify files within: %s/
+- Exception: You may update root package.json for workspace dependencies
+- Run commands from package directory: cd %s && pnpm test
+- Do NOT modify files in other packages or repository root (except root package.json)
+
+Violations will cause your changes to be rejected and reverted.
+`, c.packagePath, c.packagePath, c.packagePath)
+}
+
+// validatePackageScope checks if all file changes are within the allowed package scope.
+// If violations are found, it resets the changes and returns an error.
+func (c *Controller) validatePackageScope() error {
+	if c.scopeValidator == nil {
+		return nil // No scope validation required
+	}
+
+	result, err := c.scopeValidator.ValidateChanges()
+	if err != nil {
+		c.logWarning("Scope validation error: %v", err)
+		return nil // Don't fail on validation errors, just warn
+	}
+
+	if result.Valid {
+		if len(result.AllowedExempt) > 0 {
+			c.logInfo("Scope validation passed (%d exempt files: %v)", len(result.AllowedExempt), result.AllowedExempt)
+		}
+		return nil
+	}
+
+	// Scope violation detected
+	errMsg := c.scopeValidator.FormatViolationError(result)
+	c.logError("Scope validation failed:\n%s", errMsg)
+
+	// Reset changes to prevent out-of-scope modifications from persisting
+	if resetErr := c.scopeValidator.ResetChanges(); resetErr != nil {
+		c.logError("Failed to reset out-of-scope changes: %v", resetErr)
+	} else {
+		c.logInfo("Reset uncommitted changes due to scope violation")
+	}
+
+	return fmt.Errorf("scope violation: %d file(s) modified outside package %s", len(result.OutOfScopeFiles), c.packagePath)
 }
 
 // branchPrefixForLabels returns the branch prefix based on the first issue label.
@@ -1865,6 +2048,16 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
+	// Build project prompt with package scope instructions if applicable
+	projectPrompt := c.projectPrompt
+	if scopeInstructions := c.buildPackageScopeInstructions(); scopeInstructions != "" {
+		if projectPrompt != "" {
+			projectPrompt = projectPrompt + "\n\n" + scopeInstructions
+		} else {
+			projectPrompt = scopeInstructions
+		}
+	}
+
 	// Initialize IterationContext once at session creation to avoid repeated nil checks
 	session := &agent.Session{
 		ID:               c.config.ID,
@@ -1878,11 +2071,12 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		Metadata:         make(map[string]string),
 		ClaudeAuthMode:   c.config.ClaudeAuth.AuthMode,
 		SystemPrompt:     c.systemPrompt,
-		ProjectPrompt:    c.projectPrompt,
+		ProjectPrompt:    projectPrompt,
 		ActiveTask:       c.activeTask,
 		ExistingWork:     c.activeTaskExistingWork,
 		Interactive:      c.config.Interactive,
 		IterationContext: &agent.IterationContext{},
+		PackagePath:      c.packagePath,
 	}
 
 	// Compose phase-aware skills if selector is available

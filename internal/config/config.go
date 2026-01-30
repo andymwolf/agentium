@@ -39,6 +39,12 @@ type CodexConfig struct {
 	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json (default: ~/.codex/auth.json)
 }
 
+// MonorepoConfig contains monorepo-specific settings for pnpm workspaces
+type MonorepoConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`      // Set by agentium init when pnpm-workspace.yaml is detected
+	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
+}
+
 // Config represents the full Agentium configuration
 type Config struct {
 	Project    ProjectConfig        `mapstructure:"project"`
@@ -52,6 +58,7 @@ type Config struct {
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
 	Delegation DelegationConfigYAML `mapstructure:"delegation"`
 	PhaseLoop  PhaseLoopConfig      `mapstructure:"phase_loop"`
+	Monorepo   MonorepoConfig       `mapstructure:"monorepo"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings
@@ -193,6 +200,11 @@ func applyDefaults(cfg *Config) {
 			cfg.PhaseLoop.DocsMaxIterations == 0 {
 			cfg.PhaseLoop.Enabled = true
 		}
+	}
+
+	// Default monorepo label prefix
+	if cfg.Monorepo.LabelPrefix == "" {
+		cfg.Monorepo.LabelPrefix = "pkg"
 	}
 }
 
