@@ -62,8 +62,8 @@ func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) er
 	existingContent, err := os.ReadFile(agentMDPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// File doesn't exist, write with default custom section
-			fullContent := newContent + defaultCustomSection
+			// File doesn't exist, write with default workflow and custom sections
+			fullContent := newContent + defaultWorkflowSection + defaultCustomSection
 			return os.WriteFile(agentMDPath, []byte(fullContent), 0644)
 		}
 		return fmt.Errorf("failed to read existing AGENT.md: %w", err)
@@ -81,7 +81,7 @@ func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) er
 	if parsed.CustomContent != "" {
 		finalContent += parsed.CustomContent
 	} else {
-		finalContent += defaultCustomSection
+		finalContent += defaultWorkflowSection + defaultCustomSection
 	}
 
 	return os.WriteFile(agentMDPath, []byte(finalContent), 0644)
@@ -103,13 +103,85 @@ This is a new project. Run %sagentium refresh%s after adding code to generate pr
 *Commands will be detected after build files are added.*
 
 %s
-
-## Custom Instructions
-
-Add any project-specific instructions for AI agents here.
-
-`, GeneratedStartMarker, projectName, "`", "`", GeneratedEndMarker)
+%s%s`, GeneratedStartMarker, projectName, "`", "`", GeneratedEndMarker, defaultWorkflowSection, defaultCustomSection)
 }
+
+const defaultWorkflowSection = `
+
+## Workflow Requirements
+
+### Critical Rules
+
+**NEVER make code changes directly on the ` + "`main`" + ` branch.** All work must follow the branch workflow below.
+
+**ALWAYS create a feature branch BEFORE writing any code.** If you find yourself on ` + "`main`" + `, switch to a feature branch immediately.
+
+**When given a plan or implementation instructions:**
+1. First update the relevant GitHub issue(s) with the plan details (use ` + "`gh issue edit`" + `)
+2. Create a feature branch
+3. Then implement the changes
+
+### Branch and PR Workflow
+
+When implementing any GitHub issue:
+
+1. **Update the GitHub issue** with implementation details if needed:
+   ` + "```bash" + `
+   gh issue edit <number> --body "$(gh issue view <number> --json body -q .body)
+
+   ## Implementation Plan
+   <details added from plan>"
+   ` + "```" + `
+
+2. **Create a feature branch** from ` + "`main`" + `:
+   ` + "```bash" + `
+   git checkout main
+   git pull origin main
+   git checkout -b <label>/issue-<number>-<short-description>
+   ` + "```" + `
+
+3. **Make commits** with clear messages referencing the issue:
+   ` + "```bash" + `
+   git commit -m "Add feature X
+
+   Implements #<issue-number>"
+   ` + "```" + `
+
+4. **Push and create a PR**:
+   ` + "```bash" + `
+   git push -u origin <branch-name>
+   gh pr create --title "..." --body "Closes #<issue-number>"
+   ` + "```" + `
+
+5. **Never commit directly to ` + "`main`" + `** - This is strictly enforced.
+
+### Branch Naming Convention
+
+Branch prefixes are determined by the first label on the issue:
+- ` + "`<label>/issue-<number>-<short-description>`" + ` - Based on first issue label
+- Examples: ` + "`bug/issue-123-fix-auth`" + `, ` + "`enhancement/issue-456-add-cache`" + `, ` + "`feature/issue-789-new-api`" + `
+- Default: ` + "`feature/issue-<number>-*`" + ` when no labels are present
+
+### Before Starting Work
+
+1. **Verify you are NOT on main:** ` + "`git branch --show-current`" + `
+2. Read the issue description fully
+3. Check for dependencies on other issues
+4. Ensure you're on a clean working tree
+5. Pull latest ` + "`main`" + ` and create feature branch
+
+### Commit Messages
+
+Format:
+` + "```" + `
+<short summary>
+
+<detailed description if needed>
+
+Closes #<issue-number>
+Co-Authored-By: Claude <noreply@anthropic.com>
+` + "```" + `
+`
 
 const defaultCustomSection = `
 
