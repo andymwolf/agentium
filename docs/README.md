@@ -6,7 +6,7 @@ Welcome to the Agentium documentation. This directory contains comprehensive gui
 
 | Guide | Description |
 |-------|-------------|
-| [Getting Started](getting-started.md) | Installation, prerequisites, and quickstart tutorial |
+| [Getting Started](getting-started.md) | Installation, prerequisites, quickstart, and monorepo setup |
 | [Configuration Reference](configuration.md) | Full `.agentium.yaml` reference with all options |
 | [CLI Reference](cli-reference.md) | All commands, flags, and usage examples |
 | [Cloud Setup Guides](cloud-setup/) | Provider-specific setup instructions |

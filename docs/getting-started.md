@@ -188,6 +188,53 @@ agentium run --repo github.com/org/repo --issues 42 \
 agentium run --repo github.com/org/repo --issues 42 --dry-run
 ```
 
+### Working with Monorepos (pnpm Workspaces)
+
+For projects using pnpm workspaces, Agentium provides per-package scope enforcement:
+
+```bash
+# Agentium auto-detects pnpm-workspace.yaml during init
+agentium init --repo github.com/org/monorepo --provider gcp
+# Output: Detected pnpm-workspace.yaml - monorepo support enabled
+```
+
+When monorepo mode is enabled:
+- Issues **must** have a `pkg:<package-name>` label to specify scope
+- Agents can only modify files within the target package directory
+- Out-of-scope file changes are automatically reset and block iteration
+- Root-level files (`package.json`, `pnpm-lock.yaml`, `.github/workflows/`) are allowed
+
+**Creating package-scoped issues:**
+
+Use the `/gh-issues` skill which automatically handles package labels:
+
+```bash
+# The skill will prompt for package selection in monorepos
+/gh-issues Add validation to the form component
+```
+
+Or create issues manually with the required label:
+
+```bash
+gh label create "pkg:web" --color "0052CC"
+gh issue create --title "Add form validation" --label "pkg:web,enhancement"
+```
+
+**Package-specific AGENT.md:**
+
+You can provide per-package agent instructions by creating `.agentium/AGENT.md` within a package directory. These are merged with the root AGENT.md:
+
+```
+my-monorepo/
+├── .agentium/AGENT.md          # Repository-wide instructions
+├── packages/
+│   ├── core/
+│   │   └── .agentium/AGENT.md  # Core package instructions
+│   └── web/
+│       └── .agentium/AGENT.md  # Web package instructions
+└── pnpm-workspace.yaml
+```
+
 ### Local Interactive Mode (Debugging)
 
 Run the controller locally without provisioning a VM. The agent runs in interactive mode, prompting for permission approvals:

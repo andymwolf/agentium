@@ -98,6 +98,11 @@ delegation:
       skills:
         - "code_review"
         - "lint_detection"
+
+# Monorepo support (auto-detected for pnpm workspaces)
+monorepo:
+  enabled: true                     # Enable package scope enforcement
+  label_prefix: "pkg"               # Prefix for package labels (pkg:core, pkg:web)
 ```
 
 ## Configuration Sections
@@ -231,6 +236,36 @@ After each phase, the evaluator produces a verdict:
 - **BLOCKED** — Stop and signal human intervention needed
 
 Evaluator feedback from ITERATE verdicts is stored in the memory system and provided as context in the next iteration of that phase.
+
+### monorepo
+
+Configuration for pnpm workspace monorepo support. Automatically set by `agentium init` when `pnpm-workspace.yaml` is detected.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | bool | No | `false` | Enable monorepo mode with package scope enforcement |
+| `label_prefix` | string | No | `pkg` | Prefix for package labels (e.g., `pkg:core`, `pkg:web`) |
+
+**Monorepo behavior:**
+
+When `monorepo.enabled` is `true`:
+- Issues must have a `<prefix>:<package-name>` label to specify the target package
+- The agent can only modify files within the target package directory
+- Out-of-scope file changes are automatically reset and block the iteration
+- Allowed exceptions: root `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/workflows/`
+- Hierarchical AGENT.md loading: root + package-specific instructions are merged
+
+**Example:**
+
+```yaml
+monorepo:
+  enabled: true
+  label_prefix: "pkg"  # Issues need labels like pkg:core, pkg:api
+```
+
+**Package-specific agent instructions:**
+
+Create `.agentium/AGENT.md` within a package directory to provide package-specific instructions. These are merged with the root AGENT.md when the agent targets that package.
 
 ### delegation
 

@@ -70,6 +70,15 @@ agentium init --repo github.com/myorg/myrepo --force
 
 Creates `.agentium.yaml` with the specified configuration. Also generates `.agentium/AGENT.md` with auto-detected project information (build commands, test commands, project structure) unless `--skip-agent-md` is specified. If a config file already exists and `--force` is not set, the command will exit with an error.
 
+**Monorepo Detection:**
+
+If a `pnpm-workspace.yaml` file is present, `agentium init` automatically:
+- Sets `monorepo.enabled: true` in the config
+- Sets `monorepo.label_prefix: "pkg"` as the default prefix
+- Outputs: `Detected pnpm-workspace.yaml - monorepo support enabled`
+
+This enables per-package scope enforcement, requiring issues to have `pkg:<package-name>` labels.
+
 ---
 
 ### `agentium refresh`
