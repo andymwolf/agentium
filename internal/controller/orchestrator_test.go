@@ -37,12 +37,9 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 			Enabled:  true,
 			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
-				SubTaskImplement:  {Agent: "claude-code", Model: implModel, Skills: []string{"implement"}},
-				SubTaskDocs:       {Agent: "aider", Model: docsModel},
-				SubTaskReview:     {Agent: "claude-code", Skills: []string{"pr_review"}},
-				SubTaskPRCreation: {Agent: "claude-code", Skills: []string{"pr_create"}},
-				SubTaskPlan:       {Agent: "claude-code", Skills: []string{"planning"}},
-				SubTaskPush:       {Agent: "claude-code", Skills: []string{"push"}},
+				SubTaskImplement: {Agent: "claude-code", Model: implModel, Skills: []string{"implement"}},
+				SubTaskDocs:      {Agent: "aider", Model: docsModel},
+				SubTaskPlan:      {Agent: "claude-code", Skills: []string{"plan"}},
 			},
 		},
 	}
@@ -54,9 +51,6 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 	}{
 		{PhaseImplement, "claude-code", "claude-opus-4-20250514"},
 		{PhaseDocs, "aider", "claude-sonnet-4-20250514"},
-		{PhasePRCreation, "claude-code", ""}, // pr_creation type
-		{PhaseAnalyze, "claude-code", ""},    // plan type
-		{PhasePush, "claude-code", ""},       // push type
 	}
 
 	for _, tt := range tests {
@@ -78,14 +72,13 @@ func TestConfigForPhase_ConfiguredPhases(t *testing.T) {
 }
 
 func TestConfigForPhase_PartialDelegation(t *testing.T) {
-	// Only configure implement and docs, leaving review/plan unconfigured
+	// Only configure implement, leaving plan/docs unconfigured
 	orch := &SubTaskOrchestrator{
 		config: DelegationConfig{
 			Enabled:  true,
 			Strategy: "sequential",
 			SubAgents: map[SubTaskType]SubTaskConfig{
 				SubTaskImplement: {Agent: "claude-code"},
-				SubTaskDocs:      {Agent: "aider"},
 			},
 		},
 	}
@@ -94,18 +87,12 @@ func TestConfigForPhase_PartialDelegation(t *testing.T) {
 	if cfg := orch.ConfigForPhase(PhaseImplement); cfg == nil {
 		t.Error("ConfigForPhase(IMPLEMENT) should return config")
 	}
-	if cfg := orch.ConfigForPhase(PhaseDocs); cfg == nil {
-		t.Error("ConfigForPhase(DOCS) should return config")
-	}
 
 	// Unconfigured phases should return nil
-	if cfg := orch.ConfigForPhase(PhasePRCreation); cfg != nil {
-		t.Errorf("ConfigForPhase(PR_CREATION) = %+v, want nil (pr_creation not configured)", cfg)
+	if cfg := orch.ConfigForPhase(PhasePlan); cfg != nil {
+		t.Errorf("ConfigForPhase(PLAN) = %+v, want nil (plan not configured)", cfg)
 	}
-	if cfg := orch.ConfigForPhase(PhaseAnalyze); cfg != nil {
-		t.Errorf("ConfigForPhase(ANALYZE) = %+v, want nil (plan not configured)", cfg)
-	}
-	if cfg := orch.ConfigForPhase(PhasePush); cfg != nil {
-		t.Errorf("ConfigForPhase(PUSH) = %+v, want nil (push not configured)", cfg)
+	if cfg := orch.ConfigForPhase(PhaseDocs); cfg != nil {
+		t.Errorf("ConfigForPhase(DOCS) = %+v, want nil (docs not configured)", cfg)
 	}
 }

@@ -6,24 +6,19 @@ import "github.com/andywolf/agentium/internal/routing"
 type SubTaskType string
 
 const (
-	SubTaskPlan       SubTaskType = "plan"
-	SubTaskImplement  SubTaskType = "implement"
-	SubTaskTest       SubTaskType = "test"
-	SubTaskReview     SubTaskType = "review"
-	SubTaskPRCreation SubTaskType = "pr_creation"
-	SubTaskDocs       SubTaskType = "docs"
-	SubTaskPush       SubTaskType = "push"
-	SubTaskEvaluate   SubTaskType = "evaluate"
+	SubTaskPlan      SubTaskType = "plan"
+	SubTaskImplement SubTaskType = "implement"
+	SubTaskTest      SubTaskType = "test"
+	SubTaskReview    SubTaskType = "review"
+	SubTaskDocs      SubTaskType = "docs"
+	SubTaskEvaluate  SubTaskType = "evaluate"
 )
 
 // phaseToSubTask maps controller task phases to sub-task types.
 var phaseToSubTask = map[TaskPhase]SubTaskType{
-	PhasePlan:       SubTaskPlan,
-	PhaseImplement:  SubTaskImplement,
-	PhaseDocs:       SubTaskDocs,
-	PhasePRCreation: SubTaskPRCreation,
-	PhaseAnalyze:    SubTaskPlan,
-	PhasePush:       SubTaskPush,
+	PhasePlan:      SubTaskPlan,
+	PhaseImplement: SubTaskImplement,
+	PhaseDocs:      SubTaskDocs,
 }
 
 // SubTaskConfig specifies the agent, model, and skills for a delegated sub-task.

@@ -54,7 +54,6 @@ type SessionConfig struct {
 	CloudProvider string                `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
 	Repository    string                `json:"repository"`
 	Tasks         []string              `json:"tasks"`
-	PRs           []string              `json:"prs,omitempty"`
 	Agent         string                `json:"agent"`
 	MaxIterations int                   `json:"max_iterations"`
 	MaxDuration   string                `json:"max_duration"`

@@ -176,13 +176,17 @@ Valid phases for `--phase-model` and routing config overrides:
 |-------|-------------|
 | `PLAN` | Planning and analysis |
 | `IMPLEMENT` | Code implementation |
-| `TEST` | Test writing and execution |
-| `PR_CREATION` | Pull request creation |
-| `REVIEW` | Code review feedback |
 | `DOCS` | Documentation updates |
-| `EVALUATE` | Evaluation of results |
-| `ANALYZE` | Issue/PR analysis |
-| `PUSH` | Git push operations |
+| `COMPLETE` | Session completed |
+| `BLOCKED` | Agent blocked |
+| `NOTHING_TO_DO` | No changes needed |
+| `PLAN_REVIEW` | Plan phase review |
+| `IMPLEMENT_REVIEW` | Implementation phase review |
+| `DOCS_REVIEW` | Documentation phase review |
+| `JUDGE` | Phase evaluation |
+| `PLAN_JUDGE` | Plan phase evaluation |
+| `IMPLEMENT_JUDGE` | Implementation phase evaluation |
+| `DOCS_JUDGE` | Documentation phase evaluation |
 
 Format: `PHASE=adapter:model` (e.g., `PLAN=claude-code:claude-opus-4-20250514`)
 

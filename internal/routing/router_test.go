@@ -152,8 +152,7 @@ func TestUnknownPhases_AllValid(t *testing.T) {
 		Default: ModelConfig{Adapter: "claude-code", Model: "opus"},
 		Overrides: map[string]ModelConfig{
 			"IMPLEMENT":   {Model: "sonnet"},
-			"DOCS":        {Model: "haiku"},
-			"PR_CREATION": {Model: "opus"},
+			"DOCS": {Model: "haiku"},
 		},
 	})
 

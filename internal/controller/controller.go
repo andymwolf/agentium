@@ -70,13 +70,9 @@ const (
 	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
 	PhaseDocs        TaskPhase = "DOCS"
-	PhasePRCreation  TaskPhase = "PR_CREATION"
 	PhaseComplete    TaskPhase = "COMPLETE"
 	PhaseBlocked     TaskPhase = "BLOCKED"
 	PhaseNothingToDo TaskPhase = "NOTHING_TO_DO"
-	// PR-specific phases
-	PhaseAnalyze TaskPhase = "ANALYZE"
-	PhasePush    TaskPhase = "PUSH"
 )
 
 // WorkflowPath represents the complexity path determined after PLAN iteration 1.
@@ -97,7 +93,7 @@ const (
 //     This preserves the exact signal emitted by the agent for debugging and audit purposes.
 //
 // Example: When an agent emits "TESTS_PASSED", LastStatus is set to "TESTS_PASSED" while
-// Phase transitions to PhasePRCreation (for issues) or PhasePush (for PRs).
+// Phase transitions to PhaseDocs.
 type TaskState struct {
 	ID                 string
 	Type               string    // "issue" or "pr"
@@ -128,12 +124,11 @@ type PhaseLoopConfig struct {
 
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID                   string   `json:"id"`
-	CloudProvider        string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
-	Repository           string   `json:"repository"`
-	Tasks                []string `json:"tasks"`
-	PRs                  []string `json:"prs,omitempty"`
-	Agent                string   `json:"agent"`
+	ID            string   `json:"id"`
+	CloudProvider string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
+	Repository    string   `json:"repository"`
+	Tasks         []string `json:"tasks"`
+	Agent         string   `json:"agent"`
 	MaxIterations        int      `json:"max_iterations"`
 	MaxDuration          string   `json:"max_duration"`
 	Prompt               string   `json:"prompt"`
@@ -243,13 +238,11 @@ type Controller struct {
 	secretManager          gcp.SecretFetcher
 	systemPrompt           string                    // Loaded SYSTEM.md content
 	projectPrompt          string                    // Loaded .agentium/AGENTS.md content (may be empty)
-	taskQueue              []TaskQueueItem           // Ordered queue: PRs first, then issues
-	issueDetails           []issueDetail             // Fetched issue details for prompt building
-	prDetails              []prWithReviews           // Fetched PR details for prompt building
-	prDetailsByNumber      map[string]*prWithReviews // O(1) lookup by PR number string
-	issueDetailsByNumber   map[string]*issueDetail   // O(1) lookup by issue number string
-	activeTask             string                    // Current task ID being focused on
-	activeTaskType         string                    // "pr" or "issue"
+	taskQueue              []TaskQueueItem         // Task queue for issues
+	issueDetails           []issueDetail           // Fetched issue details for prompt building
+	issueDetailsByNumber   map[string]*issueDetail // O(1) lookup by issue number string
+	activeTask             string                  // Current task ID being focused on
+	activeTaskType         string                  // "issue"
 	activeTaskExistingWork *agent.ExistingWork       // Existing work detected for active task (issues only)
 	skillSelector          *skills.Selector          // Phase-aware skill selector (nil = legacy mode)
 	memoryStore            *memory.Store             // Persistent memory store (nil = disabled)
@@ -378,15 +371,7 @@ func New(config SessionConfig) (*Controller, error) {
 		shutdownCh:      make(chan struct{}),
 	}
 
-	// Initialize task states and build unified task queue (PRs first, then issues)
-	for _, pr := range config.PRs {
-		c.taskStates[taskKey("pr", pr)] = &TaskState{
-			ID:    pr,
-			Type:  "pr",
-			Phase: PhaseAnalyze,
-		}
-		c.taskQueue = append(c.taskQueue, TaskQueueItem{Type: "pr", ID: pr})
-	}
+	// Initialize task states and build task queue
 	initialIssuePhase := PhaseImplement
 	if c.isPhaseLoopEnabled() {
 		initialIssuePhase = PhasePlan
@@ -559,9 +544,6 @@ func (c *Controller) initSession(ctx context.Context) error {
 	if len(c.config.Tasks) > 0 {
 		c.logInfo("Tasks: %v", c.config.Tasks)
 	}
-	if len(c.config.PRs) > 0 {
-		c.logInfo("PRs: %v", c.config.PRs)
-	}
 	c.logInfo("Agent: %s", c.config.Agent)
 	c.logInfo("Max iterations: %d", c.config.MaxIterations)
 	c.logInfo("Max duration: %s", c.maxDuration)
@@ -591,9 +573,6 @@ func (c *Controller) initSession(ctx context.Context) error {
 	}
 
 	// Fetch all task details upfront
-	if len(c.config.PRs) > 0 {
-		c.prDetails = c.fetchPRDetails(ctx)
-	}
 	if len(c.config.Tasks) > 0 {
 		c.issueDetails = c.fetchIssueDetails(ctx)
 	}
@@ -603,7 +582,7 @@ func (c *Controller) initSession(ctx context.Context) error {
 		c.buildDependencyGraph()
 	}
 
-	c.logInfo("Task queue: %d issue(s) [%s], %d PR(s)", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "), len(c.config.PRs))
+	c.logInfo("Task queue: %d issue(s) [%s]", len(c.config.Tasks), strings.Join(c.config.Tasks, ", "))
 
 	return nil
 }
@@ -650,58 +629,45 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 			continue
 		}
 
-		// Build prompt based on task type
-		if nextTask.Type == "pr" {
-			c.logInfo("Focusing on PR #%s", nextTask.ID)
-			if err := c.preparePRTask(ctx, nextTask.ID); err != nil {
-				c.logError("Failed to prepare PR #%s: %v", nextTask.ID, err)
-				// Mark as blocked and continue to next task
-				taskID := taskKey("pr", nextTask.ID)
-				if state, ok := c.taskStates[taskID]; ok {
-					state.Phase = PhaseBlocked
-				}
-				continue
-			}
-		} else {
-			c.logInfo("Focusing on issue #%s", nextTask.ID)
+		// Build prompt for issue task
+		c.logInfo("Focusing on issue #%s", nextTask.ID)
 
-			// Initialize monorepo package scope for this issue
-			if err := c.initPackageScope(nextTask.ID); err != nil {
-				c.logError("Issue #%s blocked: %v", nextTask.ID, err)
-				taskID := taskKey("issue", nextTask.ID)
-				if state, ok := c.taskStates[taskID]; ok {
-					state.Phase = PhaseBlocked
-				}
-				continue
-			}
-
-			// Resolve parent branch for dependency chains
+		// Initialize monorepo package scope for this issue
+		if err := c.initPackageScope(nextTask.ID); err != nil {
+			c.logError("Issue #%s blocked: %v", nextTask.ID, err)
 			taskID := taskKey("issue", nextTask.ID)
-			state := c.taskStates[taskID]
-			parentBranch, err := c.resolveParentBranch(ctx, nextTask.ID)
-			if err != nil {
-				c.logWarning("Issue #%s blocked: %v", nextTask.ID, err)
-				if state != nil {
-					state.Phase = PhaseBlocked
-				}
-				c.propagateBlocked(nextTask.ID)
-				continue
+			if state, ok := c.taskStates[taskID]; ok {
+				state.Phase = PhaseBlocked
 			}
+			continue
+		}
+
+		// Resolve parent branch for dependency chains
+		issueTaskID := taskKey("issue", nextTask.ID)
+		state := c.taskStates[issueTaskID]
+		parentBranch, err := c.resolveParentBranch(ctx, nextTask.ID)
+		if err != nil {
+			c.logWarning("Issue #%s blocked: %v", nextTask.ID, err)
 			if state != nil {
-				state.ParentBranch = parentBranch
+				state.Phase = PhaseBlocked
 			}
+			c.propagateBlocked(nextTask.ID)
+			continue
+		}
+		if state != nil {
+			state.ParentBranch = parentBranch
+		}
 
-			existingWork := c.detectExistingWork(ctx, nextTask.ID)
-			c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork, "")
-			c.activeTaskExistingWork = existingWork
+		existingWork := c.detectExistingWork(ctx, nextTask.ID)
+		c.config.Prompt = c.buildPromptForTask(nextTask.ID, existingWork, "")
+		c.activeTaskExistingWork = existingWork
 
-			// Use phase loop if enabled for issue tasks
-			if c.isPhaseLoopEnabled() {
-				if err := c.runPhaseLoop(ctx); err != nil {
-					c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
-				}
-				continue
+		// Use phase loop if enabled for issue tasks
+		if c.isPhaseLoopEnabled() {
+			if err := c.runPhaseLoop(ctx); err != nil {
+				c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
 			}
+			continue
 		}
 
 		c.iteration++
@@ -1245,25 +1211,6 @@ func sanitizeBranchPrefix(label string) string {
 	return result
 }
 
-type prDetail struct {
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	Body        string `json:"body"`
-	HeadRefName string `json:"headRefName"`
-}
-
-type prReview struct {
-	State string `json:"state"`
-	Body  string `json:"body"`
-}
-
-type prComment struct {
-	Path     string `json:"path"`
-	Line     int    `json:"line"`
-	Body     string `json:"body"`
-	DiffHunk string `json:"diffHunk"`
-}
-
 func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 	c.logInfo("Fetching issue details")
 
@@ -1302,83 +1249,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 	return issues
 }
 
-type prWithReviews struct {
-	Detail   prDetail
-	Reviews  []prReview
-	Comments []prComment
-}
-
-func (c *Controller) fetchPRDetails(ctx context.Context) []prWithReviews {
-	c.logInfo("Fetching PR details")
-
-	prs := make([]prWithReviews, 0, len(c.config.PRs))
-	c.prDetailsByNumber = make(map[string]*prWithReviews, len(c.config.PRs))
-
-	for _, prNumber := range c.config.PRs {
-		// Fetch basic PR info
-		cmd := c.execCommand(ctx, "gh", "pr", "view", prNumber,
-			"--repo", c.config.Repository,
-			"--json", "number,title,body,headRefName",
-		)
-		cmd.Env = c.envWithGitHubToken()
-
-		output, err := cmd.Output()
-		if err != nil {
-			c.logWarning("failed to fetch PR #%s: %v", prNumber, err)
-			continue
-		}
-
-		var pr prDetail
-		if err := json.Unmarshal(output, &pr); err != nil {
-			c.logWarning("failed to parse PR #%s: %v", prNumber, err)
-			continue
-		}
-
-		prWithRev := prWithReviews{Detail: pr}
-
-		// Fetch reviews requesting changes
-		repoPath := c.config.Repository
-		reviewCmd := c.execCommand(ctx, "gh", "api",
-			fmt.Sprintf("repos/%s/pulls/%s/reviews", repoPath, prNumber),
-			"--jq", `[.[] | select(.state == "CHANGES_REQUESTED" or .state == "COMMENTED") | {state: .state, body: .body}]`,
-		)
-		reviewCmd.Env = c.envWithGitHubToken()
-
-		if reviewOutput, err := reviewCmd.Output(); err == nil {
-			var reviews []prReview
-			if err := json.Unmarshal(reviewOutput, &reviews); err == nil {
-				prWithRev.Reviews = reviews
-			}
-		}
-
-		// Fetch inline review comments
-		commentCmd := c.execCommand(ctx, "gh", "api",
-			fmt.Sprintf("repos/%s/pulls/%s/comments", repoPath, prNumber),
-			"--jq", `[.[] | {path: .path, line: .line, body: .body, diffHunk: .diff_hunk}]`,
-		)
-		commentCmd.Env = c.envWithGitHubToken()
-
-		if commentOutput, err := commentCmd.Output(); err == nil {
-			var comments []prComment
-			if err := json.Unmarshal(commentOutput, &comments); err == nil {
-				prWithRev.Comments = comments
-			}
-		}
-
-		prs = append(prs, prWithRev)
-	}
-
-	// Build O(1) lookup map after collecting all PRs
-	for i := range prs {
-		prNumStr := fmt.Sprintf("%d", prs[i].Detail.Number)
-		c.prDetailsByNumber[prNumStr] = &prs[i]
-	}
-
-	return prs
-}
-
 // nextQueuedTask returns the first task in the queue that hasn't reached a terminal phase.
-// The queue is ordered PRs first, then issues, ensuring sequential processing.
 func (c *Controller) nextQueuedTask() *TaskQueueItem {
 	for i := range c.taskQueue {
 		item := &c.taskQueue[i]
@@ -1395,81 +1266,6 @@ func (c *Controller) nextQueuedTask() *TaskQueueItem {
 		}
 	}
 	return nil
-}
-
-// preparePRTask checks out the PR branch and builds the prompt for a single PR review task.
-func (c *Controller) preparePRTask(ctx context.Context, prNumber string) error {
-	// O(1) lookup for PR detail from pre-fetched data
-	prData := c.prDetailsByNumber[prNumber]
-	if prData == nil {
-		return fmt.Errorf("PR #%s not found in fetched details", prNumber)
-	}
-
-	// Checkout PR branch
-	c.logInfo("Checking out PR branch: %s", prData.Detail.HeadRefName)
-	if err := c.checkoutBranch(ctx, prData.Detail.HeadRefName); err != nil {
-		return err
-	}
-
-	// Build prompt for this single PR
-	c.config.Prompt = c.buildPromptForPR(*prData)
-	c.activeTaskExistingWork = nil // Not applicable for PR reviews
-	return nil
-}
-
-// buildPromptForPR builds a focused prompt for a single PR review task.
-func (c *Controller) buildPromptForPR(pr prWithReviews) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("You are working on repository: %s\n\n", c.config.Repository))
-	sb.WriteString("## PR REVIEW SESSION\n\n")
-	sb.WriteString("You are addressing code review feedback on an existing pull request.\n\n")
-
-	sb.WriteString(fmt.Sprintf("### PR #%d: %s\n", pr.Detail.Number, pr.Detail.Title))
-	sb.WriteString(fmt.Sprintf("Branch: %s\n\n", pr.Detail.HeadRefName))
-
-	if len(pr.Reviews) > 0 {
-		sb.WriteString("**Review Feedback:**\n")
-		for _, review := range pr.Reviews {
-			if review.Body != "" {
-				body := review.Body
-				if len(body) > MaxReviewBodyLen {
-					body = body[:MaxReviewBodyLen] + "..."
-				}
-				sb.WriteString(fmt.Sprintf("- [%s] %s\n", review.State, body))
-			}
-		}
-		sb.WriteString("\n")
-	}
-
-	if len(pr.Comments) > 0 {
-		sb.WriteString("**Inline Comments:**\n")
-		for _, comment := range pr.Comments {
-			body := comment.Body
-			if len(body) > MaxCommentBodyLen {
-				body = body[:MaxCommentBodyLen] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("- File: %s (line %d)\n", comment.Path, comment.Line))
-			sb.WriteString(fmt.Sprintf("  Comment: %s\n", body))
-		}
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("## Instructions\n\n")
-	sb.WriteString("1. You are ALREADY on the PR branch - do NOT create a new branch\n")
-	sb.WriteString("2. Read and understand the review comments\n")
-	sb.WriteString("3. Make targeted changes to address the feedback\n")
-	sb.WriteString("4. Run tests to verify your changes\n")
-	sb.WriteString("5. Commit with message: \"Address review feedback\"\n")
-	sb.WriteString("6. Push your changes: `git push origin HEAD`\n\n")
-	sb.WriteString("## DO NOT\n\n")
-	sb.WriteString("- Create a new branch (you're already on the PR branch)\n")
-	sb.WriteString("- Close or merge the PR\n")
-	sb.WriteString("- Dismiss reviews\n")
-	sb.WriteString("- Force push (unless absolutely necessary)\n")
-	sb.WriteString("- Make unrelated changes\n")
-
-	return sb.String()
 }
 
 // detectExistingWork checks GitHub for existing branches and PRs related to an issue.
@@ -1663,11 +1459,7 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 	case "TESTS_RUNNING":
 		// Tests are now part of IMPLEMENT phase, keep phase unchanged
 	case "TESTS_PASSED":
-		if state.Type == "issue" {
-			state.Phase = PhasePRCreation
-		} else {
-			state.Phase = PhasePush
-		}
+		state.Phase = PhaseDocs
 		state.TestRetries = 0 // Reset retries on success
 	case "TESTS_FAILED":
 		state.TestRetries++
@@ -1694,8 +1486,6 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 		if state.Type == "issue" {
 			c.propagateBlocked(state.ID)
 		}
-	case "ANALYZING":
-		state.Phase = PhaseAnalyze
 	}
 
 	// Fallback: if no explicit status signal but PRs were detected for an issue task,
@@ -1812,23 +1602,15 @@ func (c *Controller) buildDependencyGraph() {
 }
 
 // reorderTaskQueue reorders the task queue to match the topologically sorted issue order.
-// PR items remain first in the queue, then issues follow the sorted order.
 func (c *Controller) reorderTaskQueue(sortedIDs []string) {
-	// Separate PRs from issues
-	var prItems []TaskQueueItem
 	issueMap := make(map[string]TaskQueueItem)
 
 	for _, item := range c.taskQueue {
-		if item.Type == "pr" {
-			prItems = append(prItems, item)
-		} else {
-			issueMap[item.ID] = item
-		}
+		issueMap[item.ID] = item
 	}
 
-	// Rebuild queue: PRs first, then issues in topological order
+	// Rebuild queue in topological order
 	newQueue := make([]TaskQueueItem, 0, len(c.taskQueue))
-	newQueue = append(newQueue, prItems...)
 
 	for _, id := range sortedIDs {
 		if item, ok := issueMap[id]; ok {
@@ -2021,16 +1803,11 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 }
 
 // determineActivePhase returns the current phase for the active task.
-// When no task state exists yet (first iteration), defaults are:
-// - PhaseAnalyze for PR tasks (agent starts by reading review comments)
-// - PhaseImplement for issue tasks (agent starts by writing code)
+// When no task state exists yet (first iteration), defaults to PhaseImplement.
 func (c *Controller) determineActivePhase() TaskPhase {
 	taskID := taskKey(c.activeTaskType, c.activeTask)
 	if state, ok := c.taskStates[taskID]; ok {
 		return state.Phase
-	}
-	if c.activeTaskType == "pr" {
-		return PhaseAnalyze
 	}
 	return PhaseImplement
 }

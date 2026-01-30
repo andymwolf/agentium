@@ -51,13 +51,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		}
 		cfg.Session.Tasks = expandedIssues
 	}
-	if prs := viper.GetStringSlice("session.prs"); len(prs) > 0 {
-		expandedPRs, expandErr := ExpandRanges(prs)
-		if expandErr != nil {
-			return fmt.Errorf("invalid --prs value: %w", expandErr)
-		}
-		cfg.Session.PRs = expandedPRs
-	}
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
 	}
@@ -101,9 +94,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	if len(cfg.Session.Tasks) > 0 {
 		fmt.Printf("Issues: %s\n", strings.Join(cfg.Session.Tasks, ", "))
 	}
-	if len(cfg.Session.PRs) > 0 {
-		fmt.Printf("PRs: %s\n", strings.Join(cfg.Session.PRs, ", "))
-	}
 	fmt.Printf("Agent: %s\n", cfg.Session.Agent)
 	fmt.Printf("Workspace: %s\n", workDir)
 	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
@@ -143,7 +133,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		CloudProvider:        "local",
 		Repository:           cfg.Session.Repository,
 		Tasks:                cfg.Session.Tasks,
-		PRs:                  cfg.Session.PRs,
 		Agent:                cfg.Session.Agent,
 		MaxIterations:        cfg.Session.MaxIterations,
 		MaxDuration:          cfg.Session.MaxDuration,

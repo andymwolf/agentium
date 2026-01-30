@@ -9,10 +9,9 @@ import "time"
 type Phase string
 
 const (
-	PhasePlan       Phase = "PLAN"
-	PhaseImplement  Phase = "IMPLEMENT"
-	PhaseDocs       Phase = "DOCS"
-	PhasePRCreation Phase = "PR_CREATION"
+	PhasePlan      Phase = "PLAN"
+	PhaseImplement Phase = "IMPLEMENT"
+	PhaseDocs      Phase = "DOCS"
 )
 
 // IssueContext contains the minimal context about the issue being worked on.
@@ -133,25 +132,6 @@ type DocsOutput struct {
 }
 
 // -----------------------------------------------------------------------------
-// PR_CREATION Phase
-// -----------------------------------------------------------------------------
-
-// PRCreationInput is the curated input for the PR_CREATION phase.
-type PRCreationInput struct {
-	Issue        IssueContext `json:"issue"`
-	BranchName   string       `json:"branch_name"`
-	PlanSummary  string       `json:"plan_summary"`
-	FilesChanged []string     `json:"files_changed"`
-	TestResults  string       `json:"test_results,omitempty"`
-}
-
-// PRCreationOutput is the structured output from the PR_CREATION phase.
-type PRCreationOutput struct {
-	PRNumber int    `json:"pr_number"`
-	PRUrl    string `json:"pr_url"`
-}
-
-// -----------------------------------------------------------------------------
 // Handoff Envelope
 // -----------------------------------------------------------------------------
 
@@ -163,11 +143,10 @@ type HandoffData struct {
 	Iteration int       `json:"iteration"`
 
 	// Only one of these will be populated based on Phase
-	PlanOutput       *PlanOutput       `json:"plan_output,omitempty"`
-	ImplementOutput  *ImplementOutput  `json:"implement_output,omitempty"`
-	ReviewOutput     *ReviewOutput     `json:"review_output,omitempty"`
-	DocsOutput       *DocsOutput       `json:"docs_output,omitempty"`
-	PRCreationOutput *PRCreationOutput `json:"pr_creation_output,omitempty"`
+	PlanOutput      *PlanOutput      `json:"plan_output,omitempty"`
+	ImplementOutput *ImplementOutput `json:"implement_output,omitempty"`
+	ReviewOutput    *ReviewOutput    `json:"review_output,omitempty"`
+	DocsOutput      *DocsOutput      `json:"docs_output,omitempty"`
 }
 
 // GetOutput returns the populated output based on the phase, or nil if none.
@@ -179,8 +158,6 @@ func (h *HandoffData) GetOutput() interface{} {
 		return h.ImplementOutput
 	case PhaseDocs:
 		return h.DocsOutput
-	case PhasePRCreation:
-		return h.PRCreationOutput
 	default:
 		return nil
 	}

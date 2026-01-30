@@ -201,15 +201,17 @@ Model routing enables per-phase model selection for optimizing cost and performa
 |-------|-------------|
 | `PLAN` | Planning the implementation approach |
 | `IMPLEMENT` | Main feature implementation |
-| `TEST` | Test execution and fixing |
-| `PR_CREATION` | Creating pull requests |
-| `REVIEW` | Reviewing own changes |
-| `EVALUATE` | LLM evaluator phase (controller-as-judge) |
-| `ANALYZE` | Analysis phase (used for PR reviews) |
+| `DOCS` | Documentation updates |
 | `COMPLETE` | Session completion |
 | `BLOCKED` | Agent blocked, needs human intervention |
 | `NOTHING_TO_DO` | No changes required |
-| `PUSH` | Pushing changes to remote |
+| `PLAN_REVIEW` | Review of plan phase output |
+| `IMPLEMENT_REVIEW` | Review of implementation phase output |
+| `DOCS_REVIEW` | Review of documentation phase output |
+| `JUDGE` | Judge phase for evaluating work |
+| `PLAN_JUDGE` | Judge for plan phase |
+| `IMPLEMENT_JUDGE` | Judge for implementation phase |
+| `DOCS_JUDGE` | Judge for documentation phase |
 
 ### phase_loop
 
@@ -220,17 +222,16 @@ Controls the controller-as-judge phase loop behavior. When enabled, the controll
 | `enabled` | bool | No | `false` | Enable the phase loop with evaluator |
 | `plan_max_iterations` | int | No | `3` | Max iterations for the PLAN phase |
 | `implement_max_iterations` | int | No | `5` | Max iterations for the IMPLEMENT phase |
-| `test_max_iterations` | int | No | `5` | Max iterations for the TEST phase |
-| `review_max_iterations` | int | No | `3` | Max iterations for the REVIEW phase |
-| `eval_context_budget` | int | No | `8000` | Max characters of evaluator output to store as context |
+| `docs_max_iterations` | int | No | `3` | Max iterations for the DOCS phase |
+| `judge_context_budget` | int | No | `8000` | Max characters of judge output to store as context |
 
 **Phase loop sequence for issues:**
 
 ```
-PLAN → [EVALUATE] → IMPLEMENT → [EVALUATE] → TEST → [EVALUATE] → REVIEW → [EVALUATE] → PR_CREATION → COMPLETE
+PLAN → [PLAN_JUDGE] → IMPLEMENT → [IMPLEMENT_JUDGE] → DOCS → [DOCS_JUDGE] → COMPLETE
 ```
 
-After each phase, the evaluator produces a verdict:
+After each phase, the judge produces a verdict:
 - **ADVANCE** — Proceed to next phase
 - **ITERATE** — Re-run current phase with feedback (up to max iterations)
 - **BLOCKED** — Stop and signal human intervention needed
@@ -281,7 +282,7 @@ Sub-agent delegation (experimental feature).
 
 Session-level settings (repository, issues, agent, etc.) are derived at runtime from CLI flags and config file defaults. They are **not** intended to be set directly in the config file. Instead:
 
-- `--repo`, `--issues`, `--prs`, `--agent`, `--max-iterations`, `--max-duration` are passed as CLI flags to `agentium run`
+- `--repo`, `--issues`, `--agent`, `--max-iterations`, `--max-duration` are passed as CLI flags to `agentium run`
 - If not provided, `agent`, `max_iterations`, and `max_duration` fall back to values in the `defaults` section
 - The `repository` field falls back to `project.repository` if `--repo` is not provided (though `--repo` is always required for `run`)
 

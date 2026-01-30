@@ -383,48 +383,12 @@ func TestNextQueuedTask(t *testing.T) {
 		wantNil    bool
 	}{
 		{
-			name: "PRs first then issues",
+			name: "multiple issues - first pending",
 			taskQueue: []TaskQueueItem{
-				{Type: "pr", ID: "57"},
-				{Type: "pr", ID: "54"},
 				{Type: "issue", ID: "6"},
 				{Type: "issue", ID: "7"},
 			},
 			taskStates: map[string]*TaskState{
-				"pr:57":   {ID: "57", Type: "pr", Phase: PhaseAnalyze},
-				"pr:54":   {ID: "54", Type: "pr", Phase: PhaseAnalyze},
-				"issue:6": {ID: "6", Type: "issue", Phase: PhaseImplement},
-				"issue:7": {ID: "7", Type: "issue", Phase: PhaseImplement},
-			},
-			wantType: "pr",
-			wantID:   "57",
-		},
-		{
-			name: "first PR complete, second PR next",
-			taskQueue: []TaskQueueItem{
-				{Type: "pr", ID: "57"},
-				{Type: "pr", ID: "54"},
-				{Type: "issue", ID: "6"},
-			},
-			taskStates: map[string]*TaskState{
-				"pr:57":   {ID: "57", Type: "pr", Phase: PhaseComplete},
-				"pr:54":   {ID: "54", Type: "pr", Phase: PhaseAnalyze},
-				"issue:6": {ID: "6", Type: "issue", Phase: PhaseImplement},
-			},
-			wantType: "pr",
-			wantID:   "54",
-		},
-		{
-			name: "all PRs done, issues next",
-			taskQueue: []TaskQueueItem{
-				{Type: "pr", ID: "57"},
-				{Type: "pr", ID: "54"},
-				{Type: "issue", ID: "6"},
-				{Type: "issue", ID: "7"},
-			},
-			taskStates: map[string]*TaskState{
-				"pr:57":   {ID: "57", Type: "pr", Phase: PhaseComplete},
-				"pr:54":   {ID: "54", Type: "pr", Phase: PhaseNothingToDo},
 				"issue:6": {ID: "6", Type: "issue", Phase: PhaseImplement},
 				"issue:7": {ID: "7", Type: "issue", Phase: PhaseImplement},
 			},
@@ -445,14 +409,14 @@ func TestNextQueuedTask(t *testing.T) {
 			wantID:   "7",
 		},
 		{
-			name: "all tasks complete",
+			name: "all tasks complete or blocked",
 			taskQueue: []TaskQueueItem{
-				{Type: "pr", ID: "57"},
 				{Type: "issue", ID: "6"},
+				{Type: "issue", ID: "7"},
 			},
 			taskStates: map[string]*TaskState{
-				"pr:57":   {ID: "57", Type: "pr", Phase: PhaseComplete},
-				"issue:6": {ID: "6", Type: "issue", Phase: PhaseBlocked},
+				"issue:6": {ID: "6", Type: "issue", Phase: PhaseComplete},
+				"issue:7": {ID: "7", Type: "issue", Phase: PhaseBlocked},
 			},
 			wantNil: true,
 		},
@@ -512,12 +476,10 @@ func TestNextQueuedTask(t *testing.T) {
 }
 
 func TestNextQueuedTask_FullSequence(t *testing.T) {
-	// Simulates: --prs 57,54 --issues 6,7,8,9,10,4,11
-	// Expected processing order: 57, 54, 6, 7, 8, 9, 10, 4, 11
+	// Simulates: --issues 6,7,8,9,10,4,11
+	// Expected processing order: 6, 7, 8, 9, 10, 4, 11
 	c := &Controller{
 		taskQueue: []TaskQueueItem{
-			{Type: "pr", ID: "57"},
-			{Type: "pr", ID: "54"},
 			{Type: "issue", ID: "6"},
 			{Type: "issue", ID: "7"},
 			{Type: "issue", ID: "8"},
@@ -527,8 +489,6 @@ func TestNextQueuedTask_FullSequence(t *testing.T) {
 			{Type: "issue", ID: "11"},
 		},
 		taskStates: map[string]*TaskState{
-			"pr:57":    {ID: "57", Type: "pr", Phase: PhaseAnalyze},
-			"pr:54":    {ID: "54", Type: "pr", Phase: PhaseAnalyze},
 			"issue:6":  {ID: "6", Type: "issue", Phase: PhaseImplement},
 			"issue:7":  {ID: "7", Type: "issue", Phase: PhaseImplement},
 			"issue:8":  {ID: "8", Type: "issue", Phase: PhaseImplement},
@@ -543,7 +503,6 @@ func TestNextQueuedTask_FullSequence(t *testing.T) {
 		typ string
 		id  string
 	}{
-		{"pr", "57"}, {"pr", "54"},
 		{"issue", "6"}, {"issue", "7"}, {"issue", "8"},
 		{"issue", "9"}, {"issue", "10"}, {"issue", "4"}, {"issue", "11"},
 	}
@@ -565,46 +524,6 @@ func TestNextQueuedTask_FullSequence(t *testing.T) {
 	// After all tasks complete, should return nil
 	if got := c.nextQueuedTask(); got != nil {
 		t.Errorf("after all complete: nextQueuedTask() = %+v, want nil", got)
-	}
-}
-
-func TestBuildPromptForPR(t *testing.T) {
-	c := &Controller{
-		config: SessionConfig{Repository: "github.com/org/repo"},
-	}
-
-	pr := prWithReviews{
-		Detail: prDetail{
-			Number:      57,
-			Title:       "Fix authentication flow",
-			HeadRefName: "bug/issue-5-fix-auth",
-		},
-		Reviews: []prReview{
-			{State: "CHANGES_REQUESTED", Body: "Please add error handling"},
-		},
-		Comments: []prComment{
-			{Path: "auth/handler.go", Line: 42, Body: "Missing nil check here"},
-		},
-	}
-
-	prompt := c.buildPromptForPR(pr)
-
-	contains := []string{
-		"github.com/org/repo",
-		"PR REVIEW SESSION",
-		"PR #57",
-		"Fix authentication flow",
-		"bug/issue-5-fix-auth",
-		"Please add error handling",
-		"auth/handler.go",
-		"Missing nil check here",
-		"ALREADY on the PR branch",
-		"do NOT create a new branch",
-	}
-	for _, substr := range contains {
-		if !containsString(prompt, substr) {
-			t.Errorf("buildPromptForPR() missing %q", substr)
-		}
 	}
 }
 
@@ -1041,20 +960,11 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 			wantPR:       "",
 		},
 		{
-			name:         "no status signal but PR detected for PR task - no fallback",
-			taskType:     "pr",
-			agentStatus:  "",
-			prsCreated:   []string{"110"},
-			initialPhase: PhaseAnalyze,
-			wantPhase:    PhaseAnalyze,
-			wantPR:       "",
-		},
-		{
 			name:         "explicit PR_CREATED status takes precedence",
 			taskType:     "issue",
 			agentStatus:  "PR_CREATED",
 			prsCreated:   []string{"110"},
-			initialPhase: PhasePRCreation,
+			initialPhase: PhaseDocs,
 			wantPhase:    PhaseComplete,
 			wantPR:       "", // StatusMessage is used, not PRsCreated
 		},
@@ -1063,7 +973,7 @@ func TestUpdateTaskPhase_PRDetectionFallback(t *testing.T) {
 			taskType:     "issue",
 			agentStatus:  "COMPLETE",
 			prsCreated:   nil,
-			initialPhase: PhasePRCreation,
+			initialPhase: PhaseDocs,
 			wantPhase:    PhaseComplete,
 			wantPR:       "",
 		},

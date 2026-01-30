@@ -23,9 +23,6 @@ var embeddedEnvironment string
 //go:embed status_signals.md
 var embeddedStatusSignals string
 
-//go:embed planning.md
-var embeddedPlanning string
-
 //go:embed plan.md
 var embeddedPlan string
 
@@ -40,9 +37,6 @@ var embeddedPRUpdate string
 
 //go:embed docs.md
 var embeddedDocs string
-
-//go:embed pr_review.md
-var embeddedPRReview string
 
 //go:embed plan_reviewer.md
 var embeddedPlanReviewer string
@@ -62,13 +56,11 @@ var skillFiles = map[string]string{
 	"safety.md":         embeddedSafety,
 	"environment.md":    embeddedEnvironment,
 	"status_signals.md": embeddedStatusSignals,
-	"planning.md":       embeddedPlanning,
 	"plan.md":           embeddedPlan,
 	"implement.md":      embeddedImplement,
 	"test.md":           embeddedTest,
 	"pr_update.md":      embeddedPRUpdate,
 	"docs.md":           embeddedDocs,
-	"pr_review.md":      embeddedPRReview,
 	"plan_reviewer.md":  embeddedPlanReviewer,
 	"code_reviewer.md":  embeddedCodeReviewer,
 	"docs_reviewer.md":  embeddedDocsReviewer,
