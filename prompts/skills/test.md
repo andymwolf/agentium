@@ -19,7 +19,7 @@ Repeat the following cycle until all tests pass and code is ready:
 #### 6a. Run Tests
 ```bash
 # Run the project's test suite
-# Check for project-specific instructions in .agentium/AGENT.md
+# Check for project-specific instructions in .agentium/AGENTS.md
 ```
 
 #### 6b. Review Your Own Code

@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// ParsedContent represents the parsed sections of an AGENT.md file.
+// ParsedContent represents the parsed sections of an AGENTS.md file.
 type ParsedContent struct {
 	PreContent       string // Content before the generated section
 	GeneratedContent string
@@ -12,7 +12,7 @@ type ParsedContent struct {
 	HasMarkers       bool
 }
 
-// Parser parses AGENT.md files to extract generated and custom sections.
+// Parser parses AGENTS.md files to extract generated and custom sections.
 type Parser struct{}
 
 // Parse splits the content into generated and custom sections.

@@ -33,7 +33,7 @@ type Session struct {
 	Metadata         map[string]string
 	ClaudeAuthMode   string            // "api" or "oauth"
 	SystemPrompt     string            // Content of SYSTEM.md (safety constraints, workflow, status signals)
-	ProjectPrompt    string            // Content of .agentium/AGENT.md from target repo (may be empty)
+	ProjectPrompt    string            // Content of .agentium/AGENTS.md from target repo (may be empty)
 	ActiveTask       string            // The single issue number currently being worked on
 	ExistingWork     *ExistingWork     // Prior work detected on GitHub for the active task
 	IterationContext *IterationContext // Phase-aware skill context (nil = legacy mode)

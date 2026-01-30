@@ -251,7 +251,7 @@ agentium run --repo github.com/org/repo --issues 42   # Just one issue
 
 **Fix:**
 1. Add more detail to the issue description
-2. Create a `.agentium/AGENT.md` with project-specific instructions
+2. Create a `.agentium/AGENTS.md` with project-specific instructions
 3. Use `--prompt` for additional guidance:
    ```bash
    agentium run --repo github.com/org/repo --issues 42 --prompt "Focus on error handling, add unit tests"

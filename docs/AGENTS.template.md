@@ -1,7 +1,7 @@
 # Project Agent Instructions
 
 This file provides project-specific instructions for Agentium agents.
-Copy this template to `.agentium/AGENT.md` in your repository and customize it.
+Copy this template to `.agentium/AGENTS.md` in your repository and customize it.
 
 ## Build & Test Commands
 
@@ -92,22 +92,22 @@ If the agent encounters issues outside its scope, it should note them in the PR 
 
 # Package-Specific Instructions (Monorepos)
 
-For pnpm workspace monorepos, you can create package-specific AGENT.md files. Place them at `<package-path>/.agentium/AGENT.md` and they will be merged with the root instructions when the agent targets that package.
+For pnpm workspace monorepos, you can create package-specific AGENTS.md files. Place them at `<package-path>/.agentium/AGENTS.md` and they will be merged with the root instructions when the agent targets that package.
 
 **Example structure:**
 
 ```
 my-monorepo/
-├── .agentium/AGENT.md          # Root instructions (applies to all packages)
+├── .agentium/AGENTS.md          # Root instructions (applies to all packages)
 ├── packages/
 │   ├── core/
-│   │   └── .agentium/AGENT.md  # Core-specific instructions
+│   │   └── .agentium/AGENTS.md  # Core-specific instructions
 │   └── web/
-│       └── .agentium/AGENT.md  # Web-specific instructions
+│       └── .agentium/AGENTS.md  # Web-specific instructions
 └── pnpm-workspace.yaml
 ```
 
-**Example package AGENT.md (`packages/web/.agentium/AGENT.md`):**
+**Example package AGENTS.md (`packages/web/.agentium/AGENTS.md`):**
 
 ```markdown
 # Web Package Instructions

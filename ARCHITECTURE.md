@@ -139,8 +139,8 @@ For pnpm workspace monorepos, Agentium enforces per-package scope:
   3. Agent continues with feedback about the violation
 
 **Hierarchical Instructions:**
-- Root `.agentium/AGENT.md` provides repository-wide instructions
-- Package `.agentium/AGENT.md` provides package-specific instructions
+- Root `.agentium/AGENTS.md` provides repository-wide instructions
+- Package `.agentium/AGENTS.md` provides package-specific instructions
 - Both are merged and injected into the agent prompt
 
 ### VM Termination Conditions
@@ -262,7 +262,7 @@ phase_loop:
   review_max_iterations: 3
 ```
 
-### Agent Instructions (`.agentium/AGENT.md`)
+### Agent Instructions (`.agentium/AGENTS.md`)
 
 Project-specific guidance injected into agent prompts. Describes build commands, code conventions, and testing requirements for the target repository.
 

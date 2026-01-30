@@ -253,7 +253,7 @@ When `monorepo.enabled` is `true`:
 - The agent can only modify files within the target package directory
 - Out-of-scope file changes are automatically reset and block the iteration
 - Allowed exceptions: root `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/workflows/`
-- Hierarchical AGENT.md loading: root + package-specific instructions are merged
+- Hierarchical AGENTS.md loading: root + package-specific instructions are merged
 
 **Example:**
 
@@ -265,7 +265,7 @@ monorepo:
 
 **Package-specific agent instructions:**
 
-Create `AGENT.md` within a package directory to provide package-specific instructions (e.g., `packages/core/AGENT.md`). These are merged with the root `AGENT.md` when the agent targets that package.
+Create `AGENTS.md` within a package directory to provide package-specific instructions (e.g., `packages/core/AGENTS.md`). These are merged with the root `AGENTS.md` when the agent targets that package.
 
 ### delegation
 
@@ -308,9 +308,9 @@ All configuration values can be set via environment variables with the `AGENTIUM
 
 ## Project-Specific Agent Instructions
 
-You can provide project-specific instructions to the AI agent by creating an `AGENT.md` file in your repository root. This file is automatically injected into the agent's system prompt.
+You can provide project-specific instructions to the AI agent by creating an `AGENTS.md` file in your repository root. This file is automatically injected into the agent's system prompt.
 
-**Example `AGENT.md`:**
+**Example `AGENTS.md`:**
 
 ```markdown
 # Project Agent Instructions

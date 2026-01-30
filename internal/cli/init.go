@@ -21,11 +21,11 @@ var initCmd = &cobra.Command{
 	Short: "Initialize project configuration",
 	Long: `Initialize Agentium configuration for the current project.
 
-This creates a .agentium.yaml file and generates AGENT.md with
+This creates a .agentium.yaml file and generates AGENTS.md with
 auto-detected project information to help AI agents understand your codebase.
 
-If a CLAUDE.md file exists, its contents are merged into AGENT.md and
-CLAUDE.md is replaced with a stub pointing to AGENT.md.
+If a CLAUDE.md file exists, its contents are merged into AGENTS.md and
+CLAUDE.md is replaced with a stub pointing to AGENTS.md.
 
 Example:
   agentium init
@@ -46,9 +46,9 @@ func init() {
 	initCmd.Flags().Int64("installation-id", 0, "GitHub App Installation ID")
 	initCmd.Flags().Bool("force", false, "Overwrite existing config")
 
-	// New flags for AGENT.md generation
-	initCmd.Flags().Bool("greenfield", false, "Skip scanning, create minimal AGENT.md for new project")
-	initCmd.Flags().Bool("skip-agent-md", false, "Skip AGENT.md generation")
+	// New flags for AGENTS.md generation
+	initCmd.Flags().Bool("greenfield", false, "Skip scanning, create minimal AGENTS.md for new project")
+	initCmd.Flags().Bool("skip-agent-md", false, "Skip AGENTS.md generation")
 	initCmd.Flags().Bool("non-interactive", false, "Use detected values without prompting")
 }
 
@@ -108,15 +108,15 @@ func initProject(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Created %s\n", configPath)
 	}
 
-	// Migrate CLAUDE.md to AGENT.md if present
+	// Migrate CLAUDE.md to AGENTS.md if present
 	if err := migrateCLAUDEMD(cwd); err != nil {
 		return fmt.Errorf("failed to migrate CLAUDE.md: %w", err)
 	}
 
-	// Generate AGENT.md
+	// Generate AGENTS.md
 	if !skipAgentMD {
 		if err := generateAgentMD(cwd, greenfield, nonInteractive); err != nil {
-			return fmt.Errorf("failed to generate AGENT.md: %w", err)
+			return fmt.Errorf("failed to generate AGENTS.md: %w", err)
 		}
 	}
 
@@ -199,7 +199,7 @@ func generateAgentMD(rootDir string, greenfield, nonInteractive bool) error {
 			}
 		}
 
-		// Write greenfield AGENT.md to project root
+		// Write greenfield AGENTS.md to project root
 		content := gen.GenerateGreenfield(info.Name)
 		agentMDPath := filepath.Join(rootDir, agentmd.AgentMDFile)
 		err = os.WriteFile(agentMDPath, []byte(content), 0644)
@@ -227,7 +227,7 @@ func generateAgentMD(rootDir string, greenfield, nonInteractive bool) error {
 		}
 	}
 
-	// Write AGENT.md
+	// Write AGENTS.md
 	if err := gen.WriteToProject(rootDir, info); err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func hasPnpmWorkspace(dir string) bool {
 	return err == nil
 }
 
-// migrateCLAUDEMD migrates CLAUDE.md content to AGENT.md and replaces CLAUDE.md with a stub.
+// migrateCLAUDEMD migrates CLAUDE.md content to AGENTS.md and replaces CLAUDE.md with a stub.
 // This allows projects to maintain a single source of truth for AI agent instructions
 // while preserving compatibility with Claude Code which reads CLAUDE.md automatically.
 func migrateCLAUDEMD(rootDir string) error {
@@ -324,43 +324,43 @@ func migrateCLAUDEMD(rootDir string) error {
 		return fmt.Errorf("failed to read CLAUDE.md: %w", err)
 	}
 
-	// Check if it's already a stub (pointing to AGENT.md)
-	if strings.Contains(string(claudeContent), "See AGENT.md") ||
-		strings.Contains(string(claudeContent), "see [AGENT.md]") {
+	// Check if it's already a stub (pointing to AGENTS.md)
+	if strings.Contains(string(claudeContent), "See AGENTS.md") ||
+		strings.Contains(string(claudeContent), "see [AGENTS.md]") {
 		return nil // Already migrated
 	}
 
-	// Check if AGENT.md already exists
+	// Check if AGENTS.md already exists
 	existingAgent, err := os.ReadFile(agentMDPath)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to read existing AGENT.md: %w", err)
+		return fmt.Errorf("failed to read existing AGENTS.md: %w", err)
 	}
 
 	var newAgentContent string
 	if len(existingAgent) > 0 {
-		// Merge: append CLAUDE.md content to existing AGENT.md
+		// Merge: append CLAUDE.md content to existing AGENTS.md
 		newAgentContent = string(existingAgent) + "\n\n---\n\n## Migrated from CLAUDE.md\n\n" + string(claudeContent)
-		fmt.Println("Merged CLAUDE.md content into existing AGENT.md")
+		fmt.Println("Merged CLAUDE.md content into existing AGENTS.md")
 	} else {
-		// No existing AGENT.md: use CLAUDE.md content as-is
+		// No existing AGENTS.md: use CLAUDE.md content as-is
 		newAgentContent = string(claudeContent)
-		fmt.Println("Migrated CLAUDE.md to AGENT.md")
+		fmt.Println("Migrated CLAUDE.md to AGENTS.md")
 	}
 
-	// Write merged content to AGENT.md
+	// Write merged content to AGENTS.md
 	if err := os.WriteFile(agentMDPath, []byte(newAgentContent), 0644); err != nil {
-		return fmt.Errorf("failed to write AGENT.md: %w", err)
+		return fmt.Errorf("failed to write AGENTS.md: %w", err)
 	}
 
 	// Replace CLAUDE.md with a stub
-	stub := `# See AGENT.md
+	stub := `# See AGENTS.md
 
-This project uses [AGENT.md](AGENT.md) for AI agent instructions.
+This project uses [AGENTS.md](AGENTS.md) for AI agent instructions.
 `
 	if err := os.WriteFile(claudeMDPath, []byte(stub), 0644); err != nil {
 		return fmt.Errorf("failed to write CLAUDE.md stub: %w", err)
 	}
-	fmt.Println("Replaced CLAUDE.md with stub pointing to AGENT.md")
+	fmt.Println("Replaced CLAUDE.md with stub pointing to AGENTS.md")
 
 	return nil
 }
@@ -372,9 +372,9 @@ func printNextSteps(skippedAgentMD bool) {
 	fmt.Println("  2. Set your GitHub App credentials")
 	fmt.Println("  3. Configure your cloud provider credentials")
 	if skippedAgentMD {
-		fmt.Println("  4. Create AGENT.md with project instructions")
+		fmt.Println("  4. Create AGENTS.md with project instructions")
 	} else {
-		fmt.Println("  4. Review and customize AGENT.md")
+		fmt.Println("  4. Review and customize AGENTS.md")
 	}
 	fmt.Println("  5. Run 'agentium run --issues 1,2,3' to start a session")
 	fmt.Println()

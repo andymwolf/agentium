@@ -1,4 +1,4 @@
-// Package agentmd generates and parses AGENT.md files for AI agents.
+// Package agentmd generates and parses AGENTS.md files for AI agents.
 package agentmd
 
 import (
@@ -17,19 +17,19 @@ const (
 	GeneratedEndMarker   = "<!-- agentium:generated:end -->"
 
 	// File name for agent instructions (now at project root)
-	AgentMDFile = "AGENT.md"
+	AgentMDFile = "AGENTS.md"
 
 	// Deprecated: AgentiumDir is kept for backward compatibility but is no longer used.
-	// AGENT.md is now written to the project root instead of .agentium/.
+	// AGENTS.md is now written to the project root instead of .agentium/.
 	AgentiumDir = ".agentium"
 )
 
-// Generator creates AGENT.md files from project info.
+// Generator creates AGENTS.md files from project info.
 type Generator struct {
 	tmpl *template.Template
 }
 
-// NewGenerator creates a new AGENT.md generator.
+// NewGenerator creates a new AGENTS.md generator.
 func NewGenerator() (*Generator, error) {
 	tmpl, err := template.New("agentmd").Parse(agentMDTemplate)
 	if err != nil {
@@ -38,7 +38,7 @@ func NewGenerator() (*Generator, error) {
 	return &Generator{tmpl: tmpl}, nil
 }
 
-// Generate creates AGENT.md content from project info.
+// Generate creates AGENTS.md content from project info.
 func (g *Generator) Generate(info *scanner.ProjectInfo) (string, error) {
 	var buf bytes.Buffer
 	if err := g.tmpl.Execute(&buf, info); err != nil {
@@ -47,7 +47,7 @@ func (g *Generator) Generate(info *scanner.ProjectInfo) (string, error) {
 	return buf.String(), nil
 }
 
-// WriteToProject writes the AGENT.md file to the project root directory.
+// WriteToProject writes the AGENTS.md file to the project root directory.
 // If the file already exists, it preserves content outside the generated markers.
 func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) error {
 	agentMDPath := filepath.Join(rootDir, AgentMDFile)
@@ -66,14 +66,14 @@ func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) er
 			fullContent := newContent + defaultWorkflowSection + defaultCustomSection
 			return os.WriteFile(agentMDPath, []byte(fullContent), 0644)
 		}
-		return fmt.Errorf("failed to read existing AGENT.md: %w", err)
+		return fmt.Errorf("failed to read existing AGENTS.md: %w", err)
 	}
 
 	// Parse existing file and preserve custom sections
 	parser := &Parser{}
 	parsed, err := parser.Parse(string(existingContent))
 	if err != nil {
-		return fmt.Errorf("failed to parse existing AGENT.md: %w", err)
+		return fmt.Errorf("failed to parse existing AGENTS.md: %w", err)
 	}
 
 	// Combine preserved pre-content, new generated content, and preserved custom content
@@ -87,7 +87,7 @@ func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) er
 	return os.WriteFile(agentMDPath, []byte(finalContent), 0644)
 }
 
-// GenerateGreenfield creates a minimal AGENT.md for a new project.
+// GenerateGreenfield creates a minimal AGENTS.md for a new project.
 func (g *Generator) GenerateGreenfield(projectName string) string {
 	return fmt.Sprintf(`%s
 # %s

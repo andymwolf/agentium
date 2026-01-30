@@ -242,7 +242,7 @@ type Controller struct {
 	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
 	systemPrompt           string                    // Loaded SYSTEM.md content
-	projectPrompt          string                    // Loaded .agentium/AGENT.md content (may be empty)
+	projectPrompt          string                    // Loaded .agentium/AGENTS.md content (may be empty)
 	taskQueue              []TaskQueueItem           // Ordered queue: PRs first, then issues
 	issueDetails           []issueDetail             // Fetched issue details for prompt building
 	prDetails              []prWithReviews           // Fetched PR details for prompt building
@@ -901,13 +901,13 @@ func (c *Controller) loadPrompts() error {
 	}
 	c.logInfo("Skills loaded: %v", names)
 
-	// Load project prompt from workspace (.agentium/AGENT.md) - optional
+	// Load project prompt from workspace (.agentium/AGENTS.md) - optional
 	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
 	if err != nil {
 		c.logWarning("failed to load project prompt: %v", err)
 	} else if projectPrompt != "" {
 		c.projectPrompt = projectPrompt
-		c.logInfo("Project prompt loaded from .agentium/AGENT.md")
+		c.logInfo("Project prompt loaded from .agentium/AGENTS.md")
 	}
 
 	// Initialize persistent memory store if enabled
@@ -1115,7 +1115,7 @@ func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, erro
 
 // initPackageScope sets up the package scope for a monorepo issue.
 // It detects the package from issue labels, validates it, and initializes the scope validator.
-// It also reloads the project prompt to include package-specific AGENT.md.
+// It also reloads the project prompt to include package-specific AGENTS.md.
 func (c *Controller) initPackageScope(issueNumber string) error {
 	pkgPath, err := c.resolveAndValidatePackage(issueNumber)
 	if err != nil {
@@ -1133,7 +1133,7 @@ func (c *Controller) initPackageScope(issueNumber string) error {
 	c.scopeValidator = scope.NewValidator(c.workDir, pkgPath)
 	c.logInfo("Monorepo package scope: %s", pkgPath)
 
-	// Reload project prompt with package-specific AGENT.md merged in
+	// Reload project prompt with package-specific AGENTS.md merged in
 	// Always update projectPrompt (even if empty) to avoid stale prompts from previous packages
 	projectPrompt, err := prompt.LoadProjectPromptWithPackage(c.workDir, pkgPath)
 	if err != nil {

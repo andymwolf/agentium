@@ -39,11 +39,11 @@ func TestLoadSystemPrompt_FileNotExists(t *testing.T) {
 }
 
 func TestLoadProjectPrompt_FileExists(t *testing.T) {
-	// Create a temp directory with AGENT.md at root
+	// Create a temp directory with AGENTS.md at root
 	tmpDir := t.TempDir()
 
 	expected := "# Project Instructions\nRun tests with: go test ./..."
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(expected), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(expected), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,7 +71,7 @@ func TestLoadProjectPrompt_FileNotExists(t *testing.T) {
 func TestLoadProjectPrompt_EmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(""), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(""), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,16 +92,16 @@ func TestLoadProjectPromptWithPackage_NoFiles(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result != "" {
-		t.Errorf("expected empty string when no AGENT.md files exist, got %q", result)
+		t.Errorf("expected empty string when no AGENTS.md files exist, got %q", result)
 	}
 }
 
 func TestLoadProjectPromptWithPackage_RootOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root AGENT.md
+	// Create root AGENTS.md
 	rootContent := "# Root Instructions\nRun tests with go test"
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,14 +121,14 @@ func TestLoadProjectPromptWithPackage_RootOnly(t *testing.T) {
 func TestLoadProjectPromptWithPackage_PackageOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create package AGENT.md at packages/core/AGENT.md
+	// Create package AGENTS.md at packages/core/AGENTS.md
 	pkgDir := filepath.Join(tmpDir, "packages", "core")
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	pkgContent := "# Package Instructions\nThis is the core package"
-	if err := os.WriteFile(filepath.Join(pkgDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDir, "AGENTS.md"), []byte(pkgContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,19 +148,19 @@ func TestLoadProjectPromptWithPackage_PackageOnly(t *testing.T) {
 func TestLoadProjectPromptWithPackage_Both(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root AGENT.md
+	// Create root AGENTS.md
 	rootContent := "Root instructions"
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create package AGENT.md at packages/core/AGENT.md
+	// Create package AGENTS.md at packages/core/AGENTS.md
 	pkgDir := filepath.Join(tmpDir, "packages", "core")
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	pkgContent := "Package instructions"
-	if err := os.WriteFile(filepath.Join(pkgDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDir, "AGENTS.md"), []byte(pkgContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -190,9 +190,9 @@ func TestLoadProjectPromptWithPackage_Both(t *testing.T) {
 func TestLoadProjectPromptWithPackage_EmptyPackagePath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root AGENT.md
+	// Create root AGENTS.md
 	rootContent := "Root instructions only"
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 

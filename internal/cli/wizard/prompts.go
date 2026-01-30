@@ -127,7 +127,7 @@ func ConfirmRegeneration(hasCustomContent bool) (bool, error) {
 		return true, nil
 	}
 
-	fmt.Println("\n--- Existing AGENT.md Found ---")
+	fmt.Println("\n--- Existing AGENTS.md Found ---")
 	fmt.Println("Custom sections will be preserved. Generated sections will be updated.")
 
 	return promptYesNo("Continue with regeneration?", true)

@@ -220,18 +220,18 @@ gh label create "pkg:web" --color "0052CC"
 gh issue create --title "Add form validation" --label "pkg:web,enhancement"
 ```
 
-**Package-specific AGENT.md:**
+**Package-specific AGENTS.md:**
 
-You can provide per-package agent instructions by creating `.agentium/AGENT.md` within a package directory. These are merged with the root AGENT.md:
+You can provide per-package agent instructions by creating `.agentium/AGENTS.md` within a package directory. These are merged with the root AGENTS.md:
 
 ```
 my-monorepo/
-├── .agentium/AGENT.md          # Repository-wide instructions
+├── .agentium/AGENTS.md          # Repository-wide instructions
 ├── packages/
 │   ├── core/
-│   │   └── .agentium/AGENT.md  # Core package instructions
+│   │   └── .agentium/AGENTS.md  # Core package instructions
 │   └── web/
-│       └── .agentium/AGENT.md  # Web package instructions
+│       └── .agentium/AGENTS.md  # Web package instructions
 └── pnpm-workspace.yaml
 ```
 
@@ -292,7 +292,7 @@ agentium destroy agentium-abc12345
 
 ## Project-Specific Agent Instructions
 
-The `agentium init` command automatically generates a `.agentium/AGENT.md` file by scanning your project. This file is included in the agent's system prompt when a session runs.
+The `agentium init` command automatically generates a `.agentium/AGENTS.md` file by scanning your project. This file is included in the agent's system prompt when a session runs.
 
 Auto-detected information includes:
 - Primary language and framework
@@ -305,7 +305,7 @@ You can customize the generated file by adding your own sections:
 - Architecture notes and important patterns
 - Off-limits areas (files the agent should not modify)
 
-To regenerate AGENT.md after making project changes:
+To regenerate AGENTS.md after making project changes:
 
 ```bash
 agentium refresh
