@@ -40,34 +40,24 @@ var allowedExemptions = []string{
 
 // ValidateChanges checks if all modified files are within the package scope.
 // It returns a ValidationResult with details about any out-of-scope files.
+// This includes both modified tracked files and untracked (new) files.
 func (v *ScopeValidator) ValidateChanges() (*ValidationResult, error) {
 	if v.PackagePath == "" {
 		// No package scope set, all files are allowed
 		return &ValidationResult{Valid: true}, nil
 	}
 
-	// Get list of modified files
-	cmd := exec.Command("git", "diff", "--name-only", "HEAD")
+	// Use git status --porcelain to get all changes including untracked files.
+	// This is more comprehensive than git diff --name-only HEAD which misses
+	// untracked files that the agent may have created outside the package scope.
+	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = v.WorkDir
 	output, err := cmd.Output()
 	if err != nil {
-		// Try with --staged for uncommitted changes
-		cmd = exec.Command("git", "status", "--porcelain")
-		cmd.Dir = v.WorkDir
-		output, err = cmd.Output()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get modified files: %w", err)
-		}
-		return v.validateStatusOutput(string(output))
+		return nil, fmt.Errorf("failed to get modified files: %w", err)
 	}
 
-	return v.validateDiffOutput(string(output))
-}
-
-// validateDiffOutput validates files from git diff --name-only output.
-func (v *ScopeValidator) validateDiffOutput(output string) (*ValidationResult, error) {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	return v.validateFiles(lines)
+	return v.validateStatusOutput(string(output))
 }
 
 // validateStatusOutput validates files from git status --porcelain output.

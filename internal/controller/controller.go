@@ -1134,12 +1134,17 @@ func (c *Controller) initPackageScope(issueNumber string) error {
 	c.logInfo("Monorepo package scope: %s", pkgPath)
 
 	// Reload project prompt with package-specific AGENT.md merged in
+	// Always update projectPrompt (even if empty) to avoid stale prompts from previous packages
 	projectPrompt, err := prompt.LoadProjectPromptWithPackage(c.workDir, pkgPath)
 	if err != nil {
 		c.logWarning("failed to load hierarchical project prompt: %v", err)
-	} else if projectPrompt != "" {
+	} else {
 		c.projectPrompt = projectPrompt
-		c.logInfo("Project prompt loaded with package context (%s)", pkgPath)
+		if projectPrompt != "" {
+			c.logInfo("Project prompt loaded with package context (%s)", pkgPath)
+		} else {
+			c.logInfo("No project prompt found for package %s", pkgPath)
+		}
 	}
 
 	return nil
