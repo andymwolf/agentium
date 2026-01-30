@@ -102,6 +102,9 @@ curl -H "Authorization: Bearer YOUR_JWT" \
 ### GCP (Secret Manager)
 
 ```bash
+# Set your GCP project (if not already configured)
+gcloud config set project YOUR_PROJECT_ID
+
 # Create the secret
 gcloud secrets create github-app-key \
   --replication-policy="automatic"
