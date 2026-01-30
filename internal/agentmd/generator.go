@@ -16,9 +16,12 @@ const (
 	GeneratedStartMarker = "<!-- agentium:generated:start -->"
 	GeneratedEndMarker   = "<!-- agentium:generated:end -->"
 
-	// Directory and file names
-	AgentiumDir = ".agentium"
+	// File name for agent instructions (now at project root)
 	AgentMDFile = "AGENT.md"
+
+	// Deprecated: AgentiumDir is kept for backward compatibility but is no longer used.
+	// AGENT.md is now written to the project root instead of .agentium/.
+	AgentiumDir = ".agentium"
 )
 
 // Generator creates AGENT.md files from project info.
@@ -44,15 +47,10 @@ func (g *Generator) Generate(info *scanner.ProjectInfo) (string, error) {
 	return buf.String(), nil
 }
 
-// WriteToProject writes the AGENT.md file to the project directory.
+// WriteToProject writes the AGENT.md file to the project root directory.
 // If the file already exists, it preserves content outside the generated markers.
 func (g *Generator) WriteToProject(rootDir string, info *scanner.ProjectInfo) error {
-	agentiumDir := filepath.Join(rootDir, AgentiumDir)
-	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .agentium directory: %w", err)
-	}
-
-	agentMDPath := filepath.Join(agentiumDir, AgentMDFile)
+	agentMDPath := filepath.Join(rootDir, AgentMDFile)
 
 	// Generate new content
 	newContent, err := g.Generate(info)

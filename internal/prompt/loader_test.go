@@ -39,15 +39,11 @@ func TestLoadSystemPrompt_FileNotExists(t *testing.T) {
 }
 
 func TestLoadProjectPrompt_FileExists(t *testing.T) {
-	// Create a temp directory with .agentium/AGENT.md
+	// Create a temp directory with AGENT.md at root
 	tmpDir := t.TempDir()
-	agentiumDir := filepath.Join(tmpDir, ".agentium")
-	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
-		t.Fatal(err)
-	}
 
 	expected := "# Project Instructions\nRun tests with: go test ./..."
-	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(expected), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(expected), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,12 +70,8 @@ func TestLoadProjectPrompt_FileNotExists(t *testing.T) {
 
 func TestLoadProjectPrompt_EmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	agentiumDir := filepath.Join(tmpDir, ".agentium")
-	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
-		t.Fatal(err)
-	}
 
-	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(""), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(""), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,14 +99,9 @@ func TestLoadProjectPromptWithPackage_NoFiles(t *testing.T) {
 func TestLoadProjectPromptWithPackage_RootOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root .agentium/AGENT.md
-	agentiumDir := filepath.Join(tmpDir, ".agentium")
-	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
+	// Create root AGENT.md
 	rootContent := "# Root Instructions\nRun tests with go test"
-	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,14 +121,14 @@ func TestLoadProjectPromptWithPackage_RootOnly(t *testing.T) {
 func TestLoadProjectPromptWithPackage_PackageOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create package .agentium/AGENT.md
-	pkgAgentiumDir := filepath.Join(tmpDir, "packages", "core", ".agentium")
-	if err := os.MkdirAll(pkgAgentiumDir, 0755); err != nil {
+	// Create package AGENT.md at packages/core/AGENT.md
+	pkgDir := filepath.Join(tmpDir, "packages", "core")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	pkgContent := "# Package Instructions\nThis is the core package"
-	if err := os.WriteFile(filepath.Join(pkgAgentiumDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,23 +148,19 @@ func TestLoadProjectPromptWithPackage_PackageOnly(t *testing.T) {
 func TestLoadProjectPromptWithPackage_Both(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root .agentium/AGENT.md
-	rootAgentiumDir := filepath.Join(tmpDir, ".agentium")
-	if err := os.MkdirAll(rootAgentiumDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Create root AGENT.md
 	rootContent := "Root instructions"
-	if err := os.WriteFile(filepath.Join(rootAgentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create package .agentium/AGENT.md
-	pkgAgentiumDir := filepath.Join(tmpDir, "packages", "core", ".agentium")
-	if err := os.MkdirAll(pkgAgentiumDir, 0755); err != nil {
+	// Create package AGENT.md at packages/core/AGENT.md
+	pkgDir := filepath.Join(tmpDir, "packages", "core")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	pkgContent := "Package instructions"
-	if err := os.WriteFile(filepath.Join(pkgAgentiumDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,13 +190,9 @@ func TestLoadProjectPromptWithPackage_Both(t *testing.T) {
 func TestLoadProjectPromptWithPackage_EmptyPackagePath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create root .agentium/AGENT.md
-	agentiumDir := filepath.Join(tmpDir, ".agentium")
-	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	// Create root AGENT.md
 	rootContent := "Root instructions only"
-	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
