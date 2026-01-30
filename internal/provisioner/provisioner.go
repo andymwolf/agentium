@@ -54,7 +54,6 @@ type SessionConfig struct {
 	CloudProvider string                `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
 	Repository    string                `json:"repository"`
 	Tasks         []string              `json:"tasks"`
-	PRs           []string              `json:"prs,omitempty"`
 	Agent         string                `json:"agent"`
 	MaxIterations int                   `json:"max_iterations"`
 	MaxDuration   string                `json:"max_duration"`
@@ -83,8 +82,9 @@ type ProvDelegationConfig struct {
 }
 
 // ProvPhaseLoopConfig contains phase loop configuration for provisioned sessions.
+// Phase loop is enabled when this config is present (non-nil).
 type ProvPhaseLoopConfig struct {
-	Enabled                bool `json:"enabled"`
+	SkipPlanIfExists       bool `json:"skip_plan_if_exists,omitempty"`
 	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
 	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`

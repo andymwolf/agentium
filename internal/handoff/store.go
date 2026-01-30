@@ -128,8 +128,6 @@ func (s *Store) StorePhaseOutput(taskID string, phase Phase, iteration int, outp
 		hd.ReviewOutput = v
 	case *DocsOutput:
 		hd.DocsOutput = v
-	case *PRCreationOutput:
-		hd.PRCreationOutput = v
 	default:
 		return fmt.Errorf("unknown output type for phase %s: %T", phase, output)
 	}
@@ -189,15 +187,6 @@ func (s *Store) GetDocsOutput(taskID string) *DocsOutput {
 		return nil
 	}
 	return hd.DocsOutput
-}
-
-// GetPRCreationOutput is a convenience method to get typed PR creation output.
-func (s *Store) GetPRCreationOutput(taskID string) *PRCreationOutput {
-	hd := s.GetPhaseOutput(taskID, PhasePRCreation)
-	if hd == nil {
-		return nil
-	}
-	return hd.PRCreationOutput
 }
 
 // ClearFromPhase clears all handoff data from the specified phase onwards.

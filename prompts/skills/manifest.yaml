@@ -11,8 +11,6 @@ skills:
       - PLAN
       - IMPLEMENT
       - DOCS
-      - ANALYZE
-      - PUSH
       - PLAN_REVIEW
       - IMPLEMENT_REVIEW
       - DOCS_REVIEW
@@ -26,12 +24,6 @@ skills:
     file: status_signals.md
     priority: 30
     phases: []
-
-  - name: planning
-    file: planning.md
-    priority: 40
-    phases:
-      - ANALYZE
 
   - name: plan
     file: plan.md
@@ -56,7 +48,6 @@ skills:
     priority: 70
     phases:
       - DOCS
-      - PUSH
       - IMPLEMENT_REVIEW
       - DOCS_REVIEW
 
@@ -65,13 +56,6 @@ skills:
     priority: 77
     phases:
       - DOCS
-
-  - name: pr_review
-    file: pr_review.md
-    priority: 80
-    phases:
-      - ANALYZE
-      - PUSH
 
   - name: plan_reviewer
     file: plan_reviewer.md

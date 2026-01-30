@@ -520,7 +520,7 @@ If you're still stuck:
 | Error Message | Likely Cause | Quick Fix |
 |--------------|-------------|-----------|
 | "required flag(s) \"repo\" not set" | Missing `--repo` flag | Always provide `--repo` on the command line |
-| "at least one issue or PR is required (use --issues or --prs)" | Missing task specification | Provide `--issues` or `--prs` flag |
+| "at least one issue is required" | Missing task specification | Provide `--issues` flag |
 | "cloud provider is required (use --provider or set in config)" | Missing provider | Set `cloud.provider` in config or pass `--provider` |
 | "invalid cloud provider: X (must be gcp, aws, or azure)" | Typo in provider name | Use one of: `gcp`, `aws`, `azure` |
 | "invalid agent: X (must be claude-code or aider)" | Invalid agent name | Use `claude-code` or `aider` |

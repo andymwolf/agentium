@@ -15,11 +15,11 @@ func TestLoadManifest(t *testing.T) {
 		t.Fatal("LoadManifest() returned empty skills list")
 	}
 
-	// Verify expected skill names (review skill removed with REVIEW phase)
+	// Verify expected skill names
 	expectedNames := []string{
-		"safety", "environment", "status_signals",
-		"planning", "plan", "implement", "test",
-		"pr_update", "docs", "pr_review",
+		"scope", "safety", "environment", "status_signals",
+		"plan", "implement", "test",
+		"pr_update", "docs",
 		"plan_reviewer", "code_reviewer", "docs_reviewer", "judge",
 	}
 
@@ -45,16 +45,15 @@ func TestLoadManifest_Phases(t *testing.T) {
 		name       string
 		wantPhases []string
 	}{
-		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "ANALYZE", "PUSH", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // PR_CREATION removed
+		{"scope", nil},
+		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
 		{"environment", nil},
 		{"status_signals", nil},
-		{"planning", []string{"ANALYZE"}},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
-		{"test", []string{"IMPLEMENT"}}, // TEST merged into IMPLEMENT
-		{"pr_update", []string{"DOCS", "PUSH", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}}, // For phases after draft PR creation
+		{"test", []string{"IMPLEMENT"}},
+		{"pr_update", []string{"DOCS", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
 		{"docs", []string{"DOCS"}},
-		{"pr_review", []string{"ANALYZE", "PUSH"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},
 		{"code_reviewer", []string{"IMPLEMENT_REVIEW"}},
 		{"docs_reviewer", []string{"DOCS_REVIEW"}},
@@ -147,18 +146,16 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 	}
 
 	// Spot-check that key content exists in expected skills
-	// Note: review skill removed with REVIEW phase
 	contentChecks := map[string]string{
+		"scope":          "SCOPE",
 		"safety":         "CRITICAL SAFETY CONSTRAINTS",
 		"environment":    "ENVIRONMENT",
 		"status_signals": "STATUS SIGNALING",
-		"planning":       "Plan Your Approach",
 		"plan":           "PLAN PHASE",
 		"implement":      "Pre-Flight Check",
 		"test":           "Development Loop",
 		"pr_update":      "PR Update Skill",
 		"docs":           "DOCS PHASE",
-		"pr_review":      "PR REVIEW SESSIONS",
 		"plan_reviewer":  "PLAN REVIEWER",
 		"code_reviewer":  "CODE REVIEWER",
 		"docs_reviewer":  "DOCS REVIEWER",

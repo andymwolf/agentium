@@ -32,7 +32,7 @@ func TestAdvancePhase(t *testing.T) {
 func TestPhaseMaxIterations_Defaults(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
-			PhaseLoop: &PhaseLoopConfig{Enabled: true},
+			PhaseLoop: &PhaseLoopConfig{},
 		},
 	}
 
@@ -60,7 +60,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:                true,
 				PlanMaxIterations:      2,
 				ImplementMaxIterations: 10,
 				DocsMaxIterations:      4,
@@ -104,7 +103,6 @@ func TestPhaseMaxIterations_SimplePath(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:                true,
 				PlanMaxIterations:      5, // Should be ignored for SIMPLE path
 				ImplementMaxIterations: 10,
 				DocsMaxIterations:      4,
@@ -139,8 +137,8 @@ func TestIsPhaseLoopEnabled(t *testing.T) {
 		want   bool
 	}{
 		{"nil config", nil, false},
-		{"disabled", &PhaseLoopConfig{Enabled: false}, false},
-		{"enabled", &PhaseLoopConfig{Enabled: true}, true},
+		{"empty config", &PhaseLoopConfig{}, true},
+		{"config with values", &PhaseLoopConfig{PlanMaxIterations: 3}, true},
 	}
 
 	for _, tt := range tests {
@@ -178,7 +176,6 @@ func TestJudgeNoSignalLimit_Custom(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:            true,
 				JudgeNoSignalLimit: 5,
 			},
 		},
@@ -330,9 +327,8 @@ func TestIsPlanSkipEnabled(t *testing.T) {
 		want   bool
 	}{
 		{"nil config", nil, false},
-		{"disabled phase loop", &PhaseLoopConfig{Enabled: false, SkipPlanIfExists: true}, false},
-		{"enabled but skip disabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: false}, false},
-		{"both enabled", &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true}, true},
+		{"skip disabled", &PhaseLoopConfig{SkipPlanIfExists: false}, false},
+		{"skip enabled", &PhaseLoopConfig{SkipPlanIfExists: true}, true},
 	}
 
 	for _, tt := range tests {
@@ -388,44 +384,44 @@ func TestShouldSkipPlanIteration(t *testing.T) {
 	}{
 		// Iteration 1 with plan should skip
 		{
-			name:      "PLAN phase, iter 1, config enabled, has plan - should skip",
+			name:      "PLAN phase, iter 1, skip enabled, has plan - should skip",
 			phase:     PhasePlan,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithPlan,
 			want:      true,
 		},
 		// Iteration 2+ should NEVER skip, even with plan
 		{
-			name:      "PLAN phase, iter 2, config enabled, has plan - should NOT skip",
+			name:      "PLAN phase, iter 2, skip enabled, has plan - should NOT skip",
 			phase:     PhasePlan,
 			iter:      2,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithPlan,
 			want:      false,
 		},
 		{
-			name:      "PLAN phase, iter 3, config enabled, has plan - should NOT skip",
+			name:      "PLAN phase, iter 3, skip enabled, has plan - should NOT skip",
 			phase:     PhasePlan,
 			iter:      3,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithPlan,
 			want:      false,
 		},
 		// Non-PLAN phases should never skip
 		{
-			name:      "IMPLEMENT phase, iter 1, config enabled, has plan - should NOT skip",
+			name:      "IMPLEMENT phase, iter 1, skip enabled, has plan - should NOT skip",
 			phase:     PhaseImplement,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithPlan,
 			want:      false,
 		},
 		{
-			name:      "DOCS phase, iter 1, config enabled, has plan - should NOT skip",
+			name:      "DOCS phase, iter 1, skip enabled, has plan - should NOT skip",
 			phase:     PhaseDocs,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithPlan,
 			want:      false,
 		},
@@ -434,15 +430,7 @@ func TestShouldSkipPlanIteration(t *testing.T) {
 			name:      "PLAN phase, iter 1, skip disabled, has plan - should NOT skip",
 			phase:     PhasePlan,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: false},
-			issueBody: issueWithPlan,
-			want:      false,
-		},
-		{
-			name:      "PLAN phase, iter 1, phase loop disabled, has plan - should NOT skip",
-			phase:     PhasePlan,
-			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: false, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: false},
 			issueBody: issueWithPlan,
 			want:      false,
 		},
@@ -456,19 +444,19 @@ func TestShouldSkipPlanIteration(t *testing.T) {
 		},
 		// No plan in issue should not skip
 		{
-			name:      "PLAN phase, iter 1, config enabled, no plan - should NOT skip",
+			name:      "PLAN phase, iter 1, skip enabled, no plan - should NOT skip",
 			phase:     PhasePlan,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: issueWithoutPlan,
 			want:      false,
 		},
 		// Empty issue body should not skip
 		{
-			name:      "PLAN phase, iter 1, config enabled, empty body - should NOT skip",
+			name:      "PLAN phase, iter 1, skip enabled, empty body - should NOT skip",
 			phase:     PhasePlan,
 			iter:      1,
-			config:    &PhaseLoopConfig{Enabled: true, SkipPlanIfExists: true},
+			config:    &PhaseLoopConfig{SkipPlanIfExists: true},
 			issueBody: "",
 			want:      false,
 		},

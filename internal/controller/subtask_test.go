@@ -9,12 +9,9 @@ import (
 
 func TestPhaseToSubTask_AllConfiguredPhases(t *testing.T) {
 	expected := map[TaskPhase]SubTaskType{
-		PhasePlan:       SubTaskPlan,
-		PhaseImplement:  SubTaskImplement,
-		PhaseDocs:       SubTaskDocs,
-		PhasePRCreation: SubTaskPRCreation,
-		PhaseAnalyze:    SubTaskPlan,
-		PhasePush:       SubTaskPush,
+		PhasePlan:      SubTaskPlan,
+		PhaseImplement: SubTaskImplement,
+		PhaseDocs:      SubTaskDocs,
 	}
 
 	for phase, want := range expected {
@@ -100,9 +97,6 @@ func TestPhaseToSubTask_AllPhasesRouteCorrectly(t *testing.T) {
 		{PhasePlan, SubTaskPlan, true},
 		{PhaseImplement, SubTaskImplement, true},
 		{PhaseDocs, SubTaskDocs, true},
-		{PhasePRCreation, SubTaskPRCreation, true},
-		{PhaseAnalyze, SubTaskPlan, true},
-		{PhasePush, SubTaskPush, true},
 		{PhaseComplete, "", false},
 		{PhaseBlocked, "", false},
 		{PhaseNothingToDo, "", false},
@@ -124,8 +118,8 @@ func TestPhaseToSubTask_AllPhasesRouteCorrectly(t *testing.T) {
 
 func TestPhaseToSubTask_MapCompleteness(t *testing.T) {
 	// Verify the map has exactly the expected number of entries
-	// REVIEW phase removed, so we have 6 entries: Plan, Implement, Docs, PRCreation, Analyze, Push
-	expectedLen := 6
+	// Core phase loop has 3 entries: Plan, Implement, Docs
+	expectedLen := 3
 	if len(phaseToSubTask) != expectedLen {
 		t.Errorf("phaseToSubTask has %d entries, want %d", len(phaseToSubTask), expectedLen)
 	}

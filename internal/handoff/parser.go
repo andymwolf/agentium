@@ -34,8 +34,6 @@ func (p *Parser) ParseOutput(output string, phase Phase) (interface{}, error) {
 		return p.parseImplementOutput(jsonStr)
 	case PhaseDocs:
 		return p.parseDocsOutput(jsonStr)
-	case PhasePRCreation:
-		return p.parsePRCreationOutput(jsonStr)
 	default:
 		return nil, fmt.Errorf("unknown phase: %s", phase)
 	}
@@ -139,15 +137,6 @@ func (p *Parser) parseDocsOutput(jsonStr string) (*DocsOutput, error) {
 	return &output, nil
 }
 
-// parsePRCreationOutput parses PR_CREATION phase output.
-func (p *Parser) parsePRCreationOutput(jsonStr string) (*PRCreationOutput, error) {
-	var output PRCreationOutput
-	if err := json.Unmarshal([]byte(jsonStr), &output); err != nil {
-		return nil, fmt.Errorf("failed to parse PRCreationOutput: %w", err)
-	}
-	return &output, nil
-}
-
 // HasHandoffSignal checks if output contains an AGENTIUM_HANDOFF signal.
 func (p *Parser) HasHandoffSignal(output string) bool {
 	return strings.Contains(output, SignalPrefix)
@@ -169,7 +158,6 @@ func (p *Parser) ParseAny(output string) (Phase, interface{}, error) {
 		{PhasePlan, func(s string) (interface{}, error) { return p.parsePlanOutput(s) }},
 		{PhaseImplement, func(s string) (interface{}, error) { return p.parseImplementOutput(s) }},
 		{PhaseDocs, func(s string) (interface{}, error) { return p.parseDocsOutput(s) }},
-		{PhasePRCreation, func(s string) (interface{}, error) { return p.parsePRCreationOutput(s) }},
 	}
 
 	// We can't reliably distinguish between types just from JSON structure,
@@ -180,17 +168,12 @@ func (p *Parser) ParseAny(output string) (Phase, interface{}, error) {
 	}
 
 	// Distinguish by unique fields - check most unique first
-	// PR_CREATION: pr_number is unique
-	if _, ok := raw["pr_number"]; ok {
-		out, err := p.parsePRCreationOutput(jsonStr)
-		return PhasePRCreation, out, err
-	}
 	// PLAN: implementation_steps is unique
 	if _, ok := raw["implementation_steps"]; ok {
 		out, err := p.parsePlanOutput(jsonStr)
 		return PhasePlan, out, err
 	}
-	// IMPLEMENT: branch_name with commits/files_changed (not pr_number)
+	// IMPLEMENT: branch_name with commits/files_changed
 	if _, ok := raw["branch_name"]; ok {
 		out, err := p.parseImplementOutput(jsonStr)
 		return PhaseImplement, out, err

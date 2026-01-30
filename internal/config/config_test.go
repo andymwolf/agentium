@@ -226,7 +226,7 @@ func TestConfig_ValidateForRun(t *testing.T) {
 				},
 			},
 			wantErr: true,
-			errMsg:  "at least one issue or PR is required",
+			errMsg:  "at least one issue is required",
 		},
 		{
 			name: "missing GitHub App ID",

@@ -289,20 +289,20 @@ More output`
 	})
 
 	t.Run("ParseAny detects phase from content", func(t *testing.T) {
-		output := `AGENTIUM_HANDOFF: {"pr_number":123,"pr_url":"https://github.com/owner/repo/pull/123"}`
+		output := `AGENTIUM_HANDOFF: {"summary":"Test plan","files_to_modify":["test.go"],"implementation_steps":[{"order":1,"description":"Step 1"}],"testing_approach":"unit tests"}`
 
 		phase, result, err := parser.ParseAny(output)
 		if err != nil {
 			t.Fatalf("ParseAny failed: %v", err)
 		}
 
-		if phase != PhasePRCreation {
-			t.Errorf("Expected PR_CREATION phase, got %s", phase)
+		if phase != PhasePlan {
+			t.Errorf("Expected PLAN phase, got %s", phase)
 		}
 
-		prOut := result.(*PRCreationOutput)
-		if prOut.PRNumber != 123 {
-			t.Errorf("Expected PR number 123, got %d", prOut.PRNumber)
+		planOut := result.(*PlanOutput)
+		if planOut.Summary != "Test plan" {
+			t.Errorf("Expected summary 'Test plan', got %s", planOut.Summary)
 		}
 	})
 }
@@ -394,30 +394,6 @@ func TestValidator(t *testing.T) {
 		errs := validator.ValidatePhaseOutput(PhaseImplement, out)
 		if !errs.HasErrors() {
 			t.Error("Expected validation error for missing branch")
-		}
-	})
-
-	t.Run("ValidatePRCreationOutput success", func(t *testing.T) {
-		out := &PRCreationOutput{
-			PRNumber: 123,
-			PRUrl:    "https://github.com/owner/repo/pull/123",
-		}
-
-		errs := validator.ValidatePhaseOutput(PhasePRCreation, out)
-		if errs.HasErrors() {
-			t.Errorf("Expected no errors, got: %v", errs)
-		}
-	})
-
-	t.Run("ValidatePRCreationOutput invalid PR number", func(t *testing.T) {
-		out := &PRCreationOutput{
-			PRNumber: 0,
-			PRUrl:    "https://github.com/owner/repo/pull/123",
-		}
-
-		errs := validator.ValidatePhaseOutput(PhasePRCreation, out)
-		if !errs.HasErrors() {
-			t.Error("Expected validation error for invalid PR number")
 		}
 	})
 

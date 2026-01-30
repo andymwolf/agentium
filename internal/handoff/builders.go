@@ -28,8 +28,6 @@ func (b *Builder) BuildInputForPhase(taskID string, phase Phase) (string, error)
 		input, err = b.buildImplementInput(taskID)
 	case PhaseDocs:
 		input, err = b.buildDocsInput(taskID)
-	case PhasePRCreation:
-		input, err = b.buildPRCreationInput(taskID)
 	default:
 		return "", fmt.Errorf("unknown phase: %s", phase)
 	}
@@ -111,38 +109,6 @@ func (b *Builder) buildDocsInput(taskID string) (*DocsInput, error) {
 		PlanSummary:  plan.Summary,
 		FilesChanged: impl.FilesChanged,
 	}, nil
-}
-
-// buildPRCreationInput constructs input for the PR_CREATION phase.
-func (b *Builder) buildPRCreationInput(taskID string) (*PRCreationInput, error) {
-	issue := b.store.GetIssueContext(taskID)
-	if issue == nil {
-		return nil, fmt.Errorf("no issue context found for task %s", taskID)
-	}
-
-	plan := b.store.GetPlanOutput(taskID)
-	if plan == nil {
-		return nil, fmt.Errorf("no plan output found for task %s", taskID)
-	}
-
-	impl := b.store.GetImplementOutput(taskID)
-	if impl == nil {
-		return nil, fmt.Errorf("no implementation output found for task %s", taskID)
-	}
-
-	input := &PRCreationInput{
-		Issue:        *issue,
-		BranchName:   impl.BranchName,
-		PlanSummary:  plan.Summary,
-		FilesChanged: impl.FilesChanged,
-	}
-
-	// Include test results if available
-	if impl.TestOutput != "" {
-		input.TestResults = impl.TestOutput
-	}
-
-	return input, nil
 }
 
 // BuildMarkdownContext creates a human-readable markdown representation

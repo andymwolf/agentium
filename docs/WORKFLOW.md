@@ -295,7 +295,7 @@ Reviewer phases:
 - `PLAN_REVIEW`, `IMPLEMENT_REVIEW`, `DOCS_REVIEW`
 
 Judge phases:
-- `JUDGE`, `PLAN_JUDGE`, `IMPLEMENT_JUDGE`, `REVIEW_JUDGE`, `DOCS_JUDGE`
+- `JUDGE`, `PLAN_JUDGE`, `IMPLEMENT_JUDGE`, `DOCS_JUDGE`
 
 ### Example Configuration
 

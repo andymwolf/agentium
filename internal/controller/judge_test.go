@@ -166,7 +166,6 @@ func TestJudgeContextBudget_Custom(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
-				Enabled:            true,
 				JudgeContextBudget: 20000,
 			},
 		},
@@ -268,7 +267,7 @@ func TestBuildJudgePrompt_TruncatesLongOutput(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			Repository: "github.com/org/repo",
-			PhaseLoop:  &PhaseLoopConfig{Enabled: true, JudgeContextBudget: 100},
+			PhaseLoop:  &PhaseLoopConfig{JudgeContextBudget: 100},
 		},
 		activeTask: "1",
 	}

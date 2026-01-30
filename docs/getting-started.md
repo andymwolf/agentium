@@ -15,10 +15,10 @@ Agentium's core workflow mirrors how a developer works on a ticket:
 3. The agent enters a phase loop:
 
 ```
-PLAN --> [EVALUATE] --> IMPLEMENT --> [EVALUATE] --> TEST --> [EVALUATE] --> REVIEW --> [EVALUATE] --> PR_CREATION --> COMPLETE
+PLAN --> [PLAN_JUDGE] --> IMPLEMENT --> [IMPLEMENT_JUDGE] --> DOCS --> [DOCS_JUDGE] --> COMPLETE
 ```
 
-Each phase runs in a clean context window. After each phase, an LLM evaluator (the "judge") decides:
+Each phase runs in a clean context window. After each phase, an LLM judge decides:
 - **ADVANCE** — Work is sufficient, proceed to next phase
 - **ITERATE** — Work needs improvement, loop back with feedback
 - **BLOCKED** — Cannot proceed, needs human intervention
@@ -163,12 +163,6 @@ agentium run --repo github.com/org/repo --issues 42,43,44
 
 ### PR Review Session
 
-Have the agent address code review feedback on an existing PR:
-
-```bash
-agentium run --repo github.com/org/repo --prs 50
-```
-
 ### Use a Different Agent
 
 ```bash
@@ -257,7 +251,7 @@ This is useful for:
 Each Agentium session follows this lifecycle:
 
 ```
-Provision VM → Phase Loop (PLAN → IMPLEMENT → TEST → REVIEW → PR_CREATION) → Terminate VM
+Provision VM → Phase Loop (PLAN → IMPLEMENT → DOCS) → Terminate VM
 ```
 
 Within the phase loop, an LLM evaluator judges each phase's output and decides:

@@ -40,7 +40,6 @@ func init() {
 
 	runCmd.Flags().String("repo", "", "GitHub repository (e.g., github.com/org/repo)")
 	runCmd.Flags().StringSlice("issues", nil, "Issue numbers to work on (comma-separated)")
-	runCmd.Flags().StringSlice("prs", nil, "PR numbers to address review feedback (comma-separated)")
 	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider, codex)")
 	runCmd.Flags().Int("max-iterations", 30, "Maximum number of iterations")
 	runCmd.Flags().String("max-duration", "2h", "Maximum session duration")
@@ -55,7 +54,6 @@ func init() {
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
-	_ = viper.BindPFlag("session.prs", runCmd.Flags().Lookup("prs"))
 	_ = viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
 	_ = viper.BindPFlag("session.max_iterations", runCmd.Flags().Lookup("max-iterations"))
 	_ = viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
@@ -99,13 +97,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("invalid --issues value: %w", expandErr)
 		}
 		cfg.Session.Tasks = expandedIssues
-	}
-	if prs := viper.GetStringSlice("session.prs"); len(prs) > 0 {
-		expandedPRs, expandErr := ExpandRanges(prs)
-		if expandErr != nil {
-			return fmt.Errorf("invalid --prs value: %w", expandErr)
-		}
-		cfg.Session.PRs = expandedPRs
 	}
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
@@ -159,9 +150,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if len(cfg.Session.Tasks) > 0 {
 		fmt.Printf("Issues: %s\n", strings.Join(cfg.Session.Tasks, ", "))
 	}
-	if len(cfg.Session.PRs) > 0 {
-		fmt.Printf("PRs: %s\n", strings.Join(cfg.Session.PRs, ", "))
-	}
 	fmt.Printf("Agent: %s\n", cfg.Session.Agent)
 	fmt.Printf("Provider: %s\n", cfg.Cloud.Provider)
 	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
@@ -185,7 +173,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 		CloudProvider: cfg.Cloud.Provider,
 		Repository:    cfg.Session.Repository,
 		Tasks:         cfg.Session.Tasks,
-		PRs:           cfg.Session.PRs,
 		Agent:         cfg.Session.Agent,
 		MaxIterations: cfg.Session.MaxIterations,
 		MaxDuration:   cfg.Session.MaxDuration,
@@ -272,16 +259,15 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 
 	// Propagate phase loop config from config file
-	if cfg.PhaseLoop.Enabled {
-		sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
-			Enabled:                cfg.PhaseLoop.Enabled,
-			PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
-			ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
-			ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
-			DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
-			JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
-			JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
-		}
+	// Phase loop is always enabled - the config just customizes iteration counts
+	sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
+		SkipPlanIfExists:       cfg.PhaseLoop.SkipPlanIfExists,
+		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
+		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
+		ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
+		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
+		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}
 
 	// Propagate monorepo config from config file

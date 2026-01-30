@@ -105,20 +105,21 @@ Requirements:
 
 Within a session, the agent operates via a **controller-as-judge phase loop**:
 
-**Phases (in order):**
+**Core Phases (in order):**
 1. **PLAN** - Agent understands the issue and creates an implementation plan
 2. **IMPLEMENT** - Agent writes code following the plan
-3. **TEST** - Agent runs tests on the implementation
-4. **REVIEW** - Agent reviews the git diff for quality/correctness
-5. **PR_CREATION** - Agent creates a pull request
+3. **DOCS** - Agent updates documentation as needed
 
-**Evaluator (Judge):**
-After each phase (except PR_CREATION), an LLM evaluator assesses the output:
+**Judge Phases:**
+After each core phase, an LLM judge assesses the output:
 - `ADVANCE` - Work is sufficient, proceed to next phase
 - `ITERATE` - Work needs improvement; feedback stored in memory for re-attempt
 - `BLOCKED` - Cannot proceed without human intervention
 
-Every phase iteration and evaluator verdict is posted as a comment on the GitHub issue.
+**Reviewer Phases:**
+Per-iteration review is available via `PLAN_REVIEW`, `IMPLEMENT_REVIEW`, and `DOCS_REVIEW` phases.
+
+Every phase iteration and judge verdict is posted as a comment on the GitHub issue.
 
 ### Monorepo Scope Enforcement
 
@@ -280,7 +281,7 @@ Project-specific guidance injected into agent prompts. Describes build commands,
 2. Cloud-init installs Docker and pulls controller image
 3. Session controller initializes, fetches secrets, mints GitHub token
 4. Agent runtime container starts with cloned repo
-5. Phase loop begins: PLAN -> EVALUATE -> IMPLEMENT -> EVALUATE -> TEST -> EVALUATE -> REVIEW -> EVALUATE -> PR_CREATION
+5. Phase loop begins: PLAN -> PLAN_JUDGE -> IMPLEMENT -> IMPLEMENT_JUDGE -> DOCS -> DOCS_JUDGE
 6. Each phase iteration posts progress to GitHub issue
 7. Session controller evaluates termination conditions
 8. Credentials cleared, logs flushed, VM self-destructs

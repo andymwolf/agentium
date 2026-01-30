@@ -130,7 +130,7 @@ agentium run [flags]
 **Required Flags:**
 
 - `--repo` is always required (enforced by the CLI; you must provide it on the command line)
-- At least one of `--issues` or `--prs` must be specified
+- `--issues` must be specified
 
 **Flags:**
 
@@ -138,7 +138,6 @@ agentium run [flags]
 |------|------|---------|-------------|
 | `--repo` | string | **Required** | GitHub repository (e.g., `github.com/org/repo`) |
 | `--issues` | string | - | Issue numbers to work on (comma-separated, supports ranges like `1-5`) |
-| `--prs` | string | - | PR numbers for review sessions (comma-separated, supports ranges like `1-5`) |
 | `--agent` | string | `claude-code` | Agent to use: `claude-code`, `aider`, `codex` |
 | `--max-iterations` | int | `30` | Maximum iterations before termination |
 | `--max-duration` | string | `2h` | Maximum session duration |
@@ -165,9 +164,6 @@ agentium run --repo github.com/org/repo --issues 42-50
 
 # Mixed syntax (ranges and individual numbers)
 agentium run --repo github.com/org/repo --issues 42-45,48,50-52
-
-# PR review session
-agentium run --repo github.com/org/repo --prs 50
 
 # Use Aider agent
 agentium run --repo github.com/org/repo --issues 42 --agent aider
@@ -402,7 +398,7 @@ For `--phase-model`, use the format:
 PHASE=ADAPTER:MODEL_ID
 ```
 
-Where `PHASE` is one of: `PLAN`, `IMPLEMENT`, `TEST`, `PR_CREATION`, `REVIEW`, `EVALUATE`, `ANALYZE`, `COMPLETE`, `BLOCKED`, `NOTHING_TO_DO`, `PUSH`.
+Where `PHASE` is one of: `PLAN`, `IMPLEMENT`, `DOCS`, `COMPLETE`, `BLOCKED`, `NOTHING_TO_DO`, `PLAN_REVIEW`, `IMPLEMENT_REVIEW`, `DOCS_REVIEW`, `JUDGE`, `PLAN_JUDGE`, `IMPLEMENT_JUDGE`, `DOCS_JUDGE`.
 
 **Example:**
 

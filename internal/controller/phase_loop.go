@@ -141,7 +141,7 @@ func (c *Controller) isPlanSkipEnabled() bool {
 	if c.config.PhaseLoop == nil {
 		return false
 	}
-	return c.config.PhaseLoop.Enabled && c.config.PhaseLoop.SkipPlanIfExists
+	return c.config.PhaseLoop.SkipPlanIfExists
 }
 
 // shouldSkipPlanIteration returns true if the planning agent iteration should

@@ -72,14 +72,6 @@ func (v *Validator) ValidatePhaseOutput(phase Phase, output interface{}) Validat
 		}
 		errs = append(errs, v.validateDocsOutput(out)...)
 
-	case PhasePRCreation:
-		out, ok := output.(*PRCreationOutput)
-		if !ok {
-			errs = append(errs, ValidationError{Phase: phase, Field: "type", Message: "expected *PRCreationOutput"})
-			return errs
-		}
-		errs = append(errs, v.validatePRCreationOutput(out)...)
-
 	default:
 		errs = append(errs, ValidationError{Phase: phase, Field: "phase", Message: "unknown phase"})
 	}
@@ -187,26 +179,6 @@ func (v *Validator) validateDocsOutput(out *DocsOutput) ValidationErrors {
 	return errs
 }
 
-// validatePRCreationOutput validates PR_CREATION phase output.
-func (v *Validator) validatePRCreationOutput(out *PRCreationOutput) ValidationErrors {
-	var errs ValidationErrors
-
-	if out == nil {
-		errs = append(errs, ValidationError{Phase: PhasePRCreation, Field: "output", Message: "output is nil"})
-		return errs
-	}
-
-	if out.PRNumber <= 0 {
-		errs = append(errs, ValidationError{Phase: PhasePRCreation, Field: "pr_number", Message: "PR number must be positive"})
-	}
-
-	if strings.TrimSpace(out.PRUrl) == "" {
-		errs = append(errs, ValidationError{Phase: PhasePRCreation, Field: "pr_url", Message: "PR URL is required"})
-	}
-
-	return errs
-}
-
 // ValidatePhaseInput validates that required inputs are present for a phase.
 func (v *Validator) ValidatePhaseInput(store *Store, taskID string, phase Phase) ValidationErrors {
 	var errs ValidationErrors
@@ -232,14 +204,6 @@ func (v *Validator) ValidatePhaseInput(store *Store, taskID string, phase Phase)
 		}
 		if store.GetImplementOutput(taskID) == nil {
 			errs = append(errs, ValidationError{Phase: phase, Field: "implement_output", Message: "implement output is required for DOCS phase"})
-		}
-
-	case PhasePRCreation:
-		if store.GetPlanOutput(taskID) == nil {
-			errs = append(errs, ValidationError{Phase: phase, Field: "plan_output", Message: "plan output is required for PR_CREATION phase"})
-		}
-		if store.GetImplementOutput(taskID) == nil {
-			errs = append(errs, ValidationError{Phase: phase, Field: "implement_output", Message: "implement output is required for PR_CREATION phase"})
 		}
 	}
 
