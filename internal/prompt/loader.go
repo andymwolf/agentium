@@ -38,13 +38,14 @@ func LoadProjectPrompt(workDir string) (string, error) {
 // instructions, providing hierarchical context to the agent.
 //
 // The returned prompt has the format:
-//   ## Repository Instructions
-//   <root AGENT.md content>
 //
-//   ---
+//	## Repository Instructions
+//	<root AGENT.md content>
 //
-//   ## Package Instructions (<packagePath>)
-//   <package AGENT.md content>
+//	---
+//
+//	## Package Instructions (<packagePath>)
+//	<package AGENT.md content>
 //
 // If either file is missing, it is silently skipped. If both are missing, returns empty string.
 func LoadProjectPromptWithPackage(workDir, packagePath string) (string, error) {
