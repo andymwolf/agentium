@@ -167,6 +167,21 @@ func (c *Controller) shouldSkipPlanIteration(phase TaskPhase, iter int) bool {
 	return c.hasExistingPlan()
 }
 
+// docsOutputIndicatesNoChanges returns true if the DOCS phase handoff output
+// indicates no documentation changes were made.
+func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
+	if !c.isHandoffEnabled() || c.handoffStore == nil {
+		return false
+	}
+
+	hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhaseDocs)
+	if hd == nil || hd.DocsOutput == nil {
+		return false
+	}
+
+	return len(hd.DocsOutput.DocsUpdated) == 0 && !hd.DocsOutput.ReadmeChanged
+}
+
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
 func advancePhase(current TaskPhase) TaskPhase {
@@ -303,6 +318,23 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if handoffErr := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); handoffErr != nil {
 					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, handoffErr)
 				}
+			}
+
+			// For DOCS phase: skip reviewer/judge if no documentation changes were made
+			if currentPhase == PhaseDocs && c.docsOutputIndicatesNoChanges(taskID) {
+				c.logInfo("Phase %s: no documentation changes detected, skipping review/judge", currentPhase)
+				c.postPhaseComment(ctx, currentPhase, iter,
+					"No documentation changes detected — skipping review (auto-advance)")
+
+				// Clear feedback and record phase result
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (no changes, auto-advanced)", currentPhase)},
+					}, c.iteration, taskID)
+				}
+				advanced = true
+				break
 			}
 
 			// Post phase comment (postPhaseComment handles attachment/truncation internally)
