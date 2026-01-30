@@ -17,10 +17,10 @@ func LoadSystemPrompt(workDir string) (string, error) {
 	return string(data), nil
 }
 
-// LoadProjectPrompt reads .agentium/AGENT.md from the given workspace directory.
+// LoadProjectPrompt reads AGENT.md from the given workspace directory root.
 // Returns empty string with nil error if the file does not exist.
 func LoadProjectPrompt(workDir string) (string, error) {
-	agentMDPath := filepath.Join(workDir, ".agentium", "AGENT.md")
+	agentMDPath := filepath.Join(workDir, "AGENT.md")
 
 	data, err := os.ReadFile(agentMDPath)
 	if err != nil {

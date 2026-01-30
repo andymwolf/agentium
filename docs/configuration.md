@@ -265,7 +265,7 @@ monorepo:
 
 **Package-specific agent instructions:**
 
-Create `.agentium/AGENT.md` within a package directory to provide package-specific instructions. These are merged with the root AGENT.md when the agent targets that package.
+Create `AGENT.md` within a package directory to provide package-specific instructions (e.g., `packages/core/AGENT.md`). These are merged with the root `AGENT.md` when the agent targets that package.
 
 ### delegation
 
@@ -308,9 +308,9 @@ All configuration values can be set via environment variables with the `AGENTIUM
 
 ## Project-Specific Agent Instructions
 
-You can provide project-specific instructions to the AI agent by creating a `.agentium/AGENT.md` file in your repository root. This file is automatically injected into the agent's system prompt.
+You can provide project-specific instructions to the AI agent by creating an `AGENT.md` file in your repository root. This file is automatically injected into the agent's system prompt.
 
-**Example `.agentium/AGENT.md`:**
+**Example `AGENT.md`:**
 
 ```markdown
 # Project Agent Instructions

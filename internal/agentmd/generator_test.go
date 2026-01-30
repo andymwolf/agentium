@@ -91,7 +91,7 @@ func TestGenerator_WriteToProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	agentMDPath := filepath.Join(tmpDir, AgentiumDir, AgentMDFile)
+	agentMDPath := filepath.Join(tmpDir, AgentMDFile)
 	content, err := os.ReadFile(agentMDPath)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestGenerator_PreservesPreContentOnRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	agentMDPath := filepath.Join(tmpDir, AgentiumDir, AgentMDFile)
+	agentMDPath := filepath.Join(tmpDir, AgentMDFile)
 
 	// Read and add content BEFORE the generated section
 	content, err := os.ReadFile(agentMDPath)

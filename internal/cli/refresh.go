@@ -14,7 +14,7 @@ import (
 var refreshCmd = &cobra.Command{
 	Use:   "refresh",
 	Short: "Regenerate AGENT.md from project",
-	Long: `Regenerate .agentium/AGENT.md by rescanning the project.
+	Long: `Regenerate AGENT.md by rescanning the project.
 
 This command re-analyzes your codebase and updates the auto-generated sections
 of AGENT.md while preserving any custom content you've added.
@@ -51,7 +51,7 @@ func refreshAgentMD(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 
 	// Check for existing AGENT.md
-	agentMDPath := filepath.Join(cwd, agentmd.AgentiumDir, agentmd.AgentMDFile)
+	agentMDPath := filepath.Join(cwd, agentmd.AgentMDFile)
 	var hasCustomContent bool
 
 	existingContent, readErr := os.ReadFile(agentMDPath)
@@ -103,7 +103,7 @@ func refreshAgentMD(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write AGENT.md: %w", err)
 	}
 
-	fmt.Printf("Updated %s/%s\n", agentmd.AgentiumDir, agentmd.AgentMDFile)
+	fmt.Printf("Updated %s\n", agentmd.AgentMDFile)
 
 	if hasCustomContent {
 		fmt.Println("Custom sections have been preserved.")

@@ -1,3 +1,9 @@
+# See AGENT.md
+
+This project uses [AGENT.md](AGENT.md) for AI agent instructions.
+
+---
+
 # Claude Code Instructions for Agentium
 
 ## CRITICAL WORKFLOW RULES
