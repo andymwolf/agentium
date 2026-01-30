@@ -16,6 +16,7 @@ Agentium implements the [Ralph Wiggum loop](https://github.com/ghuntley/how-to-r
 - 🔐 **PR-Only Output** — Agents create pull requests for human review (no production access)
 - 🚀 **Concurrent Sessions** — Launch multiple sessions in parallel on separate VMs
 - 🤖 **Multi-Agent Support** — Claude Code and Aider (more coming soon)
+- 📦 **Monorepo Support** — Per-package scope enforcement for pnpm workspaces
 - 💾 **Memory System** — Context persistence between phase iterations
 - 🎯 **Model Routing** — Assign different models to different phases
 - 🏗️ **Language Auto-Detection** — Automatically installs required runtimes

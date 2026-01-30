@@ -120,6 +120,29 @@ After each phase (except PR_CREATION), an LLM evaluator assesses the output:
 
 Every phase iteration and evaluator verdict is posted as a comment on the GitHub issue.
 
+### Monorepo Scope Enforcement
+
+For pnpm workspace monorepos, Agentium enforces per-package scope:
+
+**Package Identification:**
+- Issues must have a `pkg:<name>` label (e.g., `pkg:core`, `pkg:web`)
+- The label maps to a package directory in `pnpm-workspace.yaml`
+- Sessions without a package label are rejected in monorepo mode
+
+**Scope Validation:**
+- After each iteration, the controller validates file changes
+- Only files within the target package directory are allowed
+- Allowed exceptions: `package.json`, `pnpm-lock.yaml`, `.github/workflows/`
+- Out-of-scope changes trigger:
+  1. Automatic `git checkout .` and `git clean -fd` to reset changes
+  2. Iteration marked as failed with scope violation feedback
+  3. Agent continues with feedback about the violation
+
+**Hierarchical Instructions:**
+- Root `.agentium/AGENT.md` provides repository-wide instructions
+- Package `.agentium/AGENT.md` provides package-specific instructions
+- Both are merged and injected into the agent prompt
+
 ### VM Termination Conditions
 
 The VM **must self-terminate** when **any** of the following conditions occur:

@@ -87,3 +87,50 @@ List files or directories the agent should not modify:
 ## Contact
 
 If the agent encounters issues outside its scope, it should note them in the PR description for human follow-up.
+
+---
+
+# Package-Specific Instructions (Monorepos)
+
+For pnpm workspace monorepos, you can create package-specific AGENT.md files. Place them at `<package-path>/.agentium/AGENT.md` and they will be merged with the root instructions when the agent targets that package.
+
+**Example structure:**
+
+```
+my-monorepo/
+├── .agentium/AGENT.md          # Root instructions (applies to all packages)
+├── packages/
+│   ├── core/
+│   │   └── .agentium/AGENT.md  # Core-specific instructions
+│   └── web/
+│       └── .agentium/AGENT.md  # Web-specific instructions
+└── pnpm-workspace.yaml
+```
+
+**Example package AGENT.md (`packages/web/.agentium/AGENT.md`):**
+
+```markdown
+# Web Package Instructions
+
+## Build & Test Commands
+
+```bash
+pnpm --filter web build
+pnpm --filter web test
+pnpm --filter web lint
+```
+
+## Framework Notes
+
+- This package uses React with TypeScript
+- State management via Zustand
+- Styling with Tailwind CSS
+
+## Testing Requirements
+
+- Use React Testing Library for component tests
+- Mock API calls with MSW
+- Snapshot tests for complex UI components
+```
+
+The agent will see both root and package instructions, clearly separated.
