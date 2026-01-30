@@ -170,6 +170,14 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Enable monorepo support if configured
+	if cfg.Monorepo.Enabled {
+		sessionConfig.Monorepo = &controller.MonorepoSessionConfig{
+			Enabled:     cfg.Monorepo.Enabled,
+			LabelPrefix: cfg.Monorepo.LabelPrefix,
+		}
+	}
+
 	// Handle --model (overrides default for all phases)
 	if model, _ := cmd.Flags().GetString("model"); model != "" {
 		spec := routing.ParseModelSpec(model)

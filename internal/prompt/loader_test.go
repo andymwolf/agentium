@@ -3,6 +3,7 @@ package prompt
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +89,145 @@ func TestLoadProjectPrompt_EmptyFile(t *testing.T) {
 	}
 	if result != "" {
 		t.Errorf("expected empty string for empty file, got %q", result)
+	}
+}
+
+func TestLoadProjectPromptWithPackage_NoFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	result, err := LoadProjectPromptWithPackage(tmpDir, "packages/core")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "" {
+		t.Errorf("expected empty string when no AGENT.md files exist, got %q", result)
+	}
+}
+
+func TestLoadProjectPromptWithPackage_RootOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create root .agentium/AGENT.md
+	agentiumDir := filepath.Join(tmpDir, ".agentium")
+	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootContent := "# Root Instructions\nRun tests with go test"
+	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := LoadProjectPromptWithPackage(tmpDir, "packages/core")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, "Repository Instructions") {
+		t.Errorf("result should contain 'Repository Instructions' header")
+	}
+	if !strings.Contains(result, rootContent) {
+		t.Errorf("result should contain root content")
+	}
+}
+
+func TestLoadProjectPromptWithPackage_PackageOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create package .agentium/AGENT.md
+	pkgAgentiumDir := filepath.Join(tmpDir, "packages", "core", ".agentium")
+	if err := os.MkdirAll(pkgAgentiumDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	pkgContent := "# Package Instructions\nThis is the core package"
+	if err := os.WriteFile(filepath.Join(pkgAgentiumDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := LoadProjectPromptWithPackage(tmpDir, "packages/core")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, "Package Instructions (packages/core)") {
+		t.Errorf("result should contain package header with path")
+	}
+	if !strings.Contains(result, pkgContent) {
+		t.Errorf("result should contain package content")
+	}
+}
+
+func TestLoadProjectPromptWithPackage_Both(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create root .agentium/AGENT.md
+	rootAgentiumDir := filepath.Join(tmpDir, ".agentium")
+	if err := os.MkdirAll(rootAgentiumDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	rootContent := "Root instructions"
+	if err := os.WriteFile(filepath.Join(rootAgentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create package .agentium/AGENT.md
+	pkgAgentiumDir := filepath.Join(tmpDir, "packages", "core", ".agentium")
+	if err := os.MkdirAll(pkgAgentiumDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	pkgContent := "Package instructions"
+	if err := os.WriteFile(filepath.Join(pkgAgentiumDir, "AGENT.md"), []byte(pkgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := LoadProjectPromptWithPackage(tmpDir, "packages/core")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify both sections are present
+	if !strings.Contains(result, "Repository Instructions") {
+		t.Errorf("result should contain repository header")
+	}
+	if !strings.Contains(result, rootContent) {
+		t.Errorf("result should contain root content")
+	}
+	if !strings.Contains(result, "Package Instructions") {
+		t.Errorf("result should contain package header")
+	}
+	if !strings.Contains(result, pkgContent) {
+		t.Errorf("result should contain package content")
+	}
+	if !strings.Contains(result, "---") {
+		t.Errorf("result should contain separator between sections")
+	}
+}
+
+func TestLoadProjectPromptWithPackage_EmptyPackagePath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create root .agentium/AGENT.md
+	agentiumDir := filepath.Join(tmpDir, ".agentium")
+	if err := os.MkdirAll(agentiumDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	rootContent := "Root instructions only"
+	if err := os.WriteFile(filepath.Join(agentiumDir, "AGENT.md"), []byte(rootContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty package path - should only load root
+	result, err := LoadProjectPromptWithPackage(tmpDir, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, rootContent) {
+		t.Errorf("result should contain root content")
+	}
+	// Should not have package section header
+	if strings.Contains(result, "Package Instructions") {
+		t.Errorf("result should not contain package header when package path is empty")
 	}
 }

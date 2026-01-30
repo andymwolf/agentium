@@ -284,6 +284,14 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Propagate monorepo config from config file
+	if cfg.Monorepo.Enabled {
+		sessionConfig.Monorepo = &provisioner.ProvMonorepoConfig{
+			Enabled:     cfg.Monorepo.Enabled,
+			LabelPrefix: cfg.Monorepo.LabelPrefix,
+		}
+	}
+
 	// Build VM config
 	vmConfig := provisioner.VMConfig{
 		Project:         cfg.Cloud.Project,

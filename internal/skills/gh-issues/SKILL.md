@@ -35,6 +35,26 @@ Before creating issues, gather context:
 !gh issue list --state open --limit 20 --json number,title
 ```
 
+## Monorepo Package Detection
+
+For monorepo projects, check for available packages:
+
+```bash
+# Check if this is a monorepo with pnpm
+if [ -f "pnpm-workspace.yaml" ]; then
+  echo "=== MONOREPO DETECTED ==="
+  # List packages from workspace
+  cat pnpm-workspace.yaml
+  # Show actual package directories
+  ls -la packages/ 2>/dev/null || ls -la apps/ 2>/dev/null
+fi
+```
+
+If a monorepo is detected, you MUST:
+1. Ask the user which package the issue relates to
+2. Apply the `pkg:<package-name>` label to every issue
+3. Create the label if it doesn't exist: `gh label create "pkg:<name>" --color "0052CC"`
+
 ## Workflow
 
 1. **Analyze** - Understand what the user wants to accomplish
@@ -101,6 +121,52 @@ EOF
 )"
 ```
 
+## Issue Template (Monorepo)
+
+For monorepo projects, ALWAYS include the package label:
+
+```bash
+# First, ensure the package label exists
+gh label create "pkg:<package-name>" --color "0052CC" --description "Package: <package-name>" 2>/dev/null || true
+
+gh issue create \
+  --title "<imperative verb> <concise description>" \
+  --label "pkg:<package-name>,<type-label>" \
+  --body "$(cat <<'EOF'
+## Summary
+
+<1-2 sentence description of what needs to be done>
+
+## Package Scope
+
+This issue is scoped to the `<package-name>` package (`packages/<package-name>/`).
+
+## Context
+
+<Why this is needed, background information>
+
+## Acceptance Criteria
+
+- [ ] <Specific, testable criterion>
+- [ ] <Another criterion>
+- [ ] Tests pass
+- [ ] Documentation updated (if applicable)
+
+## Technical Notes
+
+<Implementation hints, relevant files, considerations>
+
+## Dependencies
+
+<If this depends on other issues>
+- Depends on #<number>: <brief description>
+
+<If nothing depends on this>
+None
+EOF
+)"
+```
+
 ## Label Selection
 
 Match work type to available repository labels:
@@ -118,6 +184,12 @@ Match work type to available repository labels:
 
 **Priority labels** (if available):
 - `priority:high`, `priority:medium`, `priority:low`
+
+**Package labels** (REQUIRED for monorepos):
+- `pkg:<package-name>` - Scopes the issue to a specific package
+- Examples: `pkg:core`, `pkg:api`, `pkg:web`, `pkg:shared`
+
+For monorepos, every issue MUST have exactly one `pkg:*` label.
 
 Always verify labels exist with `gh label list` before using them.
 
@@ -183,6 +255,10 @@ Create issues in dependency order:
 
 **If no labels exist in repo:**
 > Create issues without labels, or suggest the user create labels first.
+
+**If user doesn't specify a package in a monorepo:**
+> "This appears to be a monorepo. Which package does this issue relate to?"
+> List available packages and wait for user selection before creating the issue.
 
 ## Output Format
 

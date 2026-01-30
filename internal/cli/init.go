@@ -68,6 +68,12 @@ type projectConfig struct {
 		MaxIterations int    `yaml:"max_iterations"`
 		MaxDuration   string `yaml:"max_duration"`
 	} `yaml:"defaults"`
+	Monorepo *monorepoConfig `yaml:"monorepo,omitempty"`
+}
+
+type monorepoConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	LabelPrefix string `yaml:"label_prefix"`
 }
 
 func initProject(cmd *cobra.Command, args []string) error {
@@ -140,6 +146,15 @@ func writeConfig(cmd *cobra.Command, configPath, cwd string) error {
 	cfg.Defaults.Agent = "claude-code"
 	cfg.Defaults.MaxIterations = 30
 	cfg.Defaults.MaxDuration = "2h"
+
+	// Detect pnpm monorepo
+	if hasPnpmWorkspace(cwd) {
+		cfg.Monorepo = &monorepoConfig{
+			Enabled:     true,
+			LabelPrefix: "pkg",
+		}
+		fmt.Println("Detected pnpm-workspace.yaml - monorepo support enabled")
+	}
 
 	// Write config file
 	data, err := yaml.Marshal(cfg)
@@ -283,6 +298,12 @@ func getShellConfig(shell string) string {
 		}
 		return filepath.Join(home, ".bashrc")
 	}
+}
+
+// hasPnpmWorkspace checks if a pnpm-workspace.yaml file exists in the given directory.
+func hasPnpmWorkspace(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "pnpm-workspace.yaml"))
+	return err == nil
 }
 
 func printNextSteps(skippedAgentMD bool) {

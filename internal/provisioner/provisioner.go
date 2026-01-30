@@ -65,6 +65,7 @@ type SessionConfig struct {
 	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
+	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
 
 // SubAgentConfig specifies agent overrides for a delegated sub-task type.
@@ -90,6 +91,12 @@ type ProvPhaseLoopConfig struct {
 	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
 	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
+}
+
+// ProvMonorepoConfig contains monorepo settings for provisioned sessions.
+type ProvMonorepoConfig struct {
+	Enabled     bool   `json:"enabled"`
+	LabelPrefix string `json:"label_prefix"`
 }
 
 // GitHubConfig contains GitHub authentication configuration
