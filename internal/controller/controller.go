@@ -123,11 +123,11 @@ type PhaseLoopConfig struct {
 
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID            string   `json:"id"`
-	CloudProvider string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
-	Repository    string   `json:"repository"`
-	Tasks         []string `json:"tasks"`
-	Agent         string   `json:"agent"`
+	ID                   string   `json:"id"`
+	CloudProvider        string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
+	Repository           string   `json:"repository"`
+	Tasks                []string `json:"tasks"`
+	Agent                string   `json:"agent"`
 	MaxIterations        int      `json:"max_iterations"`
 	MaxDuration          string   `json:"max_duration"`
 	Prompt               string   `json:"prompt"`
@@ -229,31 +229,30 @@ type Controller struct {
 	maxDuration            time.Duration
 	gitHubToken            string
 	tokenManager           *github.TokenManager // Manages token refresh for long-running sessions (nil for static tokens)
-	pushedChanges          bool                 // Tracks if changes were pushed (for PR review sessions)
 	dockerAuthed           bool                 // Tracks if docker login to GHCR was done
 	taskStates             map[string]*TaskState
 	logger                 *log.Logger
 	cloudLogger            *gcp.CloudLogger // Structured cloud logging (may be nil if unavailable)
 	secretManager          gcp.SecretFetcher
-	systemPrompt           string                    // Loaded SYSTEM.md content
-	projectPrompt          string                    // Loaded .agentium/AGENTS.md content (may be empty)
+	systemPrompt           string                  // Loaded SYSTEM.md content
+	projectPrompt          string                  // Loaded .agentium/AGENTS.md content (may be empty)
 	taskQueue              []TaskQueueItem         // Task queue for issues
 	issueDetails           []issueDetail           // Fetched issue details for prompt building
 	issueDetailsByNumber   map[string]*issueDetail // O(1) lookup by issue number string
 	activeTask             string                  // Current task ID being focused on
 	activeTaskType         string                  // "issue"
-	activeTaskExistingWork *agent.ExistingWork       // Existing work detected for active task (issues only)
-	skillSelector          *skills.Selector          // Phase-aware skill selector (nil = legacy mode)
-	memoryStore            *memory.Store             // Persistent memory store (nil = disabled)
-	handoffStore           *handoff.Store            // Structured handoff store (nil = disabled)
-	handoffBuilder         *handoff.Builder          // Phase input builder (nil = disabled)
-	handoffParser          *handoff.Parser           // Handoff signal parser (nil = disabled)
-	handoffValidator       *handoff.Validator        // Handoff validation (nil = disabled)
-	modelRouter            *routing.Router           // Phase-to-model routing (nil = no routing)
-	depGraph               *DependencyGraph          // Inter-issue dependency graph (nil = no dependencies)
-	adapters               map[string]agent.Agent    // All initialized adapters (for multi-adapter routing)
-	orchestrator           *SubTaskOrchestrator      // Sub-task delegation orchestrator (nil = disabled)
-	metadataUpdater        gcp.MetadataUpdater       // Instance metadata updater (nil if unavailable)
+	activeTaskExistingWork *agent.ExistingWork     // Existing work detected for active task (issues only)
+	skillSelector          *skills.Selector        // Phase-aware skill selector (nil = legacy mode)
+	memoryStore            *memory.Store           // Persistent memory store (nil = disabled)
+	handoffStore           *handoff.Store          // Structured handoff store (nil = disabled)
+	handoffBuilder         *handoff.Builder        // Phase input builder (nil = disabled)
+	handoffParser          *handoff.Parser         // Handoff signal parser (nil = disabled)
+	handoffValidator       *handoff.Validator      // Handoff validation (nil = disabled)
+	modelRouter            *routing.Router         // Phase-to-model routing (nil = no routing)
+	depGraph               *DependencyGraph        // Inter-issue dependency graph (nil = no dependencies)
+	adapters               map[string]agent.Agent  // All initialized adapters (for multi-adapter routing)
+	orchestrator           *SubTaskOrchestrator    // Sub-task delegation orchestrator (nil = disabled)
+	metadataUpdater        gcp.MetadataUpdater     // Instance metadata updater (nil if unavailable)
 
 	// Monorepo support
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
@@ -278,25 +277,6 @@ func taskKey(typ, id string) string {
 // envWithGitHubToken returns os.Environ() with the GITHUB_TOKEN appended.
 func (c *Controller) envWithGitHubToken() []string {
 	return append(os.Environ(), "GITHUB_TOKEN="+c.gitHubToken)
-}
-
-// checkoutBranch checks out the given branch, fetching from origin first if needed.
-func (c *Controller) checkoutBranch(ctx context.Context, branch string) error {
-	checkoutCmd := c.execCommand(ctx, "git", "checkout", branch)
-	checkoutCmd.Dir = c.workDir
-	if err := checkoutCmd.Run(); err != nil {
-		// Fetch and retry (ignore fetch error - checkout will fail if needed)
-		fetchCmd := c.execCommand(ctx, "git", "fetch", "origin", branch)
-		fetchCmd.Dir = c.workDir
-		_ = fetchCmd.Run()
-
-		checkoutCmd = c.execCommand(ctx, "git", "checkout", branch)
-		checkoutCmd.Dir = c.workDir
-		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("failed to checkout branch %s: %w", branch, err)
-		}
-	}
-	return nil
 }
 
 // New creates a new session controller
@@ -1081,40 +1061,6 @@ Violations will cause your changes to be rejected and reverted.
 `, c.packagePath, c.packagePath, c.packagePath)
 }
 
-// validatePackageScope checks if all file changes are within the allowed package scope.
-// If violations are found, it resets the changes and returns an error.
-func (c *Controller) validatePackageScope() error {
-	if c.scopeValidator == nil {
-		return nil // No scope validation required
-	}
-
-	result, err := c.scopeValidator.ValidateChanges()
-	if err != nil {
-		c.logWarning("Scope validation error: %v", err)
-		return nil // Don't fail on validation errors, just warn
-	}
-
-	if result.Valid {
-		if len(result.AllowedExempt) > 0 {
-			c.logInfo("Scope validation passed (%d exempt files: %v)", len(result.AllowedExempt), result.AllowedExempt)
-		}
-		return nil
-	}
-
-	// Scope violation detected
-	errMsg := c.scopeValidator.FormatViolationError(result)
-	c.logError("Scope validation failed:\n%s", errMsg)
-
-	// Reset changes to prevent out-of-scope modifications from persisting
-	if resetErr := c.scopeValidator.ResetChanges(); resetErr != nil {
-		c.logError("Failed to reset out-of-scope changes: %v", resetErr)
-	} else {
-		c.logInfo("Reset uncommitted changes due to scope violation")
-	}
-
-	return fmt.Errorf("scope violation: %d file(s) modified outside package %s", len(result.OutOfScopeFiles), c.packagePath)
-}
-
 // branchPrefixForLabels returns the branch prefix based on the first issue label.
 // Returns "feature" as default when no labels are present or if sanitization yields empty string.
 func branchPrefixForLabels(labels []issueLabel) string {
@@ -1437,10 +1383,11 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 	// If still in IMPLEMENT, advance to DOCS instead of completing.
 	if result.AgentStatus == "" && state.Type == "issue" && len(result.PRsCreated) > 0 {
 		state.PRNumber = result.PRsCreated[0]
-		if state.Phase == PhaseDocs {
+		switch state.Phase {
+		case PhaseDocs:
 			state.Phase = PhaseComplete
 			c.logInfo("Task %s completed via PR detection fallback (PR #%s)", taskID, state.PRNumber)
-		} else if state.Phase == PhaseImplement {
+		case PhaseImplement:
 			state.Phase = PhaseDocs
 			c.logInfo("Task %s advancing to DOCS via PR detection (PR #%s)", taskID, state.PRNumber)
 		}
