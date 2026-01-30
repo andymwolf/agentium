@@ -23,19 +23,19 @@ func NewValidator(workDir, packagePath string) *ScopeValidator {
 
 // ValidationResult contains the result of scope validation.
 type ValidationResult struct {
-	Valid            bool
-	OutOfScopeFiles  []string
-	AllowedExempt    []string // Files that were out of scope but allowed by exemptions
+	Valid             bool
+	OutOfScopeFiles   []string
+	AllowedExempt     []string // Files that were out of scope but allowed by exemptions
 	TotalFilesChanged int
 }
 
 // allowedExemptions lists files outside the package that are allowed to be modified.
 // These are typically workspace-level files that need updates when changing package dependencies.
 var allowedExemptions = []string{
-	"package.json",           // Root package.json for workspace dependencies
-	"pnpm-lock.yaml",         // Lock file updates
-	"pnpm-workspace.yaml",    // Workspace config (rare, but valid in some cases)
-	".github/workflows",      // CI workflow files
+	"package.json",        // Root package.json for workspace dependencies
+	"pnpm-lock.yaml",      // Lock file updates
+	"pnpm-workspace.yaml", // Workspace config (rare, but valid in some cases)
+	".github/workflows",   // CI workflow files
 }
 
 // ValidateChanges checks if all modified files are within the package scope.
@@ -83,7 +83,7 @@ func (v *ScopeValidator) validateStatusOutput(output string) (*ValidationResult,
 // validateFiles checks if all files are within scope.
 func (v *ScopeValidator) validateFiles(files []string) (*ValidationResult, error) {
 	result := &ValidationResult{
-		Valid:            true,
+		Valid:             true,
 		TotalFilesChanged: len(files),
 	}
 
