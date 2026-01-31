@@ -11,47 +11,21 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/andywolf/agentium/terraform"
 )
 
 // GCPProvisioner implements Provisioner for Google Cloud Platform
 type GCPProvisioner struct {
-	verbose      bool
-	project      string
-	terraformDir string
+	verbose bool
+	project string
 }
 
 // NewGCPProvisioner creates a new GCP provisioner
 func NewGCPProvisioner(verbose bool, project string) (*GCPProvisioner, error) {
-	// Find terraform modules directory
-	execPath, err := os.Executable()
-	if err != nil {
-		execPath = "."
-	}
-
-	// Look for terraform modules in a few common locations
-	possiblePaths := []string{
-		filepath.Join(filepath.Dir(execPath), "..", "terraform", "modules", "vm", "gcp"),
-		filepath.Join(".", "terraform", "modules", "vm", "gcp"),
-		filepath.Join(os.Getenv("HOME"), ".agentium", "terraform", "modules", "vm", "gcp"),
-	}
-
-	var terraformDir string
-	for _, p := range possiblePaths {
-		if _, err := os.Stat(filepath.Join(p, "main.tf")); err == nil {
-			terraformDir = p
-			break
-		}
-	}
-
-	if terraformDir == "" {
-		// Use embedded terraform or default location
-		terraformDir = filepath.Join(".", "terraform", "modules", "vm", "gcp")
-	}
-
 	return &GCPProvisioner{
-		verbose:      verbose,
-		project:      project,
-		terraformDir: terraformDir,
+		verbose: verbose,
+		project: project,
 	}, nil
 }
 
@@ -716,31 +690,7 @@ func isNotFoundError(output string) bool {
 }
 
 func (p *GCPProvisioner) copyTerraformFiles(destDir string) error {
-	// Read all .tf files from terraform dir and copy to dest
-	entries, err := os.ReadDir(p.terraformDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") {
-			continue
-		}
-
-		src := filepath.Join(p.terraformDir, entry.Name())
-		dst := filepath.Join(destDir, entry.Name())
-
-		data, err := os.ReadFile(src)
-		if err != nil {
-			return err
-		}
-
-		if err := os.WriteFile(dst, data, 0644); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return terraform.WriteVMFiles(terraform.ProviderGCP, destDir)
 }
 
 func (p *GCPProvisioner) runTerraform(ctx context.Context, workDir string, args ...string) error {
