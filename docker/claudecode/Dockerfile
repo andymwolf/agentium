@@ -51,6 +51,11 @@ RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 RUN mkdir -p /workspace && chown agentium:agentium /workspace && \
     mkdir -p /home/agentium/.claude && chown agentium:agentium /home/agentium/.claude
 
+# Disable Claude Code bash sandbox to allow test runners (vitest, jest, etc.)
+# Safe in ephemeral VM containers; use your own judgment for custom deployments
+RUN echo '{"bashSandboxMode": "off"}' > /home/agentium/.claude/settings.json && \
+    chown agentium:agentium /home/agentium/.claude/settings.json
+
 # Copy runtime installation scripts
 COPY docker/scripts/install-runtime.sh /runtime-scripts/install-runtime.sh
 COPY docker/scripts/agent-wrapper.sh /runtime-scripts/agent-wrapper.sh
