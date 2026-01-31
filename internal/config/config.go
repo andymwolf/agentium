@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/andywolf/agentium/internal/routing"
@@ -120,10 +121,26 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Normalize routing override keys to uppercase (viper lowercases map keys)
+	normalizeRoutingKeys(cfg)
+
 	// Apply defaults
 	applyDefaults(cfg)
 
 	return cfg, nil
+}
+
+// normalizeRoutingKeys converts routing override keys to uppercase.
+// Viper's mapstructure decoding lowercases map keys by default, but phase
+// names must be uppercase (e.g., "PLAN_REVIEW" not "plan_review").
+func normalizeRoutingKeys(cfg *Config) {
+	if len(cfg.Routing.Overrides) > 0 {
+		normalized := make(map[string]routing.ModelConfig, len(cfg.Routing.Overrides))
+		for key, val := range cfg.Routing.Overrides {
+			normalized[strings.ToUpper(key)] = val
+		}
+		cfg.Routing.Overrides = normalized
+	}
 }
 
 // applyDefaults sets default values for unset fields

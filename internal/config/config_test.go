@@ -2,6 +2,8 @@ package config
 
 import (
 	"testing"
+
+	"github.com/andywolf/agentium/internal/routing"
 )
 
 func TestConfig_Validate(t *testing.T) {
@@ -551,4 +553,88 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestNormalizeRoutingKeys(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]routing.ModelConfig
+		expected map[string]routing.ModelConfig
+	}{
+		{
+			name:     "nil overrides",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty overrides",
+			input:    map[string]routing.ModelConfig{},
+			expected: map[string]routing.ModelConfig{},
+		},
+		{
+			name: "lowercase keys normalized to uppercase",
+			input: map[string]routing.ModelConfig{
+				"plan_review":      {Adapter: "codex", Model: "gpt-5"},
+				"implement_review": {Adapter: "codex", Model: "gpt-5"},
+			},
+			expected: map[string]routing.ModelConfig{
+				"PLAN_REVIEW":      {Adapter: "codex", Model: "gpt-5"},
+				"IMPLEMENT_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+			},
+		},
+		{
+			name: "mixed case normalized to uppercase",
+			input: map[string]routing.ModelConfig{
+				"Plan_Review": {Adapter: "codex", Model: "gpt-5"},
+				"IMPLEMENT":   {Adapter: "claude-code", Model: "opus"},
+			},
+			expected: map[string]routing.ModelConfig{
+				"PLAN_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+				"IMPLEMENT":   {Adapter: "claude-code", Model: "opus"},
+			},
+		},
+		{
+			name: "already uppercase unchanged",
+			input: map[string]routing.ModelConfig{
+				"PLAN_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+			},
+			expected: map[string]routing.ModelConfig{
+				"PLAN_REVIEW": {Adapter: "codex", Model: "gpt-5"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Routing: routing.PhaseRouting{
+					Overrides: tt.input,
+				},
+			}
+			normalizeRoutingKeys(cfg)
+
+			if tt.expected == nil {
+				if cfg.Routing.Overrides != nil && len(cfg.Routing.Overrides) > 0 {
+					t.Errorf("expected nil/empty overrides, got %v", cfg.Routing.Overrides)
+				}
+				return
+			}
+
+			if len(cfg.Routing.Overrides) != len(tt.expected) {
+				t.Errorf("expected %d overrides, got %d", len(tt.expected), len(cfg.Routing.Overrides))
+				return
+			}
+
+			for key, expectedVal := range tt.expected {
+				actualVal, ok := cfg.Routing.Overrides[key]
+				if !ok {
+					t.Errorf("missing key %q in normalized overrides", key)
+					continue
+				}
+				if actualVal.Adapter != expectedVal.Adapter || actualVal.Model != expectedVal.Model {
+					t.Errorf("key %q: expected %+v, got %+v", key, expectedVal, actualVal)
+				}
+			}
+		})
+	}
 }
