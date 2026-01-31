@@ -25,7 +25,7 @@ func GetVMFiles(provider string) (fs.FS, error) {
 	case ProviderAWS:
 		return nil, fmt.Errorf("AWS terraform modules not yet implemented")
 	case ProviderAzure:
-		return nil, fmt.Errorf("Azure terraform modules not yet implemented")
+		return nil, fmt.Errorf("azure terraform modules not yet implemented")
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", provider)
 	}
