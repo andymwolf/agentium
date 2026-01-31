@@ -344,6 +344,20 @@ Look for:
 - Missing `ANTHROPIC_API_KEY` - Claude API key not provided (when using `api` auth mode)
 - Container exit codes (non-zero indicates failure)
 
+### Test runners fail with "sandbox restrictions"
+
+**Cause:** Claude Code's bash sandbox blocks test runners like vitest, jest, or pytest that spawn child processes.
+
+**Fix:** The official Agentium container images have the sandbox disabled by default (safe because VMs are ephemeral and isolated). If you're using a custom image, add this to your Dockerfile:
+
+```dockerfile
+# Disable Claude Code sandbox (not needed in ephemeral VM container)
+RUN echo '{"bashSandboxMode": "off"}' > /home/agentium/.claude/settings.json && \
+    chown agentium:agentium /home/agentium/.claude/settings.json
+```
+
+**Why this is safe:** Agentium VMs are ephemeral (self-destruct after session), isolated (no access beyond the cloned repo), and containerized. The sandbox is designed to protect long-running developer machines and is deemed sufficiently safe in this environment to be worth the benefits. Use your own judgment.
+
 ### "Image not found" errors
 
 **Cause:** Container image doesn't exist or isn't accessible.
