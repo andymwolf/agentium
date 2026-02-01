@@ -7,8 +7,26 @@ import (
 
 // ModelConfig specifies an adapter and model for a phase
 type ModelConfig struct {
-	Adapter string `json:"adapter" yaml:"adapter" mapstructure:"adapter"`
-	Model   string `json:"model" yaml:"model" mapstructure:"model"`
+	Adapter   string `json:"adapter" yaml:"adapter" mapstructure:"adapter"`
+	Model     string `json:"model" yaml:"model" mapstructure:"model"`
+	Reasoning string `json:"reasoning,omitempty" yaml:"reasoning,omitempty" mapstructure:"reasoning"`
+}
+
+// ValidReasoningLevels is the set of recognized reasoning level values.
+var ValidReasoningLevels = map[string]bool{
+	"low":    true,
+	"medium": true,
+	"high":   true,
+}
+
+// ValidReasoningLevelNames returns the sorted list of recognized reasoning levels.
+func ValidReasoningLevelNames() []string {
+	names := make([]string, 0, len(ValidReasoningLevels))
+	for level := range ValidReasoningLevels {
+		names = append(names, level)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // PhaseRouting maps phases to adapter+model configurations
