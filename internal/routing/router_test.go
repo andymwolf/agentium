@@ -327,3 +327,57 @@ func TestAdaptersSorted(t *testing.T) {
 		t.Errorf("adapters not sorted: %v", adapters)
 	}
 }
+
+func TestReasoningInModelConfig(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "codex", Model: "o3"},
+		Overrides: map[string]ModelConfig{
+			"PLAN_REVIEW":      {Adapter: "codex", Model: "o3", Reasoning: "medium"},
+			"IMPLEMENT_REVIEW": {Adapter: "codex", Model: "o3", Reasoning: "high"},
+		},
+	})
+
+	// Default should have empty reasoning
+	cfg := r.ModelForPhase("IMPLEMENT")
+	if cfg.Reasoning != "" {
+		t.Errorf("default phase should have empty reasoning, got %q", cfg.Reasoning)
+	}
+
+	// Overridden phases should have reasoning
+	cfg = r.ModelForPhase("PLAN_REVIEW")
+	if cfg.Reasoning != "medium" {
+		t.Errorf("PLAN_REVIEW reasoning = %q, want %q", cfg.Reasoning, "medium")
+	}
+
+	cfg = r.ModelForPhase("IMPLEMENT_REVIEW")
+	if cfg.Reasoning != "high" {
+		t.Errorf("IMPLEMENT_REVIEW reasoning = %q, want %q", cfg.Reasoning, "high")
+	}
+}
+
+func TestValidReasoningLevels(t *testing.T) {
+	expectedLevels := []string{"low", "medium", "high"}
+	for _, level := range expectedLevels {
+		if !ValidReasoningLevels[level] {
+			t.Errorf("expected %q to be a valid reasoning level", level)
+		}
+	}
+
+	invalidLevels := []string{"", "none", "max", "ultra"}
+	for _, level := range invalidLevels {
+		if ValidReasoningLevels[level] {
+			t.Errorf("expected %q to be an invalid reasoning level", level)
+		}
+	}
+}
+
+func TestValidReasoningLevelNames(t *testing.T) {
+	names := ValidReasoningLevelNames()
+	if len(names) != 3 {
+		t.Fatalf("expected 3 reasoning levels, got %d", len(names))
+	}
+	// Should be sorted
+	if names[0] != "high" || names[1] != "low" || names[2] != "medium" {
+		t.Errorf("reasoning levels not sorted: %v", names)
+	}
+}

@@ -386,6 +386,77 @@ func TestAdapter_BuildCommand(t *testing.T) {
 			t.Error("developer_instructions should contain SkillsPrompt")
 		}
 	})
+
+	t.Run("reasoning override from IterationContext", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			Metadata:   map[string]string{},
+			IterationContext: &agent.IterationContext{
+				ReasoningOverride: "high",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var reasoningValue string
+		for i, arg := range cmd {
+			if arg == "--reasoning" && i+1 < len(cmd) {
+				reasoningValue = cmd[i+1]
+				break
+			}
+		}
+		if reasoningValue != "high" {
+			t.Errorf("--reasoning = %q, want %q", reasoningValue, "high")
+		}
+	})
+
+	t.Run("no reasoning flag when not set", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			Metadata:   map[string]string{},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		for _, arg := range cmd {
+			if arg == "--reasoning" {
+				t.Error("--reasoning flag should not be present when no reasoning is set")
+				break
+			}
+		}
+	})
+
+	t.Run("reasoning and model override together", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			Metadata:   map[string]string{},
+			IterationContext: &agent.IterationContext{
+				ModelOverride:     "o3",
+				ReasoningOverride: "medium",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var modelValue, reasoningValue string
+		for i, arg := range cmd {
+			if arg == "--model" && i+1 < len(cmd) {
+				modelValue = cmd[i+1]
+			}
+			if arg == "--reasoning" && i+1 < len(cmd) {
+				reasoningValue = cmd[i+1]
+			}
+		}
+		if modelValue != "o3" {
+			t.Errorf("--model = %q, want %q", modelValue, "o3")
+		}
+		if reasoningValue != "medium" {
+			t.Errorf("--reasoning = %q, want %q", reasoningValue, "medium")
+		}
+	})
 }
 
 func TestAdapter_BuildPrompt(t *testing.T) {

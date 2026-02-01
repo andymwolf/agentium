@@ -1807,6 +1807,9 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		if modelCfg.Model != "" {
 			session.IterationContext.ModelOverride = modelCfg.Model
 		}
+		if modelCfg.Reasoning != "" {
+			session.IterationContext.ReasoningOverride = modelCfg.Reasoning
+		}
 		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 	}
 

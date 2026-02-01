@@ -80,6 +80,12 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 			}
 			session.IterationContext.ModelOverride = modelCfg.Model
 		}
+		if modelCfg.Reasoning != "" {
+			if session.IterationContext == nil {
+				session.IterationContext = &agent.IterationContext{}
+			}
+			session.IterationContext.ReasoningOverride = modelCfg.Reasoning
+		}
 	}
 
 	env := activeAgent.BuildEnv(session, 0)

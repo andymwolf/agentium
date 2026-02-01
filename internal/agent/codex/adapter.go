@@ -91,6 +91,11 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = append(args, "--model", model)
 	}
 
+	// Reasoning level override (Codex-specific)
+	if session.IterationContext != nil && session.IterationContext.ReasoningOverride != "" {
+		args = append(args, "--reasoning", session.IterationContext.ReasoningOverride)
+	}
+
 	// Build developer instructions from system/project prompts + status signal instructions.
 	// Escape newlines so the value survives CLI config parsing as a single argument.
 	developerInstructions := a.buildDeveloperInstructions(session)

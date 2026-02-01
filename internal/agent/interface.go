@@ -10,13 +10,14 @@ type ExistingWork struct {
 // IterationContext provides phase-aware context for a single iteration.
 // When non-nil, SkillsPrompt should be preferred over Session.SystemPrompt.
 type IterationContext struct {
-	Phase         string // e.g., "IMPLEMENT", "TEST"
-	SkillsPrompt  string // Composed from phase-relevant skills
-	MemoryContext string // Summarized memory from previous iterations (legacy mode)
-	PhaseInput    string // Structured handoff input for this phase (handoff mode)
-	ModelOverride string // Model ID to pass as --model flag to the agent CLI
-	Iteration     int    // Current iteration number
-	SubTaskID     string // Unique ID for delegation tracking
+	Phase             string // e.g., "IMPLEMENT", "TEST"
+	SkillsPrompt      string // Composed from phase-relevant skills
+	MemoryContext     string // Summarized memory from previous iterations (legacy mode)
+	PhaseInput        string // Structured handoff input for this phase (handoff mode)
+	ModelOverride     string // Model ID to pass as --model flag to the agent CLI
+	ReasoningOverride string // Reasoning level to pass as --reasoning flag (for agents that support it)
+	Iteration         int    // Current iteration number
+	SubTaskID         string // Unique ID for delegation tracking
 }
 
 // Session represents an agent session with all necessary context
