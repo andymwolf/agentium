@@ -346,17 +346,31 @@ Look for:
 
 ### Test runners fail with "sandbox restrictions"
 
-**Cause:** Claude Code's bash sandbox blocks test runners like vitest, jest, or pytest that spawn child processes.
+**Cause:** Claude Code's sandbox may restrict test runners that use worker threads or native modules (like Vitest with rollup bindings).
 
-**Fix:** The official Agentium container images have the sandbox disabled by default (safe because VMs are ephemeral and isolated). If you're using a custom image, add this to your Dockerfile:
+**Fix:** Configure your test framework to use process-based parallelism instead of threads:
 
-```dockerfile
-# Disable Claude Code sandbox (not needed in ephemeral VM container)
-RUN echo '{"bashSandboxMode": "off"}' > /home/agentium/.claude/settings.json && \
-    chown agentium:agentium /home/agentium/.claude/settings.json
+**Vitest** - Add to `vitest.config.ts`:
+```typescript
+export default defineConfig({
+  test: {
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } }
+  }
+})
 ```
 
-**Why this is safe:** Agentium VMs are ephemeral (self-destruct after session), isolated (no access beyond the cloned repo), and containerized. The sandbox is designed to protect long-running developer machines and is deemed sufficiently safe in this environment to be worth the benefits. Use your own judgment.
+**Jest** - Add to `jest.config.js`:
+```javascript
+module.exports = { maxWorkers: 1 }
+```
+
+**Alternative test frameworks** that work without configuration:
+- `node --test` (Node.js built-in, zero dependencies)
+- `uvu` (minimal, fast, pure JS)
+- `mocha` (lightweight, no native bindings)
+
+**Container configuration:** Agentium containers use `enableWeakerNestedSandbox: true` for Docker compatibility while keeping sandbox protection active.
 
 ### "Image not found" errors
 

@@ -51,9 +51,11 @@ RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 RUN mkdir -p /workspace && chown agentium:agentium /workspace && \
     mkdir -p /home/agentium/.claude && chown agentium:agentium /home/agentium/.claude
 
-# Disable Claude Code bash sandbox to allow test runners (vitest, jest, etc.)
-# Safe in ephemeral VM containers; use your own judgment for custom deployments
-RUN echo '{"bashSandboxMode": "off"}' > /home/agentium/.claude/settings.json && \
+# Configure Claude Code sandbox for container environment
+# - sandbox.enabled=true: Keep sandbox active for security
+# - enableWeakerNestedSandbox=true: Required for unprivileged Docker containers
+# Note: Test frameworks must use forks pool (vitest: pool: 'forks') for compatibility
+RUN echo '{"sandbox":{"enabled":true,"enableWeakerNestedSandbox":true}}' > /home/agentium/.claude/settings.json && \
     chown agentium:agentium /home/agentium/.claude/settings.json
 
 # Copy runtime installation scripts
