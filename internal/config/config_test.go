@@ -614,7 +614,7 @@ func TestNormalizeRoutingKeys(t *testing.T) {
 			normalizeRoutingKeys(cfg)
 
 			if tt.expected == nil {
-				if cfg.Routing.Overrides != nil && len(cfg.Routing.Overrides) > 0 {
+				if len(cfg.Routing.Overrides) > 0 {
 					t.Errorf("expected nil/empty overrides, got %v", cfg.Routing.Overrides)
 				}
 				return
