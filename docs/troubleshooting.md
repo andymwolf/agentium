@@ -346,13 +346,15 @@ Look for:
 
 ### Test runners fail with "sandbox restrictions"
 
-**Cause:** Claude Code's bash sandbox blocks test runners like vitest, jest, or pytest that spawn child processes.
+**Cause:** Claude Code's sandbox blocks test runners like vitest, jest, or pytest that spawn child processes or load native modules (like rollup's native bindings).
 
-**Fix:** The official Agentium container images have the sandbox disabled by default (safe because VMs are ephemeral and isolated). If you're using a custom image, add this to your Dockerfile:
+**Fix:** The official Agentium container images are configured for container environments by default. If you're using a custom image, add this to your Dockerfile:
 
 ```dockerfile
-# Disable Claude Code sandbox (not needed in ephemeral VM container)
-RUN echo '{"bashSandboxMode": "off"}' > /home/agentium/.claude/settings.json && \
+# Configure Claude Code for container environment
+# - sandbox.enabled=false: Explicitly disable sandbox
+# - enableWeakerNestedSandbox=true: Required for unprivileged Docker containers
+RUN echo '{"sandbox":{"enabled":false,"enableWeakerNestedSandbox":true}}' > /home/agentium/.claude/settings.json && \
     chown agentium:agentium /home/agentium/.claude/settings.json
 ```
 
