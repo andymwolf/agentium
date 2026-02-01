@@ -185,9 +185,13 @@ runcmd:
       log "Fixed ownership of codex-auth.json to 1000:1000"
     fi
 
-    # Create workspace directory
+    # Create workspace directory with tmpfs to ensure exec permission.
+    # Container-Optimized OS mounts /home with noexec by default, which
+    # blocks execution of native binaries (esbuild, rollup, test runners).
+    # Using tmpfs provides exec permission and better I/O performance.
     mkdir -p /home/workspace
-    log "Created /home/workspace"
+    mount -t tmpfs -o size=10G,exec,mode=0755 tmpfs /home/workspace
+    log "Created /home/workspace with tmpfs (exec enabled)"
 
     # Pull controller image with retry
     log "Pulling controller image: ${var.controller_image}"
