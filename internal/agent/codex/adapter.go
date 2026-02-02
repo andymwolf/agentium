@@ -349,7 +349,8 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	}
 
 	// Look for created PRs in output
-	prPattern := regexp.MustCompile(`(?:Created|Opened)\s+(?:pull request|PR)[^\d]*#?(\d+)`)
+	// Use \s* instead of [^\d]* to prevent matching "Created PR for issue #123" as PR #123
+	prPattern := regexp.MustCompile(`(?:Created|Opened)\s+(?:pull request|PR)\s*#?(\d+)`)
 	prMatches := prPattern.FindAllStringSubmatch(combined, -1)
 	for _, match := range prMatches {
 		if len(match) > 1 {
