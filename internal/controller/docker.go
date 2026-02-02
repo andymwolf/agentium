@@ -213,6 +213,51 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 	return stdoutBytes, stderrBytes, exitCode, nil
 }
 
+// prePullAgentImages pulls all agent container images that will be used in this session.
+// This is called during initSession() to avoid pull latency on the first iteration.
+func (c *Controller) prePullAgentImages(ctx context.Context) error {
+	// Collect unique images from all configured adapters
+	images := make(map[string]bool)
+	for _, adapter := range c.adapters {
+		images[adapter.ContainerImage()] = true
+	}
+
+	if len(images) == 0 {
+		return nil
+	}
+
+	c.logInfo("Pre-pulling %d agent container image(s)...", len(images))
+
+	// Authenticate with GHCR if any images require it
+	for image := range images {
+		if strings.Contains(image, "ghcr.io") && c.gitHubToken != "" && !c.dockerAuthed {
+			loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
+				"-u", "x-access-token", "--password-stdin")
+			loginCmd.Stdin = strings.NewReader(c.gitHubToken)
+			if out, err := loginCmd.CombinedOutput(); err != nil {
+				c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
+			} else {
+				c.dockerAuthed = true
+			}
+			break // Only need to auth once
+		}
+	}
+
+	// Pull each image
+	for image := range images {
+		c.logInfo("Pulling image: %s", image)
+		pullCmd := exec.CommandContext(ctx, "docker", "pull", image)
+		if out, err := pullCmd.CombinedOutput(); err != nil {
+			c.logWarning("Failed to pre-pull image %s: %v (%s)", image, err, string(out))
+			// Non-fatal: docker run will retry on first iteration
+		} else {
+			c.logInfo("Successfully pulled: %s", image)
+		}
+	}
+
+	return nil
+}
+
 // logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.
 func (c *Controller) logAgentEvents(events []interface{}) {
 	for _, evt := range events {
