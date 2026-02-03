@@ -46,11 +46,6 @@ type MonorepoConfig struct {
 	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
 }
 
-// FallbackConfig controls adapter execution fallback behavior
-type FallbackConfig struct {
-	Enabled        bool   `mapstructure:"enabled"`         // Enable fallback on adapter failure
-	DefaultAdapter string `mapstructure:"default_adapter"` // Fallback adapter (default: claude-code)
-}
 
 // Config represents the full Agentium configuration
 type Config struct {
@@ -65,7 +60,6 @@ type Config struct {
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
 	Delegation DelegationConfigYAML `mapstructure:"delegation"`
 	PhaseLoop  PhaseLoopConfig      `mapstructure:"phase_loop"`
-	Fallback   FallbackConfig       `mapstructure:"fallback"`
 	Monorepo   MonorepoConfig       `mapstructure:"monorepo"`
 }
 
@@ -100,9 +94,10 @@ type CloudConfig struct {
 
 // DefaultsConfig contains default session settings
 type DefaultsConfig struct {
-	Agent         string `mapstructure:"agent"`
-	MaxIterations int    `mapstructure:"max_iterations"`
-	MaxDuration   string `mapstructure:"max_duration"`
+	Agent           string `mapstructure:"agent"`
+	MaxIterations   int    `mapstructure:"max_iterations"`
+	MaxDuration     string `mapstructure:"max_duration"`
+	FallbackEnabled bool   `mapstructure:"fallback_enabled"`
 }
 
 // SessionConfig contains per-session settings

@@ -139,21 +139,11 @@ func TestGetFallbackAdapter(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "enabled with no adapter uses default",
+			name: "enabled fallback uses default adapter",
 			config: SessionConfig{
 				Fallback: &FallbackConfig{Enabled: true},
 			},
 			want: DefaultFallbackAdapter,
-		},
-		{
-			name: "enabled with custom adapter",
-			config: SessionConfig{
-				Fallback: &FallbackConfig{
-					Enabled:        true,
-					DefaultAdapter: "aider",
-				},
-			},
-			want: "aider",
 		},
 	}
 
@@ -186,10 +176,7 @@ func TestCanFallback(t *testing.T) {
 		{
 			name: "current adapter is fallback returns false",
 			config: SessionConfig{
-				Fallback: &FallbackConfig{
-					Enabled:        true,
-					DefaultAdapter: "claude-code",
-				},
+				Fallback: &FallbackConfig{Enabled: true},
 			},
 			adapterNames:   []string{"claude-code"},
 			currentAdapter: "claude-code",
@@ -198,10 +185,7 @@ func TestCanFallback(t *testing.T) {
 		{
 			name: "fallback adapter not in adapters returns false",
 			config: SessionConfig{
-				Fallback: &FallbackConfig{
-					Enabled:        true,
-					DefaultAdapter: "claude-code",
-				},
+				Fallback: &FallbackConfig{Enabled: true},
 			},
 			adapterNames:   []string{"codex"},
 			currentAdapter: "codex",
@@ -210,10 +194,7 @@ func TestCanFallback(t *testing.T) {
 		{
 			name: "can fallback from codex to claude-code",
 			config: SessionConfig{
-				Fallback: &FallbackConfig{
-					Enabled:        true,
-					DefaultAdapter: "claude-code",
-				},
+				Fallback: &FallbackConfig{Enabled: true},
 			},
 			adapterNames:   []string{"claude-code", "codex"},
 			currentAdapter: "codex",

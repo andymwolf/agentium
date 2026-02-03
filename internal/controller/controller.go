@@ -123,8 +123,7 @@ type PhaseLoopConfig struct {
 
 // FallbackConfig controls adapter execution fallback behavior.
 type FallbackConfig struct {
-	Enabled        bool   `json:"enabled,omitempty"`         // Enable fallback on adapter failure
-	DefaultAdapter string `json:"default_adapter,omitempty"` // Fallback adapter (default: claude-code)
+	Enabled bool `json:"enabled,omitempty"` // Enable fallback on adapter failure
 }
 
 // DefaultFallbackAdapter is the default adapter used for fallback when none is specified.
@@ -416,17 +415,13 @@ func New(config SessionConfig) (*Controller, error) {
 
 	// Initialize fallback adapter if configured
 	if config.Fallback != nil && config.Fallback.Enabled {
-		name := config.Fallback.DefaultAdapter
-		if name == "" {
-			name = DefaultFallbackAdapter
-		}
-		if _, exists := c.adapters[name]; !exists {
-			a, err := agent.Get(name)
+		if _, exists := c.adapters[DefaultFallbackAdapter]; !exists {
+			a, err := agent.Get(DefaultFallbackAdapter)
 			if err != nil {
-				return nil, fmt.Errorf("failed to initialize fallback adapter %q: %w", name, err)
+				return nil, fmt.Errorf("failed to initialize fallback adapter %q: %w", DefaultFallbackAdapter, err)
 			}
-			c.adapters[name] = a
-			c.logInfo("Initialized fallback adapter: %s", name)
+			c.adapters[DefaultFallbackAdapter] = a
+			c.logInfo("Initialized fallback adapter: %s", DefaultFallbackAdapter)
 		}
 	}
 

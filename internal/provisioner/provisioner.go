@@ -102,8 +102,7 @@ type ProvMonorepoConfig struct {
 
 // ProvFallbackConfig controls adapter execution fallback for provisioned sessions.
 type ProvFallbackConfig struct {
-	Enabled        bool   `json:"enabled,omitempty"`
-	DefaultAdapter string `json:"default_adapter,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration

@@ -43,9 +43,6 @@ func (c *Controller) getFallbackAdapter() string {
 	if c.config.Fallback == nil || !c.config.Fallback.Enabled {
 		return ""
 	}
-	if c.config.Fallback.DefaultAdapter != "" {
-		return c.config.Fallback.DefaultAdapter
-	}
 	return DefaultFallbackAdapter
 }
 
