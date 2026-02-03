@@ -1018,6 +1018,64 @@ func TestAdapter_ParseOutput_Errors(t *testing.T) {
 	})
 }
 
+func TestAdapter_ParseOutput_MessageEvents(t *testing.T) {
+	a := New()
+
+	t.Run("message event with content array", func(t *testing.T) {
+		// Simulates {"type": "message", "content": [{"type": "text", "text": "..."}]}
+		stdout := `{"type": "message", "content": [{"type": "text", "text": "Review feedback here"}]}` + "\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "Review feedback here") {
+			t.Errorf("RawTextContent = %q, want to contain message content", result.RawTextContent)
+		}
+	})
+
+	t.Run("message event with nested message.content", func(t *testing.T) {
+		// Alternative format: {"type": "message", "message": {"content": [...]}}
+		stdout := `{"type": "message", "message": {"content": [{"type": "text", "text": "Nested feedback"}]}}` + "\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "Nested feedback") {
+			t.Errorf("RawTextContent = %q, want to contain nested message content", result.RawTextContent)
+		}
+	})
+
+	t.Run("response.completed event with content", func(t *testing.T) {
+		stdout := `{"type": "response.completed", "content": [{"type": "text", "text": "Final response"}]}` + "\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "Final response") {
+			t.Errorf("RawTextContent = %q, want to contain response.completed content", result.RawTextContent)
+		}
+	})
+
+	t.Run("multiple content blocks", func(t *testing.T) {
+		stdout := `{"type": "message", "content": [{"type": "text", "text": "First part"}, {"type": "image", "url": "..."}, {"type": "text", "text": "Second part"}]}` + "\n"
+
+		result, err := a.ParseOutput(0, stdout, "")
+		if err != nil {
+			t.Fatalf("ParseOutput() returned error: %v", err)
+		}
+
+		if !strings.Contains(result.RawTextContent, "First part") || !strings.Contains(result.RawTextContent, "Second part") {
+			t.Errorf("RawTextContent = %q, want to contain both text parts", result.RawTextContent)
+		}
+	})
+}
+
 func TestAdapter_ParseOutput_EdgeCases(t *testing.T) {
 	a := New()
 

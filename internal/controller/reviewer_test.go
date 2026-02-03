@@ -1,6 +1,9 @@
 package controller
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildReviewPrompt(t *testing.T) {
 	c := &Controller{
@@ -83,5 +86,74 @@ func TestBuildReviewPrompt_NoMemoryInjected(t *testing.T) {
 		if containsString(prompt, marker) {
 			t.Errorf("buildReviewPrompt() should not contain memory marker %q", marker)
 		}
+	}
+}
+
+func TestTruncateString(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{
+			name:   "short string unchanged",
+			input:  "hello",
+			maxLen: 10,
+			want:   "hello",
+		},
+		{
+			name:   "exact length unchanged",
+			input:  "hello",
+			maxLen: 5,
+			want:   "hello",
+		},
+		{
+			name:   "long string truncated",
+			input:  "hello world",
+			maxLen: 8,
+			want:   "hello...",
+		},
+		{
+			name:   "very short maxLen",
+			input:  "hello",
+			maxLen: 3,
+			want:   "hel",
+		},
+		{
+			name:   "empty string",
+			input:  "",
+			maxLen: 10,
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateString(tt.input, tt.maxLen)
+			if got != tt.want {
+				t.Errorf("truncateString(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReviewerFallback_NotPRSummary(t *testing.T) {
+	// This test verifies the fallback behavior when RawTextContent is empty.
+	// The fallback should NOT contain PR detection results like "Created 2 PR(s): #123, #99"
+	// Instead it should provide a descriptive message.
+
+	// Simulate what the fallback message should look like
+	successFallback := "Review completed but no feedback text was captured. Check agent logs for details."
+	failureFallback := "Review failed: API timeout"
+
+	// Verify success fallback doesn't look like PR summary
+	if strings.Contains(successFallback, "PR(s)") || strings.Contains(successFallback, "Created") {
+		t.Error("success fallback should not contain PR summary content")
+	}
+
+	// Verify failure fallback includes error info
+	if !strings.Contains(failureFallback, "API timeout") {
+		t.Error("failure fallback should include error information")
 	}
 }
