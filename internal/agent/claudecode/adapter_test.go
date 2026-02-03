@@ -126,6 +126,50 @@ func TestAdapter_BuildCommand(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("non-interactive plan mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "PLAN",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		// Non-interactive plan mode should add --permission-mode plan.
+		if len(cmd) != 7 {
+			t.Fatalf("BuildCommand() returned %d args, want 7", len(cmd))
+		}
+
+		if cmd[5] != "--permission-mode" {
+			t.Errorf("BuildCommand()[5] = %q, want %q", cmd[5], "--permission-mode")
+		}
+
+		if cmd[6] != "plan" {
+			t.Errorf("BuildCommand()[6] = %q, want %q", cmd[6], "plan")
+		}
+	})
+
+	t.Run("non-interactive implement phase does not enable plan mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "IMPLEMENT",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+		for _, arg := range cmd {
+			if arg == "--permission-mode" {
+				t.Fatal("BuildCommand() should not include --permission-mode outside PLAN phase")
+			}
+		}
+	})
 }
 
 func TestAdapter_BuildPrompt(t *testing.T) {
@@ -821,5 +865,9 @@ func TestAdapter_GetStdinPrompt(t *testing.T) {
 
 	t.Run("implements StdinPromptProvider interface", func(t *testing.T) {
 		var _ agent.StdinPromptProvider = a
+	})
+
+	t.Run("implements PlanModeCapable interface", func(t *testing.T) {
+		var _ agent.PlanModeCapable = a
 	})
 }

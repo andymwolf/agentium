@@ -35,6 +35,11 @@ func (a *Adapter) ContainerImage() string {
 	return a.image
 }
 
+// SupportsPlanMode indicates Claude Code can enforce plan-only mode.
+func (a *Adapter) SupportsPlanMode() bool {
+	return true
+}
+
 // BuildEnv constructs environment variables for the Claude Code container
 func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]string {
 	authMode := session.ClaudeAuthMode
@@ -76,6 +81,9 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 			"--output-format", "stream-json",
 			"--dangerously-skip-permissions",
 		}
+	}
+	if session.IterationContext != nil && session.IterationContext.Phase == "PLAN" {
+		args = append(args, "--permission-mode", "plan")
 	}
 
 	// Prefer phase-aware skills prompt over monolithic system prompt
