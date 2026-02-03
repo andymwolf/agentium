@@ -1,3 +1,19 @@
+## Implementation Principles
+
+### Subagent Strategy
+- Use subagents liberally to keep your main context clean
+- Offload research, exploration, and parallel analysis to subagents
+- One task per subagent for focused execution
+
+### Course Correction
+- If something goes sideways, STOP and reassess immediately — don't keep pushing
+- When a fix feels hacky, pause and ask: "Is there a more elegant way?"
+- Skip elegance checks for simple, obvious fixes — don't over-engineer
+
+### Prove Your Work
+- Never push code without running tests locally first
+- If tests fail, fix them before continuing — don't leave broken state
+
 ### Step 3: Pre-Flight Check (MANDATORY)
 
 Before creating any branch or PR, ALWAYS check for existing work:

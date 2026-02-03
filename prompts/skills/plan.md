@@ -28,6 +28,13 @@ Your plan should include:
 - Be specific about file paths and function names where possible
 - Consider edge cases and backward compatibility
 
+### Planning Rigor
+
+- Write detailed specs upfront to reduce ambiguity during implementation
+- If requirements are unclear, state your assumptions explicitly in the plan
+- For each implementation step, identify potential failure modes
+- A good plan answers: "What exactly will change, and how will we know it worked?"
+
 ### Scope Discipline
 
 - Your plan should address ONLY what the issue explicitly requires

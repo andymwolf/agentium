@@ -4,6 +4,11 @@ skills:
     priority: 5
     phases: []
 
+  - name: workflow
+    file: workflow.md
+    priority: 8
+    phases: []
+
   - name: safety
     file: safety.md
     priority: 10
