@@ -36,7 +36,7 @@ RUN CODEX_VERSION=$(curl -s https://api.github.com/repos/openai/codex/releases/l
     echo "Installing Codex CLI ${CODEX_VERSION}..." && \
     curl -fsSL "https://github.com/openai/codex/releases/download/${CODEX_VERSION}/codex-x86_64-unknown-linux-musl.tar.gz" -o /tmp/codex.tar.gz && \
     tar -xzf /tmp/codex.tar.gz -C /tmp && \
-    mv /tmp/codex /usr/local/bin/codex && \
+    mv /tmp/codex-x86_64-unknown-linux-musl /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
     rm /tmp/codex.tar.gz && \
     codex --version
