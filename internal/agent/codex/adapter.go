@@ -366,6 +366,15 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	combined := strings.Join(textParts, "\n") + "\n" + stderr
 	result.RawTextContent = strings.Join(textParts, "\n")
 
+	// For Codex, extract assistant text (agent_message items only, excluding command outputs)
+	var assistantTextParts []string
+	for _, e := range events {
+		if evt, ok := e.(CodexEvent); ok && evt.Item != nil && evt.Item.Type == "agent_message" && evt.Item.Text != "" {
+			assistantTextParts = append(assistantTextParts, evt.Item.Text)
+		}
+	}
+	result.AssistantText = strings.Join(assistantTextParts, "\n")
+
 	// Log warning if RawTextContent is empty despite having stdout (diagnostic for reviewer issues)
 	if result.RawTextContent == "" && stdout != "" {
 		preview := stdout

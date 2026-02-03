@@ -181,6 +181,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 
 	// Populate structured fields
 	result.RawTextContent = parsed.TextContent
+	result.AssistantText = parsed.ExtractAssistantText()
 	if parsed.TotalTokens != nil {
 		result.InputTokens = parsed.TotalTokens.InputTokens
 		result.OutputTokens = parsed.TotalTokens.OutputTokens
