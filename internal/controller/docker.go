@@ -215,7 +215,8 @@ func (c *Controller) executeAndCollect(cmd *exec.Cmd, logTag string) (stdoutByte
 
 // prePullAgentImages pulls all agent container images that will be used in this session.
 // This is called during initSession() to avoid pull latency on the first iteration.
-func (c *Controller) prePullAgentImages(ctx context.Context) error {
+// Failures are logged as warnings but not returned since pre-pulling is non-fatal.
+func (c *Controller) prePullAgentImages(ctx context.Context) {
 	// Collect unique images from all configured adapters
 	images := make(map[string]bool)
 	for _, adapter := range c.adapters {
@@ -223,7 +224,7 @@ func (c *Controller) prePullAgentImages(ctx context.Context) error {
 	}
 
 	if len(images) == 0 {
-		return nil
+		return
 	}
 
 	c.logInfo("Pre-pulling %d agent container image(s)...", len(images))
@@ -254,8 +255,6 @@ func (c *Controller) prePullAgentImages(ctx context.Context) error {
 			c.logInfo("Successfully pulled: %s", image)
 		}
 	}
-
-	return nil
 }
 
 // logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.

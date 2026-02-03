@@ -538,10 +538,7 @@ func (c *Controller) initSession(ctx context.Context) error {
 	}
 
 	// Pre-pull agent container images to avoid first-iteration latency
-	if err := c.prePullAgentImages(ctx); err != nil {
-		c.logWarning("Failed to pre-pull agent images: %v", err)
-		// Non-fatal: images will be pulled on first use
-	}
+	c.prePullAgentImages(ctx)
 
 	// Clone repository (skip if cloning inside container)
 	if !c.config.CloneInsideContainer {
