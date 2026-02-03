@@ -284,8 +284,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			state.Phase = currentPhase
 
 			// Check for pre-existing plan (PLAN phase, iteration 1 only)
-			var phaseOutput string      // Full output for internal processing (handoff, judge)
-			var commentContent string   // Filtered output for GitHub comments
+			var phaseOutput string    // Full output for internal processing (handoff, judge)
+			var commentContent string // Filtered output for GitHub comments
 			var skipIteration bool
 			if c.shouldSkipPlanIteration(currentPhase, iter) {
 				planContent := c.extractExistingPlan()
