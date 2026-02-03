@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -13,6 +14,23 @@ import (
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/memory"
 )
+
+// validateAuthFile checks that an auth file exists and is not a directory.
+// In cloud mode, Docker creates a directory at the mount point if the file doesn't exist,
+// causing EISDIR errors when the agent tries to read it.
+func (c *Controller) validateAuthFile(path, name string) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("%s auth file not found at %s (cloud-init may have failed)", name, path)
+	}
+	if err != nil {
+		return fmt.Errorf("%s auth file error: %w", name, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s auth path is a directory - Docker mount failed: %s", name, path)
+	}
+	return nil
+}
 
 // containerRunParams holds the parameters for running an agent container.
 type containerRunParams struct {
@@ -37,6 +55,21 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 			c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
 		} else {
 			c.dockerAuthed = true
+		}
+	}
+
+	// Validate auth files exist in cloud mode before mounting
+	// This prevents Docker from creating directories at mount points when files are missing
+	if !c.config.Interactive {
+		if c.config.ClaudeAuth.AuthMode == "oauth" {
+			if err := c.validateAuthFile("/etc/agentium/claude-auth.json", "Claude"); err != nil {
+				return nil, err
+			}
+		}
+		if c.config.CodexAuth.AuthJSONBase64 != "" {
+			if err := c.validateAuthFile("/etc/agentium/codex-auth.json", "Codex"); err != nil {
+				return nil, err
+			}
 		}
 	}
 

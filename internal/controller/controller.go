@@ -121,6 +121,15 @@ type PhaseLoopConfig struct {
 	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
 }
 
+// FallbackConfig controls adapter execution fallback behavior.
+type FallbackConfig struct {
+	Enabled        bool   `json:"enabled,omitempty"`         // Enable fallback on adapter failure
+	DefaultAdapter string `json:"default_adapter,omitempty"` // Fallback adapter (default: claude-code)
+}
+
+// DefaultFallbackAdapter is the default adapter used for fallback when none is specified.
+const DefaultFallbackAdapter = "claude-code"
+
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
 	ID                   string   `json:"id"`
@@ -157,6 +166,7 @@ type SessionConfig struct {
 	Routing    *routing.PhaseRouting  `json:"routing,omitempty"`
 	Delegation *DelegationConfig      `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig       `json:"phase_loop,omitempty"`
+	Fallback   *FallbackConfig        `json:"fallback,omitempty"`
 	Verbose    bool                   `json:"verbose,omitempty"`
 	Monorepo   *MonorepoSessionConfig `json:"monorepo,omitempty"`
 }
@@ -401,6 +411,22 @@ func New(config SessionConfig) (*Controller, error) {
 					c.adapters[subCfg.Agent] = a
 				}
 			}
+		}
+	}
+
+	// Initialize fallback adapter if configured
+	if config.Fallback != nil && config.Fallback.Enabled {
+		name := config.Fallback.DefaultAdapter
+		if name == "" {
+			name = DefaultFallbackAdapter
+		}
+		if _, exists := c.adapters[name]; !exists {
+			a, err := agent.Get(name)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize fallback adapter %q: %w", name, err)
+			}
+			c.adapters[name] = a
+			c.logInfo("Initialized fallback adapter: %s", name)
 		}
 	}
 
@@ -1842,7 +1868,58 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		return c.runAgentContainerInteractive(ctx, params)
 	}
 
-	return c.runAgentContainer(ctx, params)
+	execStart := time.Now()
+	result, err := c.runAgentContainer(ctx, params)
+	execDuration := time.Since(execStart)
+
+	// Attempt fallback on adapter execution failure
+	if err != nil && c.canFallback(activeAgent.Name()) {
+		stderr := ""
+		if result != nil {
+			stderr = result.Error
+		}
+
+		if isAdapterExecutionFailure(err, stderr, execDuration) {
+			fallbackName := c.getFallbackAdapter()
+			c.logWarning("Adapter %s failed (%v), falling back to %s",
+				activeAgent.Name(), err, fallbackName)
+
+			fallbackAdapter := c.adapters[fallbackName]
+			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name())
+			return c.runAgentContainer(ctx, fallbackParams)
+		}
+	}
+
+	return result, err
+}
+
+// buildFallbackParams constructs container run parameters for the fallback adapter.
+// It clones the session without model override so the fallback adapter uses its defaults.
+func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Session, originalAdapter string) containerRunParams {
+	// Clone session without model override (use fallback adapter's default)
+	fallbackSession := *session
+	if fallbackSession.IterationContext != nil {
+		ctx := *fallbackSession.IterationContext
+		ctx.ModelOverride = ""
+		fallbackSession.IterationContext = &ctx
+	}
+
+	env := adapter.BuildEnv(&fallbackSession, c.iteration)
+	cmd := adapter.BuildCommand(&fallbackSession, c.iteration)
+
+	var stdinPrompt string
+	if provider, ok := adapter.(agent.StdinPromptProvider); ok {
+		stdinPrompt = provider.GetStdinPrompt(&fallbackSession, c.iteration)
+	}
+
+	return containerRunParams{
+		Agent:       adapter,
+		Session:     &fallbackSession,
+		Env:         env,
+		Command:     cmd,
+		LogTag:      fmt.Sprintf("Agent (fallback from %s)", originalAdapter),
+		StdinPrompt: stdinPrompt,
+	}
 }
 
 func (c *Controller) emitFinalLogs() {
