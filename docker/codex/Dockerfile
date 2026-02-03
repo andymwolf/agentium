@@ -29,10 +29,17 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Install Codex CLI and copy to system path for non-root user access
-# Copy instead of symlink to avoid needing /root directory access
-RUN bun add -g @openai/codex && \
-    cp /root/.bun/bin/codex /usr/local/bin/codex
+# Install Codex CLI native binary directly from GitHub releases
+# The npm package is a JS wrapper that spawns the vendored binary, but the vendor
+# path setup doesn't work correctly with bun. Download the native binary directly.
+RUN CODEX_VERSION=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name') && \
+    echo "Installing Codex CLI ${CODEX_VERSION}..." && \
+    curl -fsSL "https://github.com/openai/codex/releases/download/${CODEX_VERSION}/codex-x86_64-unknown-linux-musl.tar.gz" -o /tmp/codex.tar.gz && \
+    tar -xzf /tmp/codex.tar.gz -C /tmp && \
+    mv /tmp/codex /usr/local/bin/codex && \
+    chmod +x /usr/local/bin/codex && \
+    rm /tmp/codex.tar.gz && \
+    codex --version
 
 # Create non-root user (remove node user which owns UID 1000 in base image)
 RUN userdel -r node && useradd -m -u 1000 agentium
