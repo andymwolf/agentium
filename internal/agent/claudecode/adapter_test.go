@@ -126,6 +126,58 @@ func TestAdapter_BuildCommand(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("non-interactive plan mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "PLAN",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		// Non-interactive plan mode should use --permission-mode plan
+		// without --dangerously-skip-permissions (they conflict per anthropics/claude-code#17544).
+		if len(cmd) != 6 {
+			t.Fatalf("BuildCommand() returned %d args, want 6: %v", len(cmd), cmd)
+		}
+
+		if cmd[4] != "--permission-mode" {
+			t.Errorf("BuildCommand()[4] = %q, want %q", cmd[4], "--permission-mode")
+		}
+
+		if cmd[5] != "plan" {
+			t.Errorf("BuildCommand()[5] = %q, want %q", cmd[5], "plan")
+		}
+
+		// Verify --dangerously-skip-permissions is NOT present
+		for _, arg := range cmd {
+			if arg == "--dangerously-skip-permissions" {
+				t.Fatal("BuildCommand() should not include --dangerously-skip-permissions in PLAN phase")
+			}
+		}
+	})
+
+	t.Run("non-interactive implement phase does not enable plan mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1"},
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "IMPLEMENT",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+		for _, arg := range cmd {
+			if arg == "--permission-mode" {
+				t.Fatal("BuildCommand() should not include --permission-mode outside PLAN phase")
+			}
+		}
+	})
 }
 
 func TestAdapter_BuildPrompt(t *testing.T) {
@@ -821,5 +873,9 @@ func TestAdapter_GetStdinPrompt(t *testing.T) {
 
 	t.Run("implements StdinPromptProvider interface", func(t *testing.T) {
 		var _ agent.StdinPromptProvider = a
+	})
+
+	t.Run("implements PlanModeCapable interface", func(t *testing.T) {
+		var _ agent.PlanModeCapable = a
 	})
 }

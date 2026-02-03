@@ -35,6 +35,11 @@ func (a *Adapter) ContainerImage() string {
 	return a.image
 }
 
+// SupportsPlanMode indicates Claude Code can enforce plan-only mode.
+func (a *Adapter) SupportsPlanMode() bool {
+	return true
+}
+
 // BuildEnv constructs environment variables for the Claude Code container
 func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]string {
 	authMode := session.ClaudeAuthMode
@@ -67,6 +72,16 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		// Interactive mode: run without --print to show TUI for permission approvals
 		args = []string{
 			"--verbose",
+		}
+	} else if session.IterationContext != nil && session.IterationContext.Phase == "PLAN" {
+		// Plan mode: use --permission-mode plan for read-only exploration.
+		// Note: --dangerously-skip-permissions conflicts with --permission-mode plan
+		// (see anthropics/claude-code#17544), so we omit it here.
+		args = []string{
+			"--print",
+			"--verbose",
+			"--output-format", "stream-json",
+			"--permission-mode", "plan",
 		}
 	} else {
 		// Non-interactive mode: use --print for structured output and skip permissions

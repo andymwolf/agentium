@@ -95,3 +95,10 @@ type StdinPromptProvider interface {
 	// Returns empty string if prompt should be passed via command-line args.
 	GetStdinPrompt(session *Session, iteration int) string
 }
+
+// PlanModeCapable is an optional interface for agents that support plan-only mode.
+// This can be used to signal read-only planning capabilities.
+type PlanModeCapable interface {
+	// SupportsPlanMode returns true if the adapter can enforce plan-only mode.
+	SupportsPlanMode() bool
+}

@@ -21,9 +21,7 @@ Your plan should include:
 
 ### Rules
 
-- Do NOT write implementation code in this phase
-- Do NOT create branches or make commits
-- Do NOT run tests (there's nothing to test yet)
+- You are in read-only plan mode with access to exploration tools only
 - Focus solely on understanding the problem and designing the solution
 - Be specific about file paths and function names where possible
 - Consider edge cases and backward compatibility
