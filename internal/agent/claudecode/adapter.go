@@ -73,6 +73,16 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = []string{
 			"--verbose",
 		}
+	} else if session.IterationContext != nil && session.IterationContext.Phase == "PLAN" {
+		// Plan mode: use --permission-mode plan for read-only exploration.
+		// Note: --dangerously-skip-permissions conflicts with --permission-mode plan
+		// (see anthropics/claude-code#17544), so we omit it here.
+		args = []string{
+			"--print",
+			"--verbose",
+			"--output-format", "stream-json",
+			"--permission-mode", "plan",
+		}
 	} else {
 		// Non-interactive mode: use --print for structured output and skip permissions
 		args = []string{
@@ -81,9 +91,6 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 			"--output-format", "stream-json",
 			"--dangerously-skip-permissions",
 		}
-	}
-	if session.IterationContext != nil && session.IterationContext.Phase == "PLAN" {
-		args = append(args, "--permission-mode", "plan")
 	}
 
 	// Prefer phase-aware skills prompt over monolithic system prompt

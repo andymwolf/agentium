@@ -139,17 +139,25 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 		cmd := a.BuildCommand(session, 1)
 
-		// Non-interactive plan mode should add --permission-mode plan.
-		if len(cmd) != 7 {
-			t.Fatalf("BuildCommand() returned %d args, want 7", len(cmd))
+		// Non-interactive plan mode should use --permission-mode plan
+		// without --dangerously-skip-permissions (they conflict per anthropics/claude-code#17544).
+		if len(cmd) != 6 {
+			t.Fatalf("BuildCommand() returned %d args, want 6: %v", len(cmd), cmd)
 		}
 
-		if cmd[5] != "--permission-mode" {
-			t.Errorf("BuildCommand()[5] = %q, want %q", cmd[5], "--permission-mode")
+		if cmd[4] != "--permission-mode" {
+			t.Errorf("BuildCommand()[4] = %q, want %q", cmd[4], "--permission-mode")
 		}
 
-		if cmd[6] != "plan" {
-			t.Errorf("BuildCommand()[6] = %q, want %q", cmd[6], "plan")
+		if cmd[5] != "plan" {
+			t.Errorf("BuildCommand()[5] = %q, want %q", cmd[5], "plan")
+		}
+
+		// Verify --dangerously-skip-permissions is NOT present
+		for _, arg := range cmd {
+			if arg == "--dangerously-skip-permissions" {
+				t.Fatal("BuildCommand() should not include --dangerously-skip-permissions in PLAN phase")
+			}
 		}
 	})
 
