@@ -119,7 +119,15 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 
 	feedback := result.RawTextContent
 	if feedback == "" {
-		feedback = result.Summary
+		// Log warning - this indicates a parsing issue that should be investigated
+		c.logWarning("Reviewer for phase %s produced no RawTextContent (parsed summary: %s)",
+			params.CompletedPhase, truncateString(result.Summary, 200))
+		// Use a descriptive fallback instead of misleading PR/summary content
+		if result.Success {
+			feedback = "Review completed but no feedback text was captured. Check agent logs for details."
+		} else {
+			feedback = fmt.Sprintf("Review failed: %s", result.Error)
+		}
 	}
 
 	c.logInfo("Reviewer completed for phase %s", params.CompletedPhase)
@@ -185,4 +193,15 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	}
 
 	return sb.String()
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }

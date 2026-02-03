@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 
@@ -203,11 +204,13 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 // CodexEvent represents a JSONL event from Codex CLI --json output.
 // This type is exported for use by the audit package.
 type CodexEvent struct {
-	Type  string      `json:"type"`
-	Item  *EventItem  `json:"item,omitempty"`
-	Delta *eventDelta `json:"delta,omitempty"`
-	Usage *usage      `json:"usage,omitempty"`
-	Error *eventError `json:"error,omitempty"`
+	Type    string          `json:"type"`
+	Item    *EventItem      `json:"item,omitempty"`
+	Delta   *eventDelta     `json:"delta,omitempty"`
+	Usage   *usage          `json:"usage,omitempty"`
+	Error   *eventError     `json:"error,omitempty"`
+	Content []contentBlock  `json:"content,omitempty"` // For "message" type events
+	Message *messageContent `json:"message,omitempty"` // Alternative message structure
 }
 
 // EventItem represents an item within a Codex event.
@@ -224,6 +227,17 @@ type EventItem struct {
 // eventDelta represents a streaming text delta
 type eventDelta struct {
 	Text string `json:"text,omitempty"`
+}
+
+// contentBlock represents a content block within a message event
+type contentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+// messageContent represents the message field structure in some events
+type messageContent struct {
+	Content []contentBlock `json:"content,omitempty"`
 }
 
 // usage represents token usage information
@@ -253,6 +267,9 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	var parsedEvents int
 	var events []interface{} // Collect events for audit logging
 
+	// Track event types seen for diagnostic logging
+	eventTypeCounts := make(map[string]int)
+
 	lines := strings.Split(stdout, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -266,6 +283,7 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 			continue
 		}
 		parsedEvents++
+		eventTypeCounts[event.Type]++
 
 		// Store completed events for audit logging
 		if event.Type == "item.completed" && event.Item != nil {
@@ -297,6 +315,18 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 			} else if event.Item != nil && event.Item.Text != "" {
 				textParts = append(textParts, event.Item.Text)
 			}
+		case "message":
+			// Handle message events with content array
+			textParts = append(textParts, extractTextFromContent(event.Content)...)
+			if event.Message != nil {
+				textParts = append(textParts, extractTextFromContent(event.Message.Content)...)
+			}
+		case "response.completed":
+			// Handle response.completed events that may contain message content
+			textParts = append(textParts, extractTextFromContent(event.Content)...)
+			if event.Message != nil {
+				textParts = append(textParts, extractTextFromContent(event.Message.Content)...)
+			}
 		case "turn.completed":
 			if event.Usage != nil {
 				totalInput += event.Usage.InputTokens
@@ -311,6 +341,11 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 				errors = append(errors, event.Error.Message)
 			}
 		}
+	}
+
+	// Log event type distribution for diagnostics
+	if len(eventTypeCounts) > 0 {
+		log.Printf("[codex] ParseOutput: parsed %d events, types: %v", parsedEvents, eventTypeCounts)
 	}
 
 	// Store events for audit logging
@@ -330,6 +365,15 @@ func (a *Adapter) ParseOutput(exitCode int, stdout, stderr string) (*agent.Itera
 	// Combine text content for signal detection
 	combined := strings.Join(textParts, "\n") + "\n" + stderr
 	result.RawTextContent = strings.Join(textParts, "\n")
+
+	// Log warning if RawTextContent is empty despite having stdout (diagnostic for reviewer issues)
+	if result.RawTextContent == "" && stdout != "" {
+		preview := stdout
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		log.Printf("[codex] WARNING: RawTextContent empty despite stdout (%d bytes). Preview: %s", len(stdout), preview)
+	}
 
 	// Parse AGENTIUM_STATUS signals from output
 	statusPattern := regexp.MustCompile(`AGENTIUM_STATUS:[ \t]*(\w+)(?:[ \t]+([^\n]+))?`)
@@ -426,6 +470,17 @@ func (a *Adapter) Validate() error {
 		return fmt.Errorf("container image is required")
 	}
 	return nil
+}
+
+// extractTextFromContent extracts text from content blocks in message events.
+func extractTextFromContent(content []contentBlock) []string {
+	var texts []string
+	for _, c := range content {
+		if c.Type == "text" && c.Text != "" {
+			texts = append(texts, c.Text)
+		}
+	}
+	return texts
 }
 
 // appendUnique appends value to slice only if not already present.
