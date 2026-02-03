@@ -15,7 +15,7 @@ type IterationContext struct {
 	MemoryContext     string // Summarized memory from previous iterations (legacy mode)
 	PhaseInput        string // Structured handoff input for this phase (handoff mode)
 	ModelOverride     string // Model ID to pass as --model flag to the agent CLI
-	ReasoningOverride string // Reasoning level to pass as --reasoning flag (for agents that support it)
+	ReasoningOverride string // Reasoning level for agents that support it (codex: model_reasoning_effort)
 	Iteration         int    // Current iteration number
 	SubTaskID         string // Unique ID for delegation tracking
 }

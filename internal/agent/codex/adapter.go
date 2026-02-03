@@ -92,9 +92,9 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 		args = append(args, "--model", model)
 	}
 
-	// Reasoning level override (Codex-specific)
+	// Reasoning level override via config (Codex uses model_reasoning_effort)
 	if session.IterationContext != nil && session.IterationContext.ReasoningOverride != "" {
-		args = append(args, "--reasoning", session.IterationContext.ReasoningOverride)
+		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%s", session.IterationContext.ReasoningOverride))
 	}
 
 	// Build developer instructions from system/project prompts + status signal instructions.

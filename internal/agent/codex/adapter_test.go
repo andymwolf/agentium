@@ -399,19 +399,22 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 		cmd := a.BuildCommand(session, 1)
 
+		// Codex uses -c model_reasoning_effort=<value> for reasoning config
 		var reasoningValue string
 		for i, arg := range cmd {
-			if arg == "--reasoning" && i+1 < len(cmd) {
-				reasoningValue = cmd[i+1]
-				break
+			if arg == "-c" && i+1 < len(cmd) {
+				if strings.HasPrefix(cmd[i+1], "model_reasoning_effort=") {
+					reasoningValue = strings.TrimPrefix(cmd[i+1], "model_reasoning_effort=")
+					break
+				}
 			}
 		}
 		if reasoningValue != "high" {
-			t.Errorf("--reasoning = %q, want %q", reasoningValue, "high")
+			t.Errorf("model_reasoning_effort = %q, want %q", reasoningValue, "high")
 		}
 	})
 
-	t.Run("no reasoning flag when not set", func(t *testing.T) {
+	t.Run("no reasoning config when not set", func(t *testing.T) {
 		session := &agent.Session{
 			Repository: "github.com/org/repo",
 			Tasks:      []string{"1"},
@@ -420,9 +423,9 @@ func TestAdapter_BuildCommand(t *testing.T) {
 
 		cmd := a.BuildCommand(session, 1)
 
-		for _, arg := range cmd {
-			if arg == "--reasoning" {
-				t.Error("--reasoning flag should not be present when no reasoning is set")
+		for i, arg := range cmd {
+			if arg == "-c" && i+1 < len(cmd) && strings.HasPrefix(cmd[i+1], "model_reasoning_effort=") {
+				t.Error("model_reasoning_effort config should not be present when no reasoning is set")
 				break
 			}
 		}
@@ -446,15 +449,15 @@ func TestAdapter_BuildCommand(t *testing.T) {
 			if arg == "--model" && i+1 < len(cmd) {
 				modelValue = cmd[i+1]
 			}
-			if arg == "--reasoning" && i+1 < len(cmd) {
-				reasoningValue = cmd[i+1]
+			if arg == "-c" && i+1 < len(cmd) && strings.HasPrefix(cmd[i+1], "model_reasoning_effort=") {
+				reasoningValue = strings.TrimPrefix(cmd[i+1], "model_reasoning_effort=")
 			}
 		}
 		if modelValue != "o3" {
 			t.Errorf("--model = %q, want %q", modelValue, "o3")
 		}
 		if reasoningValue != "medium" {
-			t.Errorf("--reasoning = %q, want %q", reasoningValue, "medium")
+			t.Errorf("model_reasoning_effort = %q, want %q", reasoningValue, "medium")
 		}
 	})
 }

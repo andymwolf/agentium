@@ -81,6 +81,10 @@ routing:
     IMPLEMENT:
       adapter: "claude-code"
       model: "claude-opus-4-20250514"
+    IMPLEMENT_REVIEW:               # Higher reasoning for code review
+      adapter: "codex"
+      model: "o3"
+      reasoning: "high"
     TEST:
       adapter: "aider"
       model: "claude-3-5-sonnet-20241022"
@@ -192,8 +196,20 @@ Model routing enables per-phase model selection for optimizing cost and performa
 |-------|------|----------|---------|-------------|
 | `default.adapter` | string | No | - | Default agent adapter (e.g., `claude-code`, `aider`) |
 | `default.model` | string | No | - | Default model ID |
+| `default.reasoning` | string | No | - | Reasoning effort level (codex only) |
 | `overrides.<PHASE>.adapter` | string | No | - | Agent adapter for specific phase |
 | `overrides.<PHASE>.model` | string | No | - | Model for specific phase |
+| `overrides.<PHASE>.reasoning` | string | No | - | Reasoning effort level for phase (codex only) |
+
+**Reasoning effort levels (codex agent only):**
+
+| Level | Description |
+|-------|-------------|
+| `minimal` | Minimal reasoning, fastest response |
+| `low` | Low reasoning effort |
+| `medium` | Medium reasoning effort (recommended default) |
+| `high` | High reasoning effort |
+| `xhigh` | Extra high reasoning, longest thinking time (model-dependent) |
 
 **Recognized phases:**
 
