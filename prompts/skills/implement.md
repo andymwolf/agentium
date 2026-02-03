@@ -66,14 +66,14 @@ When implementation is complete and tests pass, emit a structured handoff signal
 AGENTIUM_HANDOFF: {
   "branch_name": "<prefix>/issue-<number>-<description>",
   "commits": [
-    {"hash": "abc1234", "message": "Add feature X"},
-    {"hash": "def5678", "message": "Add tests for feature X"}
+    {"hash": "<actual_hash>", "message": "<actual_message>"},
+    {"hash": "<actual_hash>", "message": "<actual_message>"}
   ],
-  "files_changed": ["path/to/file1.go", "path/to/file2.go"],
+  "files_changed": ["<actual_file_path>", "<actual_file_path>"],
   "tests_passed": true,
   "test_output": "Summary of test results (optional)",
-  "draft_pr_number": 123,
-  "draft_pr_url": "https://github.com/owner/repo/pull/123"
+  "draft_pr_number": <actual PR number from gh pr create>,
+  "draft_pr_url": "<actual PR URL from gh pr create>"
 }
 ```
 

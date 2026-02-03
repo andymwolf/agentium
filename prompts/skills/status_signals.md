@@ -42,8 +42,8 @@ These signals can be used in any session type:
 # After tests pass
 echo "AGENTIUM_STATUS: TESTS_PASSED"
 
-# After creating a PR
-echo "AGENTIUM_STATUS: PR_CREATED https://github.com/org/repo/pull/123"
+# After creating a PR (use actual URL from gh pr create output)
+echo "AGENTIUM_STATUS: PR_CREATED <actual PR URL>"
 
 # When review feedback is already addressed
 echo "AGENTIUM_STATUS: NOTHING_TO_DO feedback was addressed in previous iteration"
