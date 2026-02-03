@@ -38,3 +38,10 @@ claude:
 # Controller settings (optional)
 controller:
   image: "ghcr.io/andymwolf/agentium-controller:latest"
+
+# Fallback settings (optional)
+# When enabled, if the primary agent fails with startup/infrastructure errors,
+# the controller will automatically retry with the fallback agent.
+# fallback:
+#   enabled: true
+#   default_adapter: "claude-code"  # Fallback to claude-code on adapter failure

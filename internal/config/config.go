@@ -46,6 +46,12 @@ type MonorepoConfig struct {
 	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
 }
 
+// FallbackConfig controls adapter execution fallback behavior
+type FallbackConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`         // Enable fallback on adapter failure
+	DefaultAdapter string `mapstructure:"default_adapter"` // Fallback adapter (default: claude-code)
+}
+
 // Config represents the full Agentium configuration
 type Config struct {
 	Project    ProjectConfig        `mapstructure:"project"`
@@ -59,6 +65,7 @@ type Config struct {
 	Routing    routing.PhaseRouting `mapstructure:"routing"`
 	Delegation DelegationConfigYAML `mapstructure:"delegation"`
 	PhaseLoop  PhaseLoopConfig      `mapstructure:"phase_loop"`
+	Fallback   FallbackConfig       `mapstructure:"fallback"`
 	Monorepo   MonorepoConfig       `mapstructure:"monorepo"`
 }
 
