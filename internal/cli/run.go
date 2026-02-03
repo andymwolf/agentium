@@ -278,8 +278,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Propagate fallback config from defaults
-	if cfg.Defaults.FallbackEnabled {
+	// Propagate fallback config from routing
+	if cfg.Routing.Default.FallbackEnabled {
 		sessionConfig.Fallback = &provisioner.ProvFallbackConfig{
 			Enabled: true,
 		}

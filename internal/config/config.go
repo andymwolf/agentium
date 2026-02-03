@@ -94,10 +94,8 @@ type CloudConfig struct {
 
 // DefaultsConfig contains default session settings
 type DefaultsConfig struct {
-	Agent           string `mapstructure:"agent"`
-	MaxIterations   int    `mapstructure:"max_iterations"`
-	MaxDuration     string `mapstructure:"max_duration"`
-	FallbackEnabled bool   `mapstructure:"fallback_enabled"`
+	MaxIterations int    `mapstructure:"max_iterations"`
+	MaxDuration   string `mapstructure:"max_duration"`
 }
 
 // SessionConfig contains per-session settings
@@ -162,10 +160,6 @@ func applyDefaults(cfg *Config) {
 		cfg.Cloud.DiskSizeGB = 50
 	}
 
-	if cfg.Defaults.Agent == "" {
-		cfg.Defaults.Agent = "claude-code"
-	}
-
 	if cfg.Defaults.MaxIterations == 0 {
 		cfg.Defaults.MaxIterations = 30
 	}
@@ -180,7 +174,11 @@ func applyDefaults(cfg *Config) {
 	}
 
 	if cfg.Session.Agent == "" {
-		cfg.Session.Agent = cfg.Defaults.Agent
+		if cfg.Routing.Default.Adapter != "" {
+			cfg.Session.Agent = cfg.Routing.Default.Adapter
+		} else {
+			cfg.Session.Agent = "claude-code"
+		}
 	}
 
 	if cfg.Session.MaxIterations == 0 {

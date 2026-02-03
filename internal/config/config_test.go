@@ -376,7 +376,6 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "claude-code",
 					MaxIterations: 30,
 					MaxDuration:   "2h",
 				},
@@ -404,7 +403,6 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "claude-code",
 					MaxIterations: 30,
 					MaxDuration:   "2h",
 				},
@@ -432,7 +430,6 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "claude-code",
 					MaxIterations: 30,
 					MaxDuration:   "2h",
 				},
@@ -455,9 +452,13 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  100,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "aider",
 					MaxIterations: 50,
 					MaxDuration:   "4h",
+				},
+				Routing: routing.PhaseRouting{
+					Default: routing.ModelConfig{
+						Adapter: "aider",
+					},
 				},
 			},
 			expected: Config{
@@ -467,9 +468,13 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  100,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "aider",
 					MaxIterations: 50,
 					MaxDuration:   "4h",
+				},
+				Routing: routing.PhaseRouting{
+					Default: routing.ModelConfig{
+						Adapter: "aider",
+					},
 				},
 				Session: SessionConfig{
 					Agent:         "aider",
@@ -501,7 +506,6 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					Agent:         "claude-code",
 					MaxIterations: 30,
 					MaxDuration:   "2h",
 				},
@@ -527,9 +531,6 @@ func TestApplyDefaults(t *testing.T) {
 			}
 			if tt.config.Cloud.DiskSizeGB != tt.expected.Cloud.DiskSizeGB {
 				t.Errorf("DiskSizeGB = %d, want %d", tt.config.Cloud.DiskSizeGB, tt.expected.Cloud.DiskSizeGB)
-			}
-			if tt.config.Defaults.Agent != tt.expected.Defaults.Agent {
-				t.Errorf("Defaults.Agent = %q, want %q", tt.config.Defaults.Agent, tt.expected.Defaults.Agent)
 			}
 			if tt.config.Session.Agent != tt.expected.Session.Agent {
 				t.Errorf("Session.Agent = %q, want %q", tt.config.Session.Agent, tt.expected.Session.Agent)
