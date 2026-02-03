@@ -188,6 +188,18 @@ func extractBlocks(evtType StreamEventType, blocks []rawContentBlock, result *Pa
 	}
 }
 
+// ExtractAssistantText returns only text from assistant messages, excluding tool results.
+// This is suitable for GitHub comments where tool output adds noise.
+func (pr *ParseResult) ExtractAssistantText() string {
+	var parts []string
+	for _, evt := range pr.Events {
+		if evt.Type == EventAssistant && evt.Subtype == BlockText && evt.Content != "" {
+			parts = append(parts, evt.Content)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
 // blockContentToString converts a content field (which may be a string or array) to a string.
 func blockContentToString(content interface{}) string {
 	if content == nil {

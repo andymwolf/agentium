@@ -284,7 +284,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			state.Phase = currentPhase
 
 			// Check for pre-existing plan (PLAN phase, iteration 1 only)
-			var phaseOutput string
+			var phaseOutput string    // Full output for internal processing (handoff, judge)
+			var commentContent string // Filtered output for GitHub comments
 			var skipIteration bool
 			if c.shouldSkipPlanIteration(currentPhase, iter) {
 				planContent := c.extractExistingPlan()
@@ -307,10 +308,18 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					continue
 				}
 
+				// Full output for internal processing (handoff parsing, judge context)
 				phaseOutput = result.RawTextContent
 				if phaseOutput == "" {
 					phaseOutput = result.Summary
 				}
+
+				// Filtered output for GitHub comments (assistant text only, no tool results)
+				commentContent = result.AssistantText
+				if commentContent == "" {
+					commentContent = phaseOutput
+				}
+				commentContent = SummarizeForComment(commentContent, 250)
 			}
 
 			// Parse and store handoff output if enabled
@@ -337,8 +346,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
-			// Post phase comment (postPhaseComment handles attachment/truncation internally)
-			c.postPhaseComment(ctx, currentPhase, iter, phaseOutput)
+			// Post phase comment with filtered content (no tool results, max 250 lines)
+			c.postPhaseComment(ctx, currentPhase, iter, commentContent)
 
 			// Create draft PR after first IMPLEMENT iteration with commits
 			if currentPhase == PhaseImplement && !state.DraftPRCreated {
@@ -432,8 +441,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
-			// Post reviewer feedback to appropriate location
-			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewResult.Feedback)
+			// Post reviewer feedback to appropriate location (filtered for readability)
+			reviewFeedbackComment := SummarizeForComment(reviewResult.Feedback, 250)
+			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewFeedbackComment)
 
 			judgeResult, err := c.runJudge(ctx, judgeRunParams{
 				CompletedPhase: currentPhase,

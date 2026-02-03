@@ -57,7 +57,8 @@ type IterationResult struct {
 	InputTokens    int           // Input tokens consumed this iteration
 	OutputTokens   int           // Output tokens consumed this iteration
 	Events         []interface{} `json:"-"` // Structured events (type-assert per adapter)
-	RawTextContent string        `json:"-"` // Aggregated text from structured output
+	RawTextContent string        `json:"-"` // Aggregated text from structured output (includes tool results)
+	AssistantText  string        `json:"-"` // Only assistant text blocks (for readable GitHub comments)
 	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present
 }
 
