@@ -217,9 +217,9 @@ runcmd:
 
     # Run controller
     log "Starting controller container"
+    # Mount /etc/agentium read-write so the controller can clean stale auth path directories.
     docker run --rm \
       -v /var/run/docker.sock:/var/run/docker.sock \
-      # Mount /etc/agentium read-write so the controller can clean stale auth path directories.
       -v /etc/agentium:/etc/agentium:rw \
       -v /home/workspace:/home/workspace \
       ${local.claude_auth_volume} \
