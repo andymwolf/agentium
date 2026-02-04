@@ -1868,7 +1868,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	execDuration := time.Since(execStart)
 
 	// Attempt fallback on adapter execution failure
-	if err != nil && c.canFallback(activeAgent.Name()) {
+	if err != nil && c.canFallback(activeAgent.Name(), session) {
 		stderr := ""
 		if result != nil {
 			stderr = result.Error
@@ -1876,8 +1876,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 		if isAdapterExecutionFailure(err, stderr, execDuration) {
 			fallbackName := c.getFallbackAdapter()
-			c.logWarning("Adapter %s failed (%v), falling back to %s",
-				activeAgent.Name(), err, fallbackName)
+			if fallbackName == activeAgent.Name() {
+				c.logWarning("Adapter %s failed (%v), retrying without model override",
+					activeAgent.Name(), err)
+			} else {
+				c.logWarning("Adapter %s failed (%v), falling back to %s",
+					activeAgent.Name(), err, fallbackName)
+			}
 
 			fallbackAdapter := c.adapters[fallbackName]
 			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name())

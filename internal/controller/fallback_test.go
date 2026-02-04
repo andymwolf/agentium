@@ -164,6 +164,7 @@ func TestCanFallback(t *testing.T) {
 		config         SessionConfig
 		adapterNames   []string // adapters to add
 		currentAdapter string
+		session        *agent.Session
 		want           bool
 	}{
 		{
@@ -171,16 +172,52 @@ func TestCanFallback(t *testing.T) {
 			config:         SessionConfig{},
 			adapterNames:   []string{"claude-code"},
 			currentAdapter: "codex",
+			session:        nil,
 			want:           false,
 		},
 		{
-			name: "current adapter is fallback returns false",
+			name: "current adapter is fallback without model override returns false",
 			config: SessionConfig{
 				Fallback: &FallbackConfig{Enabled: true},
 			},
 			adapterNames:   []string{"claude-code"},
 			currentAdapter: "claude-code",
+			session:        nil,
 			want:           false,
+		},
+		{
+			name: "current adapter is fallback with nil IterationContext returns false",
+			config: SessionConfig{
+				Fallback: &FallbackConfig{Enabled: true},
+			},
+			adapterNames:   []string{"claude-code"},
+			currentAdapter: "claude-code",
+			session:        &agent.Session{},
+			want:           false,
+		},
+		{
+			name: "current adapter is fallback with empty model override returns false",
+			config: SessionConfig{
+				Fallback: &FallbackConfig{Enabled: true},
+			},
+			adapterNames:   []string{"claude-code"},
+			currentAdapter: "claude-code",
+			session:        &agent.Session{IterationContext: &agent.IterationContext{}},
+			want:           false,
+		},
+		{
+			name: "same adapter with model override can fallback",
+			config: SessionConfig{
+				Fallback: &FallbackConfig{Enabled: true},
+			},
+			adapterNames:   []string{"claude-code"},
+			currentAdapter: "claude-code",
+			session: &agent.Session{
+				IterationContext: &agent.IterationContext{
+					ModelOverride: "claude-opus-4-20250514",
+				},
+			},
+			want: true,
 		},
 		{
 			name: "fallback adapter not in adapters returns false",
@@ -189,6 +226,7 @@ func TestCanFallback(t *testing.T) {
 			},
 			adapterNames:   []string{"codex"},
 			currentAdapter: "codex",
+			session:        nil,
 			want:           false,
 		},
 		{
@@ -198,6 +236,17 @@ func TestCanFallback(t *testing.T) {
 			},
 			adapterNames:   []string{"claude-code", "codex"},
 			currentAdapter: "codex",
+			session:        nil,
+			want:           true,
+		},
+		{
+			name: "can fallback from codex to claude-code with session",
+			config: SessionConfig{
+				Fallback: &FallbackConfig{Enabled: true},
+			},
+			adapterNames:   []string{"claude-code", "codex"},
+			currentAdapter: "codex",
+			session:        &agent.Session{IterationContext: &agent.IterationContext{}},
 			want:           true,
 		},
 	}
@@ -212,9 +261,9 @@ func TestCanFallback(t *testing.T) {
 				c.adapters[name] = &mockFallbackAgent{name: name}
 			}
 
-			got := c.canFallback(tt.currentAdapter)
+			got := c.canFallback(tt.currentAdapter, tt.session)
 			if got != tt.want {
-				t.Errorf("canFallback(%q) = %v, want %v", tt.currentAdapter, got, tt.want)
+				t.Errorf("canFallback(%q, session) = %v, want %v", tt.currentAdapter, got, tt.want)
 			}
 		})
 	}
