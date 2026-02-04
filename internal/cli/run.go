@@ -219,18 +219,35 @@ func runSession(cmd *cobra.Command, args []string) error {
 			// No CLI routing at all: use config file entirely
 			cfgRouting := cfg.Routing // copy
 			sessionConfig.Routing = &cfgRouting
+			if verbose {
+				fmt.Printf("Routing: using config file (default=%s, %d overrides)\n",
+					cfg.Routing.Default.Adapter, len(cfg.Routing.Overrides))
+			}
 		} else if sessionConfig.Routing.Overrides == nil && len(cfg.Routing.Overrides) > 0 {
 			// CLI set --model default but no --phase-model: merge config file overrides
 			sessionConfig.Routing.Overrides = make(map[string]routing.ModelConfig, len(cfg.Routing.Overrides))
 			for phase, spec := range cfg.Routing.Overrides {
 				sessionConfig.Routing.Overrides[phase] = spec
 			}
+			if verbose {
+				fmt.Printf("Routing: merged %d overrides from config file\n", len(cfg.Routing.Overrides))
+			}
 		}
 	}
 
 	// Handle Codex OAuth authentication
 	// Check after routing merge so CLI overrides are considered
-	needsCodexAuth := cfg.Session.Agent == "codex" || routing.NewRouter(sessionConfig.Routing).UsesAdapter("codex")
+	router := routing.NewRouter(sessionConfig.Routing)
+	needsCodexAuth := cfg.Session.Agent == "codex" || router.UsesAdapter("codex")
+
+	// Debug logging to help diagnose auth detection issues
+	if verbose {
+		adapters := router.Adapters()
+		fmt.Printf("Routing adapters detected: %v\n", adapters)
+		fmt.Printf("Codex auth needed: %v (agent=%q, usesAdapter=%v)\n",
+			needsCodexAuth, cfg.Session.Agent, router.UsesAdapter("codex"))
+	}
+
 	if needsCodexAuth {
 		var authJSON []byte
 		authJSON, err = readCodexAuthJSON(cfg.Codex.AuthJSONPath)
