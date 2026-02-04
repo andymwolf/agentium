@@ -39,3 +39,7 @@ Thumbs.db
 # Go
 vendor/
 .env
+
+# Node.js
+node_modules/
+src/api/dist/
