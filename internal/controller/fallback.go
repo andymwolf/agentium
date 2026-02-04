@@ -3,6 +3,8 @@ package controller
 import (
 	"strings"
 	"time"
+
+	"github.com/andywolf/agentium/internal/agent"
 )
 
 // isAdapterExecutionFailure checks if an error indicates an adapter-level failure
@@ -47,12 +49,19 @@ func (c *Controller) getFallbackAdapter() string {
 }
 
 // canFallback returns true if a fallback can be attempted from the current adapter.
-// Returns false if fallback is disabled, the current adapter is already the fallback,
-// or the fallback adapter is not available.
-func (c *Controller) canFallback(currentAdapter string) bool {
+// Returns false if fallback is disabled or the fallback adapter is not available.
+// When the current adapter matches the fallback adapter, fallback is still allowed
+// if there's a model override that can be removed (retry with default model).
+func (c *Controller) canFallback(currentAdapter string, session *agent.Session) bool {
 	fallback := c.getFallbackAdapter()
-	if fallback == "" || fallback == currentAdapter {
+	if fallback == "" {
 		return false
+	}
+	if fallback == currentAdapter {
+		// Same adapter - can only fallback if there's a model override to remove
+		return session != nil &&
+			session.IterationContext != nil &&
+			session.IterationContext.ModelOverride != ""
 	}
 	_, exists := c.adapters[fallback]
 	return exists
