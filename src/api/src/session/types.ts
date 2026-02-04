@@ -8,6 +8,15 @@ export interface TokenMetrics {
 }
 
 /**
+ * Skip conditions for phase-level configuration
+ * - 'empty_output': Skip if WORKER produced no output
+ * - 'simple_output': Skip if output is trivial (few lines)
+ * - 'no_code_changes': Skip if no files were modified
+ * - true: Always skip
+ */
+export type SkipCondition = 'empty_output' | 'simple_output' | 'no_code_changes' | true;
+
+/**
  * Worker result from executing a phase
  */
 export interface WorkerResult {
@@ -92,6 +101,24 @@ export interface SessionContext {
 }
 
 /**
+ * Reviewer configuration for a phase
+ */
+export interface ReviewerConfig {
+  skip?: boolean;
+  skip_on?: SkipCondition;
+  prompt?: string;
+}
+
+/**
+ * Judge configuration for a phase
+ */
+export interface JudgeConfig {
+  skip?: boolean;
+  skip_on?: SkipCondition;
+  criteria?: string;
+}
+
+/**
  * Phase definition in a workflow
  */
 export interface PhaseDefinition {
@@ -100,6 +127,9 @@ export interface PhaseDefinition {
   worker_prompt: string;
   reviewer_prompt: string;
   judge_prompt: string;
+  // Optional phase-level configurations
+  reviewer?: ReviewerConfig;
+  judge?: JudgeConfig;
 }
 
 /**
@@ -130,6 +160,7 @@ export interface SessionResult {
   status: 'completed' | 'failed';
   duration_ms: number;
   phases: PhaseResult[];
+  behaviors_applied: BehaviorConfig;
 }
 
 /**
