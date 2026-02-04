@@ -64,6 +64,7 @@ type SessionConfig struct {
 	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
+	Fallback      *ProvFallbackConfig   `json:"fallback,omitempty"`
 	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
 
@@ -97,6 +98,11 @@ type ProvPhaseLoopConfig struct {
 type ProvMonorepoConfig struct {
 	Enabled     bool   `json:"enabled"`
 	LabelPrefix string `json:"label_prefix"`
+}
+
+// ProvFallbackConfig controls adapter execution fallback for provisioned sessions.
+type ProvFallbackConfig struct {
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // GitHubConfig contains GitHub authentication configuration

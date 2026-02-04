@@ -46,6 +46,7 @@ type MonorepoConfig struct {
 	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
 }
 
+
 // Config represents the full Agentium configuration
 type Config struct {
 	Project    ProjectConfig        `mapstructure:"project"`
@@ -93,7 +94,6 @@ type CloudConfig struct {
 
 // DefaultsConfig contains default session settings
 type DefaultsConfig struct {
-	Agent         string `mapstructure:"agent"`
 	MaxIterations int    `mapstructure:"max_iterations"`
 	MaxDuration   string `mapstructure:"max_duration"`
 }
@@ -160,10 +160,6 @@ func applyDefaults(cfg *Config) {
 		cfg.Cloud.DiskSizeGB = 50
 	}
 
-	if cfg.Defaults.Agent == "" {
-		cfg.Defaults.Agent = "claude-code"
-	}
-
 	if cfg.Defaults.MaxIterations == 0 {
 		cfg.Defaults.MaxIterations = 30
 	}
@@ -178,7 +174,11 @@ func applyDefaults(cfg *Config) {
 	}
 
 	if cfg.Session.Agent == "" {
-		cfg.Session.Agent = cfg.Defaults.Agent
+		if cfg.Routing.Default.Adapter != "" {
+			cfg.Session.Agent = cfg.Routing.Default.Adapter
+		} else {
+			cfg.Session.Agent = "claude-code"
+		}
 	}
 
 	if cfg.Session.MaxIterations == 0 {

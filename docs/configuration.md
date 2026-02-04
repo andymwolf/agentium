@@ -45,7 +45,6 @@ cloud:
 
 # Default session settings
 defaults:
-  agent: "claude-code"              # Default agent: claude-code, aider, codex
   max_iterations: 30                # Maximum agent iterations per session
   max_duration: "2h"                # Maximum session duration (Go duration format)
 
@@ -75,8 +74,9 @@ phase_loop:
 # Model routing (per-phase model selection)
 routing:
   default:                          # Default model for all phases
-    adapter: "claude-code"
+    adapter: "claude-code"          # Default agent adapter (required)
     model: "claude-opus-4-20250514"
+    fallback_enabled: true          # Fallback to claude-code on adapter failure
   overrides:                        # Per-phase overrides
     IMPLEMENT:
       adapter: "claude-code"
@@ -149,7 +149,6 @@ monorepo:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `agent` | string | No | `claude-code` | Default agent adapter (`claude-code`, `aider`, `codex`) |
 | `max_iterations` | int | No | `30` | Max iterations before session termination |
 | `max_duration` | string | No | `2h` | Max session duration (Go duration: `30m`, `2h`, `4h`) |
 
@@ -190,16 +189,21 @@ codex:
 
 ### routing
 
-Model routing enables per-phase model selection for optimizing cost and performance.
+Model routing enables per-phase model selection for optimizing cost and performance. The `routing.default.adapter` field specifies the default agent adapter used for all phases.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `default.adapter` | string | No | - | Default agent adapter (e.g., `claude-code`, `aider`) |
+| `default.adapter` | string | No | `claude-code` | Default agent adapter (`claude-code`, `aider`, `codex`) |
 | `default.model` | string | No | - | Default model ID |
 | `default.reasoning` | string | No | - | Reasoning effort level (codex only) |
+| `default.fallback_enabled` | bool | No | `false` | Enable fallback to `claude-code` on adapter failure |
 | `overrides.<PHASE>.adapter` | string | No | - | Agent adapter for specific phase |
 | `overrides.<PHASE>.model` | string | No | - | Model for specific phase |
 | `overrides.<PHASE>.reasoning` | string | No | - | Reasoning effort level for phase (codex only) |
+
+**Adapter fallback:**
+
+When `fallback_enabled` is `true`, if the primary adapter fails with a startup or infrastructure error (e.g., missing auth file, Docker error, permission denied), the controller automatically retries with `claude-code`. This prevents session failures due to adapter configuration issues.
 
 **Reasoning effort levels (codex agent only):**
 
@@ -299,7 +303,8 @@ Sub-agent delegation (experimental feature).
 Session-level settings (repository, issues, agent, etc.) are derived at runtime from CLI flags and config file defaults. They are **not** intended to be set directly in the config file. Instead:
 
 - `--repo`, `--issues`, `--agent`, `--max-iterations`, `--max-duration` are passed as CLI flags to `agentium run`
-- If not provided, `agent`, `max_iterations`, and `max_duration` fall back to values in the `defaults` section
+- If `--agent` is not provided, it falls back to `routing.default.adapter` (or `claude-code` if not configured)
+- `max_iterations` and `max_duration` fall back to values in the `defaults` section
 - The `repository` field falls back to `project.repository` if `--repo` is not provided (though `--repo` is always required for `run`)
 
 ## Environment Variables
@@ -315,9 +320,9 @@ All configuration values can be set via environment variables with the `AGENTIUM
 | `AGENTIUM_CLOUD_PROVIDER` | `cloud.provider` |
 | `AGENTIUM_CLOUD_REGION` | `cloud.region` |
 | `AGENTIUM_CLOUD_PROJECT` | `cloud.project` |
-| `AGENTIUM_DEFAULTS_AGENT` | `defaults.agent` |
 | `AGENTIUM_DEFAULTS_MAX_ITERATIONS` | `defaults.max_iterations` |
 | `AGENTIUM_DEFAULTS_MAX_DURATION` | `defaults.max_duration` |
+| `AGENTIUM_ROUTING_DEFAULT_ADAPTER` | `routing.default.adapter` |
 | `AGENTIUM_CLAUDE_AUTH_MODE` | `claude.auth_mode` |
 | `AGENTIUM_CONTROLLER_IMAGE` | `controller.image` |
 
@@ -399,7 +404,6 @@ cloud:
   disk_size_gb: 100
 
 defaults:
-  agent: "claude-code"
   max_iterations: 50
   max_duration: "4h"
 
@@ -410,6 +414,7 @@ routing:
   default:
     adapter: "claude-code"
     model: "claude-opus-4-20250514"
+    fallback_enabled: true
   overrides:
     IMPLEMENT:
       adapter: "claude-code"
@@ -436,7 +441,11 @@ cloud:
   disk_size_gb: 30
 
 defaults:
-  agent: "claude-code"
   max_iterations: 20
   max_duration: "1h"
+
+routing:
+  default:
+    adapter: "claude-code"
+    model: "claude-sonnet-4-20250514"  # Use Sonnet for cost savings
 ```

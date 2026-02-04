@@ -278,6 +278,13 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Propagate fallback config from routing
+	if cfg.Routing.Default.FallbackEnabled {
+		sessionConfig.Fallback = &provisioner.ProvFallbackConfig{
+			Enabled: true,
+		}
+	}
+
 	// Build VM config
 	vmConfig := provisioner.VMConfig{
 		Project:         cfg.Cloud.Project,

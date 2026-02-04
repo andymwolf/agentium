@@ -7,9 +7,10 @@ import (
 
 // ModelConfig specifies an adapter and model for a phase
 type ModelConfig struct {
-	Adapter   string `json:"adapter" yaml:"adapter" mapstructure:"adapter"`
-	Model     string `json:"model" yaml:"model" mapstructure:"model"`
-	Reasoning string `json:"reasoning,omitempty" yaml:"reasoning,omitempty" mapstructure:"reasoning"`
+	Adapter         string `json:"adapter" yaml:"adapter" mapstructure:"adapter"`
+	Model           string `json:"model" yaml:"model" mapstructure:"model"`
+	Reasoning       string `json:"reasoning,omitempty" yaml:"reasoning,omitempty" mapstructure:"reasoning"`
+	FallbackEnabled bool   `json:"fallback_enabled,omitempty" yaml:"fallback_enabled,omitempty" mapstructure:"fallback_enabled"`
 }
 
 // ValidReasoningLevels is the set of recognized reasoning level values.
