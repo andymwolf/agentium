@@ -60,15 +60,20 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 
 	// Validate auth files exist in cloud mode before mounting
 	// This prevents Docker from creating directories at mount points when files are missing
+	// Only validate auth for the specific adapter being run to avoid false failures
 	if !c.config.Interactive {
-		if c.config.ClaudeAuth.AuthMode == "oauth" {
-			if err := c.validateAuthFile("/etc/agentium/claude-auth.json", "Claude"); err != nil {
-				return nil, err
+		switch params.Agent.Name() {
+		case "claude-code":
+			if c.config.ClaudeAuth.AuthMode == "oauth" {
+				if err := c.validateAuthFile("/etc/agentium/claude-auth.json", "Claude"); err != nil {
+					return nil, err
+				}
 			}
-		}
-		if c.config.CodexAuth.AuthJSONBase64 != "" {
-			if err := c.validateAuthFile("/etc/agentium/codex-auth.json", "Codex"); err != nil {
-				return nil, err
+		case "codex":
+			if c.config.CodexAuth.AuthJSONBase64 != "" {
+				if err := c.validateAuthFile("/etc/agentium/codex-auth.json", "Codex"); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -89,37 +94,39 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Mount Claude OAuth credentials
-	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		if c.config.Interactive {
-			// In local mode, write credentials to temp file and mount from there
-			authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
-			if err != nil {
-				c.logWarning("Failed to write Claude auth file: %v", err)
-			} else if authPath != "" {
-				args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
+	// Mount OAuth credentials only for the adapter being used
+	switch params.Agent.Name() {
+	case "claude-code":
+		if c.config.ClaudeAuth.AuthMode == "oauth" {
+			if c.config.Interactive {
+				// In local mode, write credentials to temp file and mount from there
+				authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
+				if err != nil {
+					c.logWarning("Failed to write Claude auth file: %v", err)
+				} else if authPath != "" {
+					args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
+				}
+			} else {
+				// In cloud mode, mount from VM path set up by provisioner
+				args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
 			}
-		} else {
-			// In cloud mode, mount from VM path set up by provisioner
-			args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
+		} else if c.config.ClaudeAuth.AuthMode != "" {
+			c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
 		}
-	} else if c.config.ClaudeAuth.AuthMode != "" {
-		c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
-	}
-
-	// Mount Codex OAuth credentials
-	if c.config.CodexAuth.AuthJSONBase64 != "" {
-		if c.config.Interactive {
-			// In local mode, write credentials to temp file and mount from there
-			authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
-			if err != nil {
-				c.logWarning("Failed to write Codex auth file: %v", err)
-			} else if authPath != "" {
-				args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
+	case "codex":
+		if c.config.CodexAuth.AuthJSONBase64 != "" {
+			if c.config.Interactive {
+				// In local mode, write credentials to temp file and mount from there
+				authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
+				if err != nil {
+					c.logWarning("Failed to write Codex auth file: %v", err)
+				} else if authPath != "" {
+					args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
+				}
+			} else {
+				// In cloud mode, mount from VM path set up by provisioner
+				args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
 			}
-		} else {
-			// In cloud mode, mount from VM path set up by provisioner
-			args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
 		}
 	}
 
