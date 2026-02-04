@@ -59,10 +59,11 @@ func (c *Controller) postIssueComment(ctx context.Context, body string) {
 	body = c.appendSignature(body)
 	cmd := exec.CommandContext(ctx, "gh", "issue", "comment", c.activeTask,
 		"--repo", c.config.Repository,
-		"--body", body,
+		"--body-file", "-",
 	)
 	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
+	cmd.Stdin = strings.NewReader(body)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to post issue comment: %v (output: %s)", err, string(output))
@@ -81,10 +82,11 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 	body = c.appendSignature(body)
 	cmd := exec.CommandContext(ctx, "gh", "pr", "comment", prNumber,
 		"--repo", c.config.Repository,
-		"--body", body,
+		"--body-file", "-",
 	)
 	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
+	cmd.Stdin = strings.NewReader(body)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to post PR comment: %v (output: %s)", err, string(output))
@@ -176,13 +178,14 @@ func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
 		newBody = currentBody + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + plan
 	}
 
-	// Update issue body
+	// Update issue body via stdin to avoid "argument list too long" errors
 	cmd = exec.CommandContext(ctx, "gh", "issue", "edit", c.activeTask,
 		"--repo", c.config.Repository,
-		"--body", newBody,
+		"--body-file", "-",
 	)
 	cmd.Env = c.envWithGitHubToken()
 	cmd.Dir = c.workDir
+	cmd.Stdin = strings.NewReader(newBody)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logWarning("failed to update issue body with plan: %v (output: %s)", err, string(output))
