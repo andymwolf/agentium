@@ -85,6 +85,7 @@ export class SessionController {
       status,
       duration_ms: Date.now() - startTime,
       phases: phaseResults,
+      behaviors_applied: context.behaviors,
     };
   }
 
