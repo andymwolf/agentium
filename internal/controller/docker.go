@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/agent/claudecode"
@@ -40,7 +42,13 @@ func (c *Controller) cleanupAuthPath(path string) error {
 func (c *Controller) validateAuthFile(path, name string) error {
 	// Clean up stale directories from previous Docker mount attempts
 	if err := c.cleanupAuthPath(path); err != nil {
-		return fmt.Errorf("%s auth path cleanup failed: %w", name, err)
+		if errors.Is(err, syscall.EROFS) {
+			if c.logger != nil {
+				c.logWarning("%s auth path cleanup failed due to read-only filesystem: %s", name, path)
+			}
+		} else {
+			return fmt.Errorf("%s auth path cleanup failed: %w", name, err)
+		}
 	}
 
 	info, err := os.Stat(path)
