@@ -40,18 +40,18 @@ func (c *Controller) cleanupAuthPath(path string) error {
 func (c *Controller) validateAuthFile(path, name string) error {
 	// Clean up stale directories from previous Docker mount attempts
 	if err := c.cleanupAuthPath(path); err != nil {
-		return fmt.Errorf("%s auth path cleanup failed: %w", name, err)
+		return fmt.Errorf("%s auth path cleanup failed (read-only filesystem): %w\n\nThis typically means the auth file was not created by cloud-init.\nCheck cloud-init logs: sudo cat /var/log/cloud-init-output.log", name, err)
 	}
 
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("%s auth file not found at %s (cloud-init may have failed)", name, path)
+		return fmt.Errorf("%s auth file not found at %s\n\nThis typically means cloud-init did not create the file.\nCheck cloud-init logs: sudo cat /var/log/cloud-init-output.log\nVerify terraform vars included %s_auth_json", name, path, strings.ToLower(name))
 	}
 	if err != nil {
 		return fmt.Errorf("%s auth file error: %w", name, err)
 	}
 	if info.IsDir() {
-		return fmt.Errorf("%s auth path is a directory - Docker mount failed: %s", name, path)
+		return fmt.Errorf("%s auth path is a directory - Docker created it because the file was missing: %s\n\nCheck cloud-init logs: sudo cat /var/log/cloud-init-output.log", name, path)
 	}
 	return nil
 }

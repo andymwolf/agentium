@@ -83,6 +83,7 @@ claude_auth_mode   = "%s"
 
 	// Add Codex auth JSON when present
 	if config.Session.CodexAuth.AuthJSONBase64 != "" {
+		fmt.Println("Including codex_auth_json in terraform vars")
 		tfvars += fmt.Sprintf("codex_auth_json    = \"%s\"\n", config.Session.CodexAuth.AuthJSONBase64)
 	}
 

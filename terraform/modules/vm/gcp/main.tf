@@ -179,10 +179,16 @@ runcmd:
     if [ -f /etc/agentium/claude-auth.json ]; then
       chown 1000:1000 /etc/agentium/claude-auth.json
       log "Fixed ownership of claude-auth.json to 1000:1000"
+      log "claude-auth.json permissions: $(ls -la /etc/agentium/claude-auth.json)"
+    else
+      log "NOTE: claude-auth.json not found (not configured for this session)"
     fi
     if [ -f /etc/agentium/codex-auth.json ]; then
       chown 1000:1000 /etc/agentium/codex-auth.json
       log "Fixed ownership of codex-auth.json to 1000:1000"
+      log "codex-auth.json permissions: $(ls -la /etc/agentium/codex-auth.json)"
+    else
+      log "NOTE: codex-auth.json not found (not configured for this session)"
     fi
 
     # Create workspace directory with tmpfs to ensure exec permission.

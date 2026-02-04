@@ -238,7 +238,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to read Codex auth.json: %w", err)
 		}
 		sessionConfig.CodexAuth.AuthJSONBase64 = base64.StdEncoding.EncodeToString(authJSON)
-		fmt.Println("Using Codex OAuth authentication")
+		fmt.Printf("Using Codex OAuth authentication (%d bytes)\n", len(authJSON))
 	}
 
 	// Validate auth requirements match routing config before provisioning
