@@ -15,10 +15,34 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 )
 
+// cleanupAuthPath removes any directory at an auth file path.
+// Docker creates directories at mount points when source files don't exist.
+func (c *Controller) cleanupAuthPath(path string) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		if c.logger != nil {
+			c.logWarning("Removing stale directory at auth path: %s", path)
+		}
+		return os.Remove(path)
+	}
+	return nil
+}
+
 // validateAuthFile checks that an auth file exists and is not a directory.
 // In cloud mode, Docker creates a directory at the mount point if the file doesn't exist,
 // causing EISDIR errors when the agent tries to read it.
 func (c *Controller) validateAuthFile(path, name string) error {
+	// Clean up stale directories from previous Docker mount attempts
+	if err := c.cleanupAuthPath(path); err != nil {
+		return fmt.Errorf("%s auth path cleanup failed: %w", name, err)
+	}
+
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("%s auth file not found at %s (cloud-init may have failed)", name, path)
