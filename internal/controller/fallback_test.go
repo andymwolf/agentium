@@ -300,8 +300,8 @@ type mockFallbackAgent struct {
 	name string
 }
 
-func (m *mockFallbackAgent) Name() string               { return m.name }
-func (m *mockFallbackAgent) ContainerImage() string     { return "test-image" }
+func (m *mockFallbackAgent) Name() string           { return m.name }
+func (m *mockFallbackAgent) ContainerImage() string { return "test-image" }
 func (m *mockFallbackAgent) BuildEnv(s *agent.Session, i int) map[string]string {
 	return nil
 }

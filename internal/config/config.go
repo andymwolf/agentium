@@ -46,7 +46,6 @@ type MonorepoConfig struct {
 	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
 }
 
-
 // Config represents the full Agentium configuration
 type Config struct {
 	Project    ProjectConfig        `mapstructure:"project"`
