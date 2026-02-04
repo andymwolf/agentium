@@ -8,6 +8,7 @@ import {
   AgentAdapter,
   SessionRequest,
   TokenMetrics,
+  SkipCondition,
 } from '../types.js';
 import { DEFAULT_WORKFLOW } from '../workflow.js';
 
@@ -185,14 +186,12 @@ describe('SessionController', () => {
 
   describe('context propagation', () => {
     it('should inject template variables into prompts', async () => {
-      const testIssueUrl = 'https://github.com/test/repo/issues/42';
-      const testInstructions = 'Implement the login feature';
       const request: SessionRequest = {
         workflow: 'default',
         repository: { url: 'https://github.com/test/repo', branch: 'feature-branch' },
         prompt_context: {
-          issue_url: testIssueUrl,
-          instructions: testInstructions,
+          issue_url: 'https://github.com/test/repo/issues/42',
+          instructions: 'Implement the login feature',
         },
       };
 
@@ -202,17 +201,17 @@ describe('SessionController', () => {
       const calls = (mockAdapter.invoke as ReturnType<typeof vi.fn>).mock.calls;
       expect(calls.length).toBeGreaterThan(0);
 
-      // Concatenate all prompts for verification (test code only - not URL validation)
-      const allPrompts = calls.map((call) => call[0]).join('\n');
+      // At least one call should contain the issue URL
+      const hasIssueUrl = calls.some((call) =>
+        call[0].includes('https://github.com/test/repo/issues/42')
+      );
+      expect(hasIssueUrl).toBe(true);
 
-      // Verify issue URL was injected using exact string comparison via split
-      const issueUrlParts = testIssueUrl.split('/');
-      const hasIssueNumber = allPrompts.includes('issues/42');
-      const hasGitHubDomain = allPrompts.includes('github.com/test/repo');
-      expect(hasIssueNumber && hasGitHubDomain).toBe(true);
-
-      // Verify instructions were injected
-      expect(allPrompts).toContain(testInstructions);
+      // At least one call should contain the instructions
+      const hasInstructions = calls.some((call) =>
+        call[0].includes('Implement the login feature')
+      );
+      expect(hasInstructions).toBe(true);
     });
 
     it('should propagate {{previous_phase_output}} between phases', async () => {
@@ -347,7 +346,7 @@ describe('SessionController', () => {
 
       // Reviewer should be skipped
       expect(result.phases[0].reviewer.status).toBe('skipped');
-      expect(result.phases[0].reviewer.skip_reason).toBe('Worker failed');
+      expect(result.phases[0].reviewer.skip_reason).toBe('worker_failed');
     });
 
     it('should report failed status when any phase fails', async () => {
@@ -395,7 +394,7 @@ describe('SessionController', () => {
 
       // Reviewer should be skipped due to empty output
       expect(result.phases[0].reviewer.status).toBe('skipped');
-      expect(result.phases[0].reviewer.skip_reason).toBe('Worker output is empty');
+      expect(result.phases[0].reviewer.skip_reason).toBe('empty_output');
     });
 
     it('should skip judge when skip_judge_on_simple is true and output is simple', async () => {
@@ -420,6 +419,120 @@ describe('SessionController', () => {
       // Judge should be skipped with auto-pass
       expect(result.phases[0].judge.status).toBe('skipped');
       expect(result.phases[0].judge.passed).toBe(true);
+    });
+
+    it('should include behaviors_applied in result', async () => {
+      const request: SessionRequest = {
+        workflow: 'default',
+        repository: { url: 'https://github.com/test/repo', branch: 'main' },
+        behaviors: {
+          skip_reviewer_on_empty: true,
+          skip_judge_on_simple: false,
+        },
+      };
+
+      const result = await controller.execute(request);
+
+      expect(result.behaviors_applied).toBeDefined();
+      expect(result.behaviors_applied.skip_reviewer_on_empty).toBe(true);
+      expect(result.behaviors_applied.skip_judge_on_simple).toBe(false);
+    });
+
+    it('should skip reviewer when phase-level skip: true is set', async () => {
+      const request: SessionRequest = {
+        repository: { url: 'https://github.com/test/repo', branch: 'main' },
+        phases: [
+          {
+            name: 'TEST_PHASE',
+            worker_prompt: 'Do something',
+            reviewer_prompt: 'Review it',
+            judge_prompt: 'Judge it',
+            reviewer: { skip: true },
+          },
+        ],
+      };
+
+      const result = await controller.execute(request);
+
+      expect(result.phases[0].reviewer.status).toBe('skipped');
+      expect(result.phases[0].reviewer.skip_reason).toBe('phase_config');
+    });
+
+    it('should skip judge when phase-level skip: true is set', async () => {
+      const request: SessionRequest = {
+        repository: { url: 'https://github.com/test/repo', branch: 'main' },
+        phases: [
+          {
+            name: 'TEST_PHASE',
+            worker_prompt: 'Do something',
+            reviewer_prompt: 'Review it',
+            judge_prompt: 'Judge it',
+            judge: { skip: true },
+          },
+        ],
+      };
+
+      const result = await controller.execute(request);
+
+      expect(result.phases[0].judge.status).toBe('skipped');
+      expect(result.phases[0].judge.skip_reason).toBe('phase_config');
+      expect(result.phases[0].judge.passed).toBe(true);
+    });
+
+    it('should skip reviewer based on phase-level skip_on condition', async () => {
+      const emptyAdapter: AgentAdapter = {
+        invoke: vi.fn(async () => ({
+          output: '',
+        })),
+      };
+
+      const emptyController = createSessionController({ adapter: emptyAdapter });
+
+      const request: SessionRequest = {
+        repository: { url: 'https://github.com/test/repo', branch: 'main' },
+        phases: [
+          {
+            name: 'TEST_PHASE',
+            worker_prompt: 'Do something',
+            reviewer_prompt: 'Review it',
+            judge_prompt: 'Judge it',
+            reviewer: { skip_on: 'empty_output' },
+          },
+        ],
+      };
+
+      const result = await emptyController.execute(request);
+
+      expect(result.phases[0].reviewer.status).toBe('skipped');
+      expect(result.phases[0].reviewer.skip_reason).toBe('empty_output');
+    });
+
+    it('should skip judge based on phase-level skip_on: simple_output condition', async () => {
+      const simpleAdapter: AgentAdapter = {
+        invoke: vi.fn(async () => ({
+          output: 'Done.',
+        })),
+      };
+
+      const simpleController = createSessionController({ adapter: simpleAdapter });
+
+      const request: SessionRequest = {
+        repository: { url: 'https://github.com/test/repo', branch: 'main' },
+        phases: [
+          {
+            name: 'TEST_PHASE',
+            worker_prompt: 'Do something',
+            reviewer_prompt: 'Review it',
+            judge_prompt: 'Judge it',
+            judge: { skip_on: 'simple_output' },
+          },
+        ],
+      };
+
+      const result = await simpleController.execute(request);
+
+      expect(result.phases[0].judge.status).toBe('skipped');
+      expect(result.phases[0].judge.skip_reason).toBe('simple_output');
     });
   });
 

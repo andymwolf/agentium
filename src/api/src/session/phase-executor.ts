@@ -6,9 +6,13 @@ import {
   JudgeResult,
   SessionContext,
   AgentAdapter,
-  BehaviorConfig,
 } from './types.js';
 import { injectTemplateVariables, TemplateContext } from './template.js';
+import {
+  shouldSkipReviewer,
+  shouldSkipJudge,
+  SkipEvaluationContext,
+} from './skip-conditions.js';
 
 /**
  * Options for phase execution
@@ -123,19 +127,26 @@ async function executeReviewer(
   templateContext: TemplateContext,
   workerResult: WorkerResult
 ): Promise<ReviewerResult> {
-  // Check if reviewer should be skipped
+  // Check if reviewer should be skipped due to worker failure
   if (workerResult.status === 'failed') {
     return {
       status: 'skipped',
-      skip_reason: 'Worker failed',
+      skip_reason: 'worker_failed',
     };
   }
 
-  // Check skip_reviewer_on_empty behavior
-  if (context.behaviors.skip_reviewer_on_empty && isOutputEmpty(workerResult.output)) {
+  // Build evaluation context
+  const evalContext: SkipEvaluationContext = {
+    worker_output: workerResult.output,
+    changed_files: context.changed_files || [],
+  };
+
+  // Evaluate skip conditions using the new evaluator
+  const skipResult = shouldSkipReviewer(phase.reviewer, context.behaviors, evalContext);
+  if (skipResult.should_skip) {
     return {
       status: 'skipped',
-      skip_reason: 'Worker output is empty',
+      skip_reason: skipResult.skip_reason,
     };
   }
 
@@ -159,7 +170,7 @@ async function executeReviewer(
     // Reviewer failure is non-fatal
     return {
       status: 'skipped',
-      skip_reason: `Reviewer error: ${error instanceof Error ? error.message : String(error)}`,
+      skip_reason: `reviewer_error: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -179,16 +190,23 @@ async function executeJudge(
   if (workerResult.status === 'failed' && !context.behaviors.judge_on_failure) {
     return {
       status: 'skipped',
-      skip_reason: 'Worker failed',
+      skip_reason: 'worker_failed',
     };
   }
 
-  // Check skip_judge_on_simple behavior
-  if (context.behaviors.skip_judge_on_simple && isSimpleOutput(workerResult.output)) {
+  // Build evaluation context
+  const evalContext: SkipEvaluationContext = {
+    worker_output: workerResult.output,
+    changed_files: context.changed_files || [],
+  };
+
+  // Evaluate skip conditions using the new evaluator
+  const skipResult = shouldSkipJudge(phase.judge, context.behaviors, evalContext);
+  if (skipResult.should_skip) {
     return {
       status: 'skipped',
-      skip_reason: 'Output is simple, skipping judgment',
-      passed: true, // Auto-pass for simple outputs
+      skip_reason: skipResult.skip_reason,
+      passed: true, // Auto-pass when skipped due to conditions
     };
   }
 
@@ -216,7 +234,7 @@ async function executeJudge(
     // Judge failure defaults to not passed
     return {
       status: 'skipped',
-      skip_reason: `Judge error: ${error instanceof Error ? error.message : String(error)}`,
+      skip_reason: `judge_error: ${error instanceof Error ? error.message : String(error)}`,
       passed: false,
     };
   }
@@ -251,25 +269,6 @@ function parseJudgeResponse(output: string): { passed: boolean; reasoning: strin
     passed,
     reasoning: output,
   };
-}
-
-/**
- * Check if output is empty or whitespace only
- */
-function isOutputEmpty(output?: string): boolean {
-  return !output || output.trim().length === 0;
-}
-
-/**
- * Check if output is considered "simple" (for skip_judge_on_simple)
- * Simple outputs are short and don't contain complex changes
- */
-function isSimpleOutput(output?: string): boolean {
-  if (!output) return true;
-
-  // Consider output simple if it's very short
-  const SIMPLE_THRESHOLD = 200;
-  return output.length < SIMPLE_THRESHOLD;
 }
 
 /**
