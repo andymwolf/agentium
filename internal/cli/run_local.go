@@ -206,14 +206,15 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 
 	// Handle Codex OAuth authentication
 	// Check after routing merge so CLI overrides are considered
-	needsCodexAuth := cfg.Session.Agent == "codex" || routing.NewRouter(sessionConfig.Routing).UsesAdapter("codex")
+	router := routing.NewRouter(sessionConfig.Routing)
+	needsCodexAuth := cfg.Session.Agent == "codex" || router.UsesAdapter("codex")
 	if needsCodexAuth {
 		// Try auto-detect from Keychain first
 		if autoAuth := tryAutoDetectCodexOAuth(); autoAuth != nil {
 			sessionConfig.CodexAuth.AuthJSONBase64 = base64.StdEncoding.EncodeToString(autoAuth)
 			fmt.Println("Auto-detected Codex OAuth credentials from macOS Keychain")
 		} else {
-			fmt.Println("No Codex OAuth credentials found - will use interactive auth in container")
+			fmt.Println("Warning: Codex auth not found - will prompt for auth inside container")
 		}
 	}
 

@@ -240,7 +240,7 @@ func TestValidateAuthFile(t *testing.T) {
 			path:      "/tmp",
 			authName:  "Codex",
 			wantErr:   true,
-			errSubstr: "is a directory",
+			errSubstr: "cleanup failed",
 		},
 	}
 

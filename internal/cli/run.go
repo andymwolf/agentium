@@ -241,6 +241,11 @@ func runSession(cmd *cobra.Command, args []string) error {
 		fmt.Println("Using Codex OAuth authentication")
 	}
 
+	// Validate auth requirements match routing config before provisioning
+	if err = validateAuthForRouting(sessionConfig, cfg); err != nil {
+		return err
+	}
+
 	// Propagate delegation config from config file
 	if cfg.Delegation.Enabled {
 		subAgents := make(map[string]provisioner.SubAgentConfig, len(cfg.Delegation.SubAgents))
@@ -469,4 +474,26 @@ func readCodexAuthFromKeychain() ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// validateAuthForRouting checks that required authentication is available for all adapters in routing.
+// Call this after routing merge and auth loading, before provisioning.
+func validateAuthForRouting(sessionConfig provisioner.SessionConfig, cfg *config.Config) error {
+	router := routing.NewRouter(sessionConfig.Routing)
+
+	// Check Codex auth requirements
+	if router.UsesAdapter("codex") && sessionConfig.CodexAuth.AuthJSONBase64 == "" {
+		return fmt.Errorf("codex adapter is in routing but auth credentials are missing\n\n" +
+			"Run 'codex --login' to authenticate before using codex adapter")
+	}
+
+	// Check Claude OAuth requirements
+	if router.UsesAdapter("claude-code") && cfg.Claude.AuthMode == "oauth" {
+		if sessionConfig.ClaudeAuth.AuthJSONBase64 == "" {
+			return fmt.Errorf("claude-code adapter with OAuth mode requires authentication\n\n" +
+				"Run 'claude login' to authenticate or use --claude-auth-mode=api")
+		}
+	}
+
+	return nil
 }
