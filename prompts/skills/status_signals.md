@@ -67,6 +67,7 @@ Format: `AGENTIUM_MEMORY: TYPE content`
 - `AGENTIUM_MEMORY: STEP_PENDING <description>` - Step still to be done in a future iteration
 - `AGENTIUM_MEMORY: FILE_MODIFIED <path>` - File that was created or modified
 - `AGENTIUM_MEMORY: ERROR <description>` - Error encountered that may need addressing
+- `AGENTIUM_MEMORY: FEEDBACK_RESPONSE [STATUS] <summary> - <response>` - Response to a reviewer feedback point (STATUS: ADDRESSED, DECLINED, or PARTIAL)
 
 ### Examples
 

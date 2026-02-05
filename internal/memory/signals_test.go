@@ -100,3 +100,30 @@ AGENTIUM_MEMORY: PHASE_RESULT IMPLEMENT completed (iteration 2)`
 		t.Errorf("signal[1].Content = %q, want %q", signals[1].Content, "IMPLEMENT completed (iteration 2)")
 	}
 }
+
+func TestParseSignals_FeedbackResponse(t *testing.T) {
+	output := `AGENTIUM_MEMORY: FEEDBACK_RESPONSE [ADDRESSED] Fix nil pointer in auth handler - Added nil check at handler.go:45
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [DECLINED] Use sync.Map for concurrency - Current mutex is sufficient
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [PARTIAL] Improve test coverage - Added unit tests, integration tests deferred`
+
+	signals := ParseSignals(output)
+	if len(signals) != 3 {
+		t.Fatalf("expected 3 signals, got %d", len(signals))
+	}
+
+	for _, s := range signals {
+		if s.Type != FeedbackResponse {
+			t.Errorf("expected type %q, got %q", FeedbackResponse, s.Type)
+		}
+	}
+
+	if signals[0].Content != "[ADDRESSED] Fix nil pointer in auth handler - Added nil check at handler.go:45" {
+		t.Errorf("signal[0].Content = %q, want %q", signals[0].Content, "[ADDRESSED] Fix nil pointer in auth handler - Added nil check at handler.go:45")
+	}
+	if signals[1].Content != "[DECLINED] Use sync.Map for concurrency - Current mutex is sufficient" {
+		t.Errorf("signal[1].Content = %q, want %q", signals[1].Content, "[DECLINED] Use sync.Map for concurrency - Current mutex is sufficient")
+	}
+	if signals[2].Content != "[PARTIAL] Improve test coverage - Added unit tests, integration tests deferred" {
+		t.Errorf("signal[2].Content = %q, want %q", signals[2].Content, "[PARTIAL] Improve test coverage - Added unit tests, integration tests deferred")
+	}
+}

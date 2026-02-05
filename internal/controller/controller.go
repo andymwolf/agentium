@@ -1789,6 +1789,16 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 		}
 	}
 
+	// Instructions for responding to feedback
+	sb.WriteString("### Responding to Feedback\n\n")
+	sb.WriteString("For each point in the reviewer analysis above, emit a `FEEDBACK_RESPONSE` memory signal indicating how you handled it.\n\n")
+	sb.WriteString("Format: `AGENTIUM_MEMORY: FEEDBACK_RESPONSE [STATUS] <feedback summary> - <your response>`\n\n")
+	sb.WriteString("STATUS values:\n")
+	sb.WriteString("- `[ADDRESSED]` — You fixed or implemented the feedback point\n")
+	sb.WriteString("- `[DECLINED]` — You chose not to act on it (explain why)\n")
+	sb.WriteString("- `[PARTIAL]` — You partially addressed it (explain what remains)\n\n")
+	sb.WriteString("Emit one signal per feedback point. This is expected for every reviewer feedback item.\n\n")
+
 	return sb.String()
 }
 

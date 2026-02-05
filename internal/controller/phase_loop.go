@@ -415,14 +415,24 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Get worker handoff summary if available
 			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase, iter)
 
+			// Extract worker's feedback responses from phase output (iteration > 1 only)
+			var workerFeedbackResponses string
+			if iter > 1 && phaseOutput != "" {
+				responses := extractFeedbackResponses(phaseOutput)
+				if len(responses) > 0 {
+					workerFeedbackResponses = strings.Join(responses, "\n")
+				}
+			}
+
 			// Run reviewer + judge
 			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
-				CompletedPhase:       currentPhase,
-				PhaseOutput:          phaseOutput,
-				Iteration:            iter,
-				MaxIterations:        maxIter,
-				PreviousFeedback:     previousFeedback,
-				WorkerHandoffSummary: workerHandoffSummary,
+				CompletedPhase:          currentPhase,
+				PhaseOutput:             phaseOutput,
+				Iteration:               iter,
+				MaxIterations:           maxIter,
+				PreviousFeedback:        previousFeedback,
+				WorkerHandoffSummary:    workerHandoffSummary,
+				WorkerFeedbackResponses: workerFeedbackResponses,
 			})
 			if reviewErr != nil {
 				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
@@ -447,7 +457,6 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			priorDirectives := ""
 			if c.memoryStore != nil && iter > 1 {
-				taskID := taskKey(c.activeTaskType, c.activeTask)
 				priorDirectives = c.memoryStore.BuildJudgeHistoryContext(taskID, iter)
 			}
 

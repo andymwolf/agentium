@@ -7,14 +7,15 @@ var signalPattern = regexp.MustCompile(`(?m)^AGENTIUM_MEMORY:\s+(\w+)\s+(.+)$`)
 
 // validTypes is the set of recognised signal types.
 var validTypes = map[SignalType]bool{
-	KeyFact:      true,
-	Decision:     true,
-	StepDone:     true,
-	StepPending:  true,
-	FileModified: true,
-	Error:        true,
-	EvalFeedback: true,
-	PhaseResult:  true,
+	KeyFact:          true,
+	Decision:         true,
+	StepDone:         true,
+	StepPending:      true,
+	FileModified:     true,
+	Error:            true,
+	EvalFeedback:     true,
+	PhaseResult:      true,
+	FeedbackResponse: true,
 }
 
 // ParseSignals extracts all memory signals from combined agent output.

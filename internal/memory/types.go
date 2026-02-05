@@ -6,15 +6,16 @@ import "time"
 type SignalType string
 
 const (
-	KeyFact        SignalType = "KEY_FACT"
-	Decision       SignalType = "DECISION"
-	StepDone       SignalType = "STEP_DONE"
-	StepPending    SignalType = "STEP_PENDING"
-	FileModified   SignalType = "FILE_MODIFIED"
-	Error          SignalType = "ERROR"
-	EvalFeedback   SignalType = "EVAL_FEEDBACK"
-	JudgeDirective SignalType = "JUDGE_DIRECTIVE"
-	PhaseResult    SignalType = "PHASE_RESULT"
+	KeyFact          SignalType = "KEY_FACT"
+	Decision         SignalType = "DECISION"
+	StepDone         SignalType = "STEP_DONE"
+	StepPending      SignalType = "STEP_PENDING"
+	FileModified     SignalType = "FILE_MODIFIED"
+	Error            SignalType = "ERROR"
+	EvalFeedback     SignalType = "EVAL_FEEDBACK"
+	JudgeDirective   SignalType = "JUDGE_DIRECTIVE"
+	PhaseResult      SignalType = "PHASE_RESULT"
+	FeedbackResponse SignalType = "FEEDBACK_RESPONSE"
 )
 
 // Signal is a parsed memory signal extracted from agent output.
