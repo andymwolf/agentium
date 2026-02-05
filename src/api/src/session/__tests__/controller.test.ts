@@ -202,6 +202,7 @@ describe('SessionController', () => {
       expect(calls.length).toBeGreaterThan(0);
 
       // At least one call should contain the issue URL
+      // lgtm[js/incomplete-url-substring-sanitization] - This is test assertion code, not URL validation
       const hasIssueUrl = calls.some((call) =>
         call[0].includes('https://github.com/test/repo/issues/42')
       );
