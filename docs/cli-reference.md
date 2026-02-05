@@ -301,6 +301,8 @@ agentium logs <session-id> [flags]
 | `--since` | string | - | Show logs since timestamp (RFC3339) or duration (e.g., `1h`, `30m`) |
 | `--events` | bool | `false` | Show agent events (tool calls, decisions); implies `--level=debug` |
 | `--level` | string | `info` | Minimum log level: `debug`, `info`, `warning`, `error` |
+| `--type` | string | - | Filter by event types (comma-separated, e.g., `tool_use,thinking`) |
+| `--iteration` | int | `0` | Filter by iteration number (0 = all iterations) |
 
 **Examples:**
 
@@ -325,6 +327,12 @@ agentium logs agentium-abc12345 --events
 
 # Show only warnings and errors
 agentium logs agentium-abc12345 --level warning
+
+# Filter events by type (tool calls and thinking only)
+agentium logs agentium-abc12345 --events --type tool_use,thinking
+
+# Show events from a specific iteration
+agentium logs agentium-abc12345 --events --iteration 3
 ```
 
 ---
