@@ -169,10 +169,28 @@ runcmd:
   - |
     set -e  # Exit on first error
 
-    # Log startup progress to serial console for debugging
-    log() { echo "[agentium-startup] $(date -Iseconds) $*" | tee /dev/ttyS0 || true; }
+    # Log to both serial console and syslog (syslog is picked up by Cloud Logging agent)
+    log() {
+      local msg="[agentium-startup] $(date -Iseconds) $*"
+      echo "$msg" | tee /dev/ttyS0 || true
+      logger -t agentium-startup -p user.info "$*" 2>/dev/null || true
+    }
 
-    log "Starting agentium controller setup"
+    log "Starting agentium controller setup (session: ${var.session_id})"
+
+    # Wait for docker daemon to be ready (COS starts docker asynchronously)
+    log "Waiting for docker daemon..."
+    for i in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        log "Docker daemon ready after $i seconds"
+        break
+      fi
+      if [ $i -eq 30 ]; then
+        log "ERROR: Docker daemon not ready after 30 seconds"
+        exit 1
+      fi
+      sleep 1
+    done
 
     # Fix ownership of auth files (cloud-init owner directive doesn't work on COS)
     # Container runs as UID 1000, so files must be readable by that UID
@@ -193,16 +211,34 @@ runcmd:
     mount -t tmpfs -o size=10G,exec,mode=0755 tmpfs /home/workspace
     log "Created /home/workspace with tmpfs (exec enabled)"
 
+    # Wait for network connectivity (needed to pull images from ghcr.io)
+    log "Checking network connectivity..."
+    for i in $(seq 1 15); do
+      if curl -sf --connect-timeout 2 https://ghcr.io >/dev/null 2>&1; then
+        log "Network ready after $i seconds"
+        break
+      fi
+      if [ $i -eq 15 ]; then
+        log "WARNING: Network check timed out, proceeding anyway"
+      fi
+      sleep 1
+    done
+
     # Pull controller image with retry
     log "Pulling controller image: ${var.controller_image}"
+    pull_success=false
     for i in 1 2 3; do
       if docker pull ${var.controller_image}; then
         log "Image pull successful"
+        pull_success=true
         break
       fi
       log "Image pull attempt $i failed, retrying in 5s..."
       sleep 5
     done
+    if [ "$pull_success" = "false" ]; then
+      log "ERROR: All image pull attempts failed"
+    fi
 
     # Verify image was pulled
     if ! docker image inspect ${var.controller_image} >/dev/null 2>&1; then
@@ -218,6 +254,9 @@ runcmd:
     # Run controller
     log "Starting controller container"
     # Mount /etc/agentium read-write so the controller can clean stale auth path directories.
+    # Note: Controller logs go directly to Cloud Logging via the API, not stdout.
+    # We capture stderr here for any docker/container errors.
+    set +e  # Don't exit on error, capture it
     docker run --rm \
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v /etc/agentium:/etc/agentium:rw \
@@ -230,8 +269,14 @@ runcmd:
       -e GOOGLE_CLOUD_PROJECT=${var.project_id} \
       --name agentium-controller \
       ${var.controller_image}
+    exit_code=$?
+    set -e
 
-    log "Controller exited"
+    if [ $exit_code -eq 0 ]; then
+      log "Controller exited successfully"
+    else
+      log "ERROR: Controller exited with code $exit_code"
+    fi
 EOF
 }
 
@@ -268,8 +313,9 @@ resource "google_compute_instance" "agentium" {
   }
 
   metadata = {
-    user-data           = local.cloud_init
-    agentium-session-id = var.session_id
+    user-data              = local.cloud_init
+    agentium-session-id    = var.session_id
+    google-logging-enabled = "true"
   }
 
   scheduling {
