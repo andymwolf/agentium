@@ -1,7 +1,7 @@
 # Aider Runtime Dockerfile
 # This image provides the runtime environment for Aider
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Version build args
 ARG VERSION=dev
