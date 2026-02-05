@@ -28,12 +28,13 @@ type JudgeResult struct {
 
 // judgeRunParams holds parameters for running a judge agent.
 type judgeRunParams struct {
-	CompletedPhase TaskPhase
-	PhaseOutput    string
-	ReviewFeedback string
-	Iteration      int
-	MaxIterations  int
-	PhaseIteration int // Within-phase iteration (1-indexed) for scoped feedback
+	CompletedPhase  TaskPhase
+	PhaseOutput     string
+	ReviewFeedback  string
+	Iteration       int
+	MaxIterations   int
+	PhaseIteration  int    // Within-phase iteration (1-indexed) for scoped feedback
+	PriorDirectives string // Judge's own prior ITERATE directives for loop detection
 }
 
 // judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
@@ -99,20 +100,6 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),
-		}
-	}
-
-	// Inject eval memory context for iteration awareness
-	// Use iteration-scoped context so judge only sees current iteration's feedback
-	if c.memoryStore != nil {
-		// Build context scoped to the current task and phase iteration
-		taskID := taskKey(c.activeTaskType, c.activeTask)
-		evalCtx := c.memoryStore.BuildCurrentIterationEvalContext(taskID, params.PhaseIteration)
-		if evalCtx != "" {
-			if session.IterationContext == nil {
-				session.IterationContext = &agent.IterationContext{}
-			}
-			session.IterationContext.MemoryContext = evalCtx
 		}
 	}
 
@@ -230,6 +217,12 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	sb.WriteString(fmt.Sprintf("Repository: %s\n", c.config.Repository))
 	sb.WriteString(fmt.Sprintf("Issue: #%s\n", c.activeTask))
 	sb.WriteString(fmt.Sprintf("Iteration: %d/%d\n\n", params.Iteration, params.MaxIterations))
+
+	if params.PriorDirectives != "" {
+		sb.WriteString("## Your Prior Directives\n\n")
+		sb.WriteString(params.PriorDirectives)
+		sb.WriteString("\n")
+	}
 
 	sb.WriteString("## Reviewer's Feedback\n\n")
 	if params.ReviewFeedback != "" {

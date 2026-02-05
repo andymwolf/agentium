@@ -256,6 +256,123 @@ func TestBuildEvalContext_FiltersByTaskID(t *testing.T) {
 	}
 }
 
+func TestBuildJudgeHistoryContext_EmptyOnIteration1(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "fix tests", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 1)
+	if ctx != "" {
+		t.Errorf("expected empty context on iteration 1, got %q", ctx)
+	}
+}
+
+func TestBuildJudgeHistoryContext_EmptyStore(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{})
+	ctx := s.BuildJudgeHistoryContext("issue:123", 3)
+	if ctx != "" {
+		t.Errorf("expected empty context for empty store, got %q", ctx)
+	}
+}
+
+func TestBuildJudgeHistoryContext_OnlyJudgeDirectives(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "fix auth errors", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "reviewer says tests fail", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: PhaseResult, Content: "PLAN completed", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: JudgeDirective, Content: "add unit tests", Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: EvalFeedback, Content: "reviewer says coverage low", Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 3)
+
+	// Should contain JudgeDirective entries from iterations 1 and 2
+	if !strings.Contains(ctx, "[iter 1] fix auth errors") {
+		t.Error("missing iter 1 judge directive")
+	}
+	if !strings.Contains(ctx, "[iter 2] add unit tests") {
+		t.Error("missing iter 2 judge directive")
+	}
+
+	// Should NOT contain EvalFeedback or PhaseResult
+	if strings.Contains(ctx, "reviewer says") {
+		t.Error("should not contain EvalFeedback entries")
+	}
+	if strings.Contains(ctx, "PLAN completed") {
+		t.Error("should not contain PhaseResult entries")
+	}
+}
+
+func TestBuildJudgeHistoryContext_ExcludesCurrentIteration(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "prior directive", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: JudgeDirective, Content: "current directive", Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 2)
+
+	if !strings.Contains(ctx, "prior directive") {
+		t.Error("missing prior iteration directive")
+	}
+	if strings.Contains(ctx, "current directive") {
+		t.Error("should not contain current iteration directive")
+	}
+}
+
+func TestBuildJudgeHistoryContext_FiltersByTaskID(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "task1 directive", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: JudgeDirective, Content: "task2 directive", Iteration: 1, PhaseIteration: 1, TaskID: "issue:456", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 2)
+
+	if !strings.Contains(ctx, "task1 directive") {
+		t.Error("missing task1 directive")
+	}
+	if strings.Contains(ctx, "task2 directive") {
+		t.Error("should not contain task2 directive")
+	}
+}
+
+func TestBuildJudgeHistoryContext_RespectsBudget(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 50})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "short", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: JudgeDirective, Content: strings.Repeat("x", 200), Iteration: 2, PhaseIteration: 2, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 3)
+
+	if !strings.Contains(ctx, "short") {
+		t.Error("first item should fit within budget")
+	}
+	if strings.Contains(ctx, strings.Repeat("x", 200)) {
+		t.Error("long item should be cut by budget")
+	}
+}
+
+func TestBuildJudgeHistoryContext_IncludesIterationTags(t *testing.T) {
+	s := NewStore(t.TempDir(), Config{ContextBudget: 5000})
+	s.data.Entries = []Entry{
+		{Type: JudgeDirective, Content: "directive one", Iteration: 1, PhaseIteration: 1, TaskID: "issue:123", Timestamp: time.Now()},
+		{Type: JudgeDirective, Content: "directive two", Iteration: 3, PhaseIteration: 3, TaskID: "issue:123", Timestamp: time.Now()},
+	}
+
+	ctx := s.BuildJudgeHistoryContext("issue:123", 5)
+
+	if !strings.Contains(ctx, "- [iter 1] directive one") {
+		t.Error("missing formatted iter 1 tag")
+	}
+	if !strings.Contains(ctx, "- [iter 3] directive two") {
+		t.Error("missing formatted iter 3 tag")
+	}
+}
+
 func TestBuildCurrentIterationEvalContext_Empty(t *testing.T) {
 	s := NewStore(t.TempDir(), Config{})
 	ctx := s.BuildCurrentIterationEvalContext("", 1)
