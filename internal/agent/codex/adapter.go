@@ -47,8 +47,11 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 		"AGENTIUM_WORKDIR":    "/workspace",
 	}
 
-	// Codex needs an API key: prefer codex_api_key, fall back to openai_api_key
-	if key, ok := session.Metadata["codex_api_key"]; ok {
+	// Inject OpenAI API key from credentials if available (highest precedence)
+	if session.Credentials != nil && session.Credentials.OpenAIAccessToken != "" {
+		env["OPENAI_API_KEY"] = session.Credentials.OpenAIAccessToken
+	} else if key, ok := session.Metadata["codex_api_key"]; ok {
+		// Fall back to metadata: prefer codex_api_key, then openai_api_key
 		env["CODEX_API_KEY"] = key
 	} else if key, ok := session.Metadata["openai_api_key"]; ok {
 		env["OPENAI_API_KEY"] = key

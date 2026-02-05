@@ -20,6 +20,13 @@ type IterationContext struct {
 	SubTaskID         string // Unique ID for delegation tracking
 }
 
+// InjectedCredentials contains OAuth tokens injected from the task request.
+// These are used instead of system-level API keys when present.
+type InjectedCredentials struct {
+	AnthropicAccessToken string // Anthropic OAuth access token
+	OpenAIAccessToken    string // OpenAI OAuth access token
+}
+
 // Session represents an agent session with all necessary context
 type Session struct {
 	ID               string
@@ -32,14 +39,15 @@ type Session struct {
 	MaxDuration      string
 	Prompt           string
 	Metadata         map[string]string
-	ClaudeAuthMode   string            // "api" or "oauth"
-	SystemPrompt     string            // Content of SYSTEM.md (safety constraints, workflow, status signals)
-	ProjectPrompt    string            // Content of .agentium/AGENTS.md from target repo (may be empty)
-	ActiveTask       string            // The single issue number currently being worked on
-	ExistingWork     *ExistingWork     // Prior work detected on GitHub for the active task
-	IterationContext *IterationContext // Phase-aware skill context (nil = legacy mode)
-	Interactive      bool              // When true, omit auto-accept permission flags
-	PackagePath      string            // Monorepo: relative path from repo root (e.g., "packages/core")
+	ClaudeAuthMode   string               // "api" or "oauth"
+	SystemPrompt     string               // Content of SYSTEM.md (safety constraints, workflow, status signals)
+	ProjectPrompt    string               // Content of .agentium/AGENTS.md from target repo (may be empty)
+	ActiveTask       string               // The single issue number currently being worked on
+	ExistingWork     *ExistingWork        // Prior work detected on GitHub for the active task
+	IterationContext *IterationContext    // Phase-aware skill context (nil = legacy mode)
+	Interactive      bool                 // When true, omit auto-accept permission flags
+	PackagePath      string               // Monorepo: relative path from repo root (e.g., "packages/core")
+	Credentials      *InjectedCredentials // Injected OAuth credentials (takes precedence over system API keys)
 }
 
 // IterationResult represents the outcome of a single agent iteration

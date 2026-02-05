@@ -47,8 +47,11 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 		"AGENTIUM_WORKDIR":    "/workspace",
 	}
 
-	// Aider needs ANTHROPIC_API_KEY for Claude models
-	if key, ok := session.Metadata["anthropic_api_key"]; ok {
+	// Inject Anthropic API key from credentials if available (highest precedence)
+	if session.Credentials != nil && session.Credentials.AnthropicAccessToken != "" {
+		env["ANTHROPIC_API_KEY"] = session.Credentials.AnthropicAccessToken
+	} else if key, ok := session.Metadata["anthropic_api_key"]; ok {
+		// Fall back to metadata
 		env["ANTHROPIC_API_KEY"] = key
 	}
 

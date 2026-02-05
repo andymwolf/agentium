@@ -1,12 +1,36 @@
 import { z } from 'zod';
 
 /**
+ * OAuth token credential for a provider
+ */
+export const ProviderCredentialSchema = z.object({
+  access_token: z.string().min(1),
+  token_type: z.enum(['Bearer']).optional().default('Bearer'),
+});
+
+/**
+ * Credentials for LLM providers
+ */
+export const CredentialsSchema = z.object({
+  anthropic: ProviderCredentialSchema.optional(),
+  openai: ProviderCredentialSchema.optional(),
+});
+
+/**
+ * Worker configuration for a phase
+ */
+export const WorkerConfigSchema = z.object({
+  adapter: z.string().min(1),
+});
+
+/**
  * Phase configuration for custom workflow phases
  */
 export const PhaseConfigSchema = z.object({
   name: z.string().min(1),
   max_iterations: z.number().int().positive().optional(),
   prompt: z.string().optional(),
+  worker: WorkerConfigSchema.optional(),
 });
 
 /**
@@ -81,6 +105,7 @@ export const TaskConfigSchema = z
     prompt_context: PromptContextSchema.optional(),
     behaviors: BehaviorsSchema.optional(),
     webhook: WebhookConfigSchema.optional(),
+    credentials: CredentialsSchema.optional(),
   })
   .refine(
     (data) => {
@@ -100,6 +125,16 @@ export const TaskConfigSchema = z
  * Task configuration type
  */
 export type TaskConfig = z.infer<typeof TaskConfigSchema>;
+
+/**
+ * Provider credential type
+ */
+export type ProviderCredential = z.infer<typeof ProviderCredentialSchema>;
+
+/**
+ * Credentials type
+ */
+export type Credentials = z.infer<typeof CredentialsSchema>;
 
 /**
  * Task accepted response

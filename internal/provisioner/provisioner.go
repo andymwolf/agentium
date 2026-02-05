@@ -48,6 +48,18 @@ type CodexAuthConfig struct {
 	AuthJSONBase64 string `json:"auth_json_base64,omitempty"`
 }
 
+// ProviderCredential represents an OAuth token for an LLM provider
+type ProviderCredential struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type,omitempty"`
+}
+
+// Credentials contains injected OAuth credentials for LLM providers
+type Credentials struct {
+	Anthropic *ProviderCredential `json:"anthropic,omitempty"`
+	OpenAI    *ProviderCredential `json:"openai,omitempty"`
+}
+
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
 	ID            string                `json:"id"`
@@ -61,6 +73,7 @@ type SessionConfig struct {
 	GitHub        GitHubConfig          `json:"github"`
 	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
 	CodexAuth     CodexAuthConfig       `json:"codex_auth,omitempty"`
+	Credentials   *Credentials          `json:"credentials,omitempty"` // Injected OAuth credentials for LLM providers
 	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
