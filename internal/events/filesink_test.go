@@ -13,7 +13,7 @@ func TestFileSink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	t.Run("create and write events", func(t *testing.T) {
 		sink, err := NewFileSink(tmpDir)
@@ -28,7 +28,7 @@ func TestFileSink(t *testing.T) {
 		}
 
 		// Write events
-		events := []AgentEvent{
+		testEvents := []AgentEvent{
 			{
 				Timestamp: time.Now(),
 				SessionID: "session-1",
@@ -50,19 +50,19 @@ func TestFileSink(t *testing.T) {
 			},
 		}
 
-		if err := sink.Write(events); err != nil {
-			t.Fatalf("failed to write events: %v", err)
+		if writeErr := sink.Write(testEvents); writeErr != nil {
+			t.Fatalf("failed to write events: %v", writeErr)
 		}
 
 		// Close sink
-		if err := sink.Close(); err != nil {
-			t.Fatalf("failed to close sink: %v", err)
+		if closeErr := sink.Close(); closeErr != nil {
+			t.Fatalf("failed to close sink: %v", closeErr)
 		}
 
 		// Read back events
-		readEvents, err := ReadEvents(sink.Path())
-		if err != nil {
-			t.Fatalf("failed to read events: %v", err)
+		readEvents, readErr := ReadEvents(sink.Path())
+		if readErr != nil {
+			t.Fatalf("failed to read events: %v", readErr)
 		}
 
 		if len(readEvents) != 2 {
@@ -79,35 +79,58 @@ func TestFileSink(t *testing.T) {
 
 	t.Run("append mode", func(t *testing.T) {
 		// Create new temp dir for this test
-		dir, err := os.MkdirTemp("", "events-append-*")
-		if err != nil {
-			t.Fatalf("failed to create temp dir: %v", err)
+		dir, dirErr := os.MkdirTemp("", "events-append-*")
+		if dirErr != nil {
+			t.Fatalf("failed to create temp dir: %v", dirErr)
 		}
-		defer os.RemoveAll(dir)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 		// First write
-		sink1, _ := NewFileSink(dir)
-		sink1.WriteOne(AgentEvent{Type: EventText, Content: "First"})
-		sink1.Close()
+		sink1, err1 := NewFileSink(dir)
+		if err1 != nil {
+			t.Fatalf("failed to create first sink: %v", err1)
+		}
+		if err := sink1.WriteOne(AgentEvent{Type: EventText, Content: "First"}); err != nil {
+			t.Fatalf("failed to write first event: %v", err)
+		}
+		if err := sink1.Close(); err != nil {
+			t.Fatalf("failed to close first sink: %v", err)
+		}
 
 		// Second write (append)
-		sink2, _ := NewFileSink(dir)
-		sink2.WriteOne(AgentEvent{Type: EventText, Content: "Second"})
-		sink2.Close()
+		sink2, err2 := NewFileSink(dir)
+		if err2 != nil {
+			t.Fatalf("failed to create second sink: %v", err2)
+		}
+		if err := sink2.WriteOne(AgentEvent{Type: EventText, Content: "Second"}); err != nil {
+			t.Fatalf("failed to write second event: %v", err)
+		}
+		if err := sink2.Close(); err != nil {
+			t.Fatalf("failed to close second sink: %v", err)
+		}
 
 		// Verify both events are present
-		events, _ := ReadEvents(filepath.Join(dir, DefaultFilename))
-		if len(events) != 2 {
-			t.Errorf("expected 2 events after append, got %d", len(events))
+		readEvents, readErr := ReadEvents(filepath.Join(dir, DefaultFilename))
+		if readErr != nil {
+			t.Fatalf("failed to read events: %v", readErr)
+		}
+		if len(readEvents) != 2 {
+			t.Errorf("expected 2 events after append, got %d", len(readEvents))
 		}
 	})
 
 	t.Run("write empty slice", func(t *testing.T) {
-		dir, _ := os.MkdirTemp("", "events-empty-*")
-		defer os.RemoveAll(dir)
+		dir, dirErr := os.MkdirTemp("", "events-empty-*")
+		if dirErr != nil {
+			t.Fatalf("failed to create temp dir: %v", dirErr)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
-		sink, _ := NewFileSink(dir)
-		defer sink.Close()
+		sink, sinkErr := NewFileSink(dir)
+		if sinkErr != nil {
+			t.Fatalf("failed to create sink: %v", sinkErr)
+		}
+		t.Cleanup(func() { _ = sink.Close() })
 
 		// Writing empty slice should not error
 		if err := sink.Write([]AgentEvent{}); err != nil {
@@ -116,11 +139,19 @@ func TestFileSink(t *testing.T) {
 	})
 
 	t.Run("double close", func(t *testing.T) {
-		dir, _ := os.MkdirTemp("", "events-double-*")
-		defer os.RemoveAll(dir)
+		dir, dirErr := os.MkdirTemp("", "events-double-*")
+		if dirErr != nil {
+			t.Fatalf("failed to create temp dir: %v", dirErr)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
-		sink, _ := NewFileSink(dir)
-		sink.Close()
+		sink, sinkErr := NewFileSink(dir)
+		if sinkErr != nil {
+			t.Fatalf("failed to create sink: %v", sinkErr)
+		}
+		if err := sink.Close(); err != nil {
+			t.Fatalf("first Close() returned error: %v", err)
+		}
 
 		// Second close should not error
 		if err := sink.Close(); err != nil {
@@ -168,7 +199,7 @@ func TestFilterByType(t *testing.T) {
 }
 
 func TestFilterByIteration(t *testing.T) {
-	events := []AgentEvent{
+	testEvents := []AgentEvent{
 		{Iteration: 1, Content: "iter1-a"},
 		{Iteration: 1, Content: "iter1-b"},
 		{Iteration: 2, Content: "iter2-a"},
@@ -176,23 +207,37 @@ func TestFilterByIteration(t *testing.T) {
 	}
 
 	t.Run("filter by iteration 1", func(t *testing.T) {
-		result := FilterByIteration(events, 1)
+		result := FilterByIteration(testEvents, 1)
 		if len(result) != 2 {
 			t.Errorf("expected 2 events for iteration 1, got %d", len(result))
 		}
 	})
 
 	t.Run("filter by iteration 2", func(t *testing.T) {
-		result := FilterByIteration(events, 2)
+		result := FilterByIteration(testEvents, 2)
 		if len(result) != 1 {
 			t.Errorf("expected 1 event for iteration 2, got %d", len(result))
 		}
 	})
 
 	t.Run("filter by non-existent iteration", func(t *testing.T) {
-		result := FilterByIteration(events, 99)
+		result := FilterByIteration(testEvents, 99)
 		if len(result) != 0 {
 			t.Errorf("expected 0 events for iteration 99, got %d", len(result))
+		}
+	})
+
+	t.Run("iteration 0 returns all events", func(t *testing.T) {
+		result := FilterByIteration(testEvents, 0)
+		if len(result) != len(testEvents) {
+			t.Errorf("expected %d events for iteration 0, got %d", len(testEvents), len(result))
+		}
+	})
+
+	t.Run("negative iteration returns all events", func(t *testing.T) {
+		result := FilterByIteration(testEvents, -1)
+		if len(result) != len(testEvents) {
+			t.Errorf("expected %d events for iteration -1, got %d", len(testEvents), len(result))
 		}
 	})
 }
@@ -206,10 +251,17 @@ func TestReadEvents_InvalidFile(t *testing.T) {
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
-		tmpFile, _ := os.CreateTemp("", "invalid-*.jsonl")
-		tmpFile.WriteString("not valid json\n")
-		tmpFile.Close()
-		defer os.Remove(tmpFile.Name())
+		tmpFile, createErr := os.CreateTemp("", "invalid-*.jsonl")
+		if createErr != nil {
+			t.Fatalf("failed to create temp file: %v", createErr)
+		}
+		if _, writeErr := tmpFile.WriteString("not valid json\n"); writeErr != nil {
+			t.Fatalf("failed to write to temp file: %v", writeErr)
+		}
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			t.Fatalf("failed to close temp file: %v", closeErr)
+		}
+		t.Cleanup(func() { _ = os.Remove(tmpFile.Name()) })
 
 		_, err := ReadEvents(tmpFile.Name())
 		if err == nil {

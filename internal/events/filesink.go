@@ -28,7 +28,8 @@ func NewFileSink(dir string) (*FileSink, error) {
 	path := filepath.Join(dir, DefaultFilename)
 
 	// Open file in append mode, create if not exists
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Use 0600 permissions for security (potential sensitive tool inputs/results)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open events file: %w", err)
 	}
@@ -126,10 +127,14 @@ func ReadEvents(path string) ([]AgentEvent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open events file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var events []AgentEvent
 	scanner := bufio.NewScanner(file)
+
+	// Set a larger buffer for potentially large JSON lines (1MB max)
+	const maxLineSize = 1024 * 1024
+	scanner.Buffer(make([]byte, 64*1024), maxLineSize)
 	lineNum := 0
 
 	for scanner.Scan() {
@@ -174,7 +179,12 @@ func FilterByType(events []AgentEvent, types ...EventType) []AgentEvent {
 }
 
 // FilterByIteration filters events by iteration number.
+// If iteration is 0 or negative, all events are returned.
 func FilterByIteration(events []AgentEvent, iteration int) []AgentEvent {
+	if iteration <= 0 {
+		return events
+	}
+
 	var filtered []AgentEvent
 	for _, event := range events {
 		if event.Iteration == iteration {

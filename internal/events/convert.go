@@ -1,7 +1,6 @@
 package events
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -17,8 +16,9 @@ type ConvertParams struct {
 	Timestamp time.Time // Optional: defaults to time.Now() if zero
 }
 
-// FromIterationResult auto-detects the adapter and converts events from an IterationResult.
-// It returns a slice of unified AgentEvents.
+// FromIterationResult converts events from an IterationResult to unified AgentEvents.
+// It type-switches on the event payload to handle Claude Code and Codex event formats.
+// The Adapter field in params is used to label the resulting events.
 func FromIterationResult(result *agent.IterationResult, params ConvertParams) []AgentEvent {
 	if result == nil || len(result.Events) == 0 {
 		return nil
@@ -170,35 +170,6 @@ func fromCodexEvent(ce codex.CodexEvent, params ConvertParams, ts time.Time) *Ag
 	}
 
 	return event
-}
-
-// FromCodexEventSlice converts a slice of interface{} (from IterationResult.Events)
-// that contains codex.CodexEvent values to unified AgentEvents.
-func FromCodexEventSlice(rawEvents []interface{}, params ConvertParams) []AgentEvent {
-	if len(rawEvents) == 0 {
-		return nil
-	}
-
-	ts := params.Timestamp
-	if ts.IsZero() {
-		ts = time.Now()
-	}
-
-	var events []AgentEvent
-	for _, evt := range rawEvents {
-		if ce, ok := evt.(codex.CodexEvent); ok {
-			converted := fromCodexEvent(ce, params, ts)
-			if converted != nil {
-				events = append(events, *converted)
-			}
-		}
-	}
-	return events
-}
-
-// ToJSON serializes an AgentEvent to JSON.
-func (e *AgentEvent) ToJSON() ([]byte, error) {
-	return json.Marshal(e)
 }
 
 // truncate shortens a string to the specified maximum length, adding "..." if truncated.

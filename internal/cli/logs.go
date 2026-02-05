@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/andywolf/agentium/internal/config"
+	"github.com/andywolf/agentium/internal/events"
 	"github.com/andywolf/agentium/internal/provisioner"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -82,12 +83,22 @@ func getLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Parse type filter into slice
+	// Parse and validate type filter
 	var types []string
 	if typeFilter != "" {
-		types = strings.Split(typeFilter, ",")
-		for i, t := range types {
-			types[i] = strings.TrimSpace(t)
+		for _, t := range strings.Split(typeFilter, ",") {
+			t = strings.TrimSpace(t)
+			if t == "" {
+				continue
+			}
+			if !events.IsValidEventType(t) {
+				validTypes := make([]string, 0, len(events.ValidEventTypes()))
+				for _, vt := range events.ValidEventTypes() {
+					validTypes = append(validTypes, string(vt))
+				}
+				return fmt.Errorf("invalid event type %q; valid types: %s", t, strings.Join(validTypes, ", "))
+			}
+			types = append(types, t)
 		}
 	}
 
