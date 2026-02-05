@@ -140,58 +140,16 @@ func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, ph
 	c.postPRComment(ctx, prNumber, body)
 }
 
-// planMarker is the delimiter used to identify the AGENTIUM PLAN section in issue bodies.
-const planMarker = "<!-- #AGENTIUM PLAN# -->"
-
-// updateIssuePlan updates the GitHub issue body to append or update the AGENTIUM PLAN section.
-// The original issue description is preserved above the plan marker.
+// postImplementationPlan posts the implementation plan as a comment on the GitHub issue.
+// This follows the "append only" principle - we never modify the issue body.
 // This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) updateIssuePlan(ctx context.Context, plan string) {
+func (c *Controller) postImplementationPlan(ctx context.Context, plan string) {
 	if c.activeTaskType != "issue" {
 		return
 	}
 
-	// Fetch current issue body
-	cmd := exec.CommandContext(ctx, "gh", "issue", "view", c.activeTask,
-		"--repo", c.config.Repository,
-		"--json", "body",
-		"--jq", ".body",
-	)
-	cmd.Env = c.envWithGitHubToken()
-	cmd.Dir = c.workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		c.logWarning("failed to fetch issue body for plan update: %v", err)
-		return
-	}
-
-	currentBody := strings.TrimSpace(string(output))
-
-	// Build new body: preserve original content, update/add plan section
-	var newBody string
-	if idx := strings.Index(currentBody, planMarker); idx >= 0 {
-		// Replace existing plan section
-		newBody = strings.TrimSpace(currentBody[:idx]) + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + plan
-	} else {
-		// Append new plan section
-		newBody = currentBody + "\n\n" + planMarker + "\n## Implementation Plan\n\n" + plan
-	}
-
-	// Update issue body via stdin to avoid "argument list too long" errors
-	cmd = exec.CommandContext(ctx, "gh", "issue", "edit", c.activeTask,
-		"--repo", c.config.Repository,
-		"--body-file", "-",
-	)
-	cmd.Env = c.envWithGitHubToken()
-	cmd.Dir = c.workDir
-	cmd.Stdin = strings.NewReader(newBody)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		c.logWarning("failed to update issue body with plan: %v (output: %s)", err, string(output))
-	} else {
-		c.logInfo("Updated issue #%s with implementation plan", c.activeTask)
-	}
+	body := fmt.Sprintf("## Implementation Plan\n\n%s", plan)
+	c.postIssueComment(ctx, body)
 }
 
 // getPRNumberForTask returns the PR number associated with the current task, if any.

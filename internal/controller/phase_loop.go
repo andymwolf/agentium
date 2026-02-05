@@ -385,9 +385,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (SIMPLE path, iteration %d)", currentPhase, iter)},
 						}, c.iteration, taskID)
 					}
-					// Update issue with plan (updateIssuePlan handles attachment/truncation internally)
+					// Post implementation plan as a comment (follows "append only" principle)
 					if phaseOutput != "" {
-						c.updateIssuePlan(ctx, phaseOutput)
+						c.postImplementationPlan(ctx, phaseOutput)
 					}
 					advanced = true
 					break
@@ -489,10 +489,10 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					}, c.iteration, taskID)
 				}
 
-				// Update issue with plan after PLAN phase advances
-				// (updateIssuePlan handles attachment/truncation internally)
+				// Post implementation plan as a comment after PLAN phase advances
+				// (postImplementationPlan follows "append only" principle)
 				if currentPhase == PhasePlan && phaseOutput != "" {
-					c.updateIssuePlan(ctx, phaseOutput)
+					c.postImplementationPlan(ctx, phaseOutput)
 				}
 
 				advanced = true
