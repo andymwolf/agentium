@@ -148,5 +148,17 @@ func (c *Controller) writeInteractiveAuthFile(filename, base64Data string) (stri
 		return "", fmt.Errorf("failed to write auth file: %w", err)
 	}
 
+	// When running as root (cloud mode), chown the auth files to agentium user
+	// so agent containers can read them. The controller runs as root but agent
+	// containers run as agentium (uid=1000).
+	if os.Getuid() == 0 {
+		if err := os.Chown(authDir, AgentiumUID, AgentiumGID); err != nil {
+			return "", fmt.Errorf("failed to chown auth directory: %w", err)
+		}
+		if err := os.Chown(authPath, AgentiumUID, AgentiumGID); err != nil {
+			return "", fmt.Errorf("failed to chown auth file: %w", err)
+		}
+	}
+
 	return authPath, nil
 }
