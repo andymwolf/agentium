@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/andywolf/agentium/internal/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -30,6 +31,10 @@ func Execute() error {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	// Set version for --version flag
+	rootCmd.Version = version.Short()
+	rootCmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .agentium.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "enable verbose output")

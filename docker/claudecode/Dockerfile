@@ -3,6 +3,19 @@
 
 FROM node:20-slim
 
+# Version build args
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# OCI image labels
+LABEL org.opencontainers.image.title="Agentium Claude Code Agent"
+LABEL org.opencontainers.image.description="Claude Code runtime environment for Agentium"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${COMMIT}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.source="https://github.com/andywolf/agentium"
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -50,6 +63,9 @@ RUN echo "agentium ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 # Create workspace and Claude config directory
 RUN mkdir -p /workspace && chown agentium:agentium /workspace && \
     mkdir -p /home/agentium/.claude && chown agentium:agentium /home/agentium/.claude
+
+# Write version file for runtime introspection
+RUN echo "${VERSION}" > /etc/agentium-version
 
 # Configure Claude Code sandbox for container environment
 # - sandbox.enabled=true: Keep sandbox active for security

@@ -68,7 +68,8 @@ jobs:
         run: |
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          go build -o agentium-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/agentium
+          LDFLAGS="-X github.com/andywolf/agentium/internal/version.Commit=${{ github.sha }}"
+          go build -ldflags="${LDFLAGS}" -o agentium-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/agentium
 
       - name: Build controller
         env:
@@ -77,4 +78,5 @@ jobs:
         run: |
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          go build -o controller-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/controller
+          LDFLAGS="-X github.com/andywolf/agentium/internal/version.Commit=${{ github.sha }}"
+          go build -ldflags="${LDFLAGS}" -o controller-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/controller
