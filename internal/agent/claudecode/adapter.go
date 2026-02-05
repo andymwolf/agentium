@@ -57,9 +57,18 @@ func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]str
 		"CLAUDE_CODE_USE_BEDROCK": "0",
 	}
 
-	// Add any custom metadata
+	// Inject Anthropic API key from credentials if available
+	// This takes precedence over file-based OAuth credentials
+	if session.Credentials != nil && session.Credentials.AnthropicAccessToken != "" {
+		env["ANTHROPIC_API_KEY"] = session.Credentials.AnthropicAccessToken
+	}
+
+	// Add any custom metadata (exclude sensitive keys)
 	for k, v := range session.Metadata {
-		env[fmt.Sprintf("AGENTIUM_%s", strings.ToUpper(k))] = v
+		lowerKey := strings.ToLower(k)
+		if !strings.Contains(lowerKey, "api_key") && !strings.Contains(lowerKey, "secret") && !strings.Contains(lowerKey, "token") {
+			env[fmt.Sprintf("AGENTIUM_%s", strings.ToUpper(k))] = v
+		}
 	}
 
 	return env

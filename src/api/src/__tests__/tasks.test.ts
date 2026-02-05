@@ -228,6 +228,47 @@ describe('POST /api/v1/tasks', () => {
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('accepted');
     });
+
+    it('should accept task config with credentials', async () => {
+      const response = await request(app)
+        .post('/api/v1/tasks')
+        .set('Authorization', `Bearer ${validApiKey}`)
+        .send({
+          repository: { url: 'https://github.com/test/repo', branch: 'main' },
+          phases: [{ name: 'implement', worker: { adapter: 'claude-code' } }],
+          credentials: {
+            anthropic: {
+              access_token: 'sk-ant-test-token',
+              token_type: 'Bearer',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('accepted');
+    });
+
+    it('should accept task config with both provider credentials', async () => {
+      const response = await request(app)
+        .post('/api/v1/tasks')
+        .set('Authorization', `Bearer ${validApiKey}`)
+        .send({
+          repository: { url: 'https://github.com/test/repo', branch: 'main' },
+          credentials: {
+            anthropic: {
+              access_token: 'sk-ant-test-token',
+              token_type: 'Bearer',
+            },
+            openai: {
+              access_token: 'sk-test-token',
+              token_type: 'Bearer',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('accepted');
+    });
   });
 });
 
