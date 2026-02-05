@@ -133,6 +133,15 @@ resource "google_project_iam_member" "compute_admin" {
   }
 }
 
+# Grant serviceAccountUser on itself so the VM can update its own instance metadata.
+# Without this, setMetadata operations fail with SERVICE_ACCOUNT_ACCESS_DENIED
+# because the service account cannot impersonate itself.
+resource "google_service_account_iam_member" "self_user" {
+  service_account_id = google_service_account.agentium.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.agentium.email}"
+}
+
 # Cloud-init script
 locals {
   # Note: Auth files are mounted by the controller to agent containers, not to the controller itself.
