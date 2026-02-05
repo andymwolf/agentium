@@ -143,9 +143,10 @@ func (s *Store) prune() int {
 	return excess
 }
 
-// GetPreviousIterationFeedback returns the EvalFeedback entries from the previous phase iteration.
+// GetPreviousIterationFeedback returns the EvalFeedback and JudgeDirective entries from the previous phase iteration.
 // This allows the reviewer to see what feedback was given in iteration N-1 so it can verify
-// whether the worker addressed that feedback.
+// whether the worker addressed that feedback, and allows the worker to see both the detailed
+// reviewer analysis (EvalFeedback) and the required action items from the judge (JudgeDirective).
 func (s *Store) GetPreviousIterationFeedback(taskID string, currentPhaseIteration int) []Entry {
 	if currentPhaseIteration <= 1 {
 		return nil
@@ -157,7 +158,7 @@ func (s *Store) GetPreviousIterationFeedback(taskID string, currentPhaseIteratio
 		if taskID != "" && e.TaskID != taskID {
 			continue
 		}
-		if e.Type == EvalFeedback && e.PhaseIteration == previousIteration {
+		if (e.Type == EvalFeedback || e.Type == JudgeDirective) && e.PhaseIteration == previousIteration {
 			result = append(result, e)
 		}
 	}

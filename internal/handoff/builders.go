@@ -46,15 +46,24 @@ func (b *Builder) BuildInputForPhase(taskID string, phase Phase) (string, error)
 }
 
 // buildPlanInput constructs input for the PLAN phase.
+// If a previous plan exists (from an ITERATE cycle), it's included so the worker
+// can modify the existing plan rather than starting from scratch.
 func (b *Builder) buildPlanInput(taskID string) (*PlanInput, error) {
 	issue := b.store.GetIssueContext(taskID)
 	if issue == nil {
 		return nil, fmt.Errorf("no issue context found for task %s", taskID)
 	}
 
-	return &PlanInput{
+	input := &PlanInput{
 		Issue: *issue,
-	}, nil
+	}
+
+	// Include previous plan if available (for ITERATE cycles)
+	if prevPlan := b.store.GetPlanOutput(taskID); prevPlan != nil {
+		input.PreviousPlan = prevPlan
+	}
+
+	return input, nil
 }
 
 // buildImplementInput constructs input for the IMPLEMENT phase.

@@ -1730,6 +1730,68 @@ func (c *Controller) determineActivePhase() TaskPhase {
 	return PhaseImplement
 }
 
+// buildIterateFeedbackSection constructs the feedback section for ITERATE prompts.
+// It retrieves the previous iteration's reviewer feedback (EvalFeedback) and judge
+// directives (JudgeDirective) from memory, formatting them into a structured section
+// that guides the worker on what must be addressed.
+//
+// The returned section contains:
+// - Guidance on how to interpret feedback types
+// - Judge directives (REQUIRED action items)
+// - Reviewer analysis (detailed context)
+//
+// Returns empty string if no feedback is available for the previous iteration.
+func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int) string {
+	if c.memoryStore == nil {
+		return ""
+	}
+
+	entries := c.memoryStore.GetPreviousIterationFeedback(taskID, phaseIteration)
+	if len(entries) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString("## Feedback from Previous Iteration\n\n")
+
+	// Guidance on how to interpret feedback
+	sb.WriteString("**How to use this feedback:**\n")
+	sb.WriteString("- **Reviewer feedback**: Detailed analysis - consider all points as context\n")
+	sb.WriteString("- **Judge directives**: Required action items - you MUST address these\n\n")
+
+	// Separate reviewer feedback and judge directives
+	var reviewerFeedback, judgeDirectives []string
+	for _, e := range entries {
+		switch e.Type {
+		case memory.EvalFeedback:
+			reviewerFeedback = append(reviewerFeedback, e.Content)
+		case memory.JudgeDirective:
+			judgeDirectives = append(judgeDirectives, e.Content)
+		}
+	}
+
+	// Judge directives first (required actions)
+	if len(judgeDirectives) > 0 {
+		sb.WriteString("### Judge Directives (REQUIRED)\n\n")
+		for _, d := range judgeDirectives {
+			sb.WriteString(d)
+			sb.WriteString("\n\n")
+		}
+	}
+
+	// Reviewer feedback second (context)
+	if len(reviewerFeedback) > 0 {
+		sb.WriteString("### Reviewer Analysis (Context)\n\n")
+		for _, f := range reviewerFeedback {
+			sb.WriteString(f)
+			sb.WriteString("\n\n")
+		}
+	}
+
+	return sb.String()
+}
+
 func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, error) {
 	// Build phase-aware prompt FIRST (before delegation check)
 	// This ensures both delegated and non-delegated paths use the same phase-appropriate prompt
@@ -1800,6 +1862,25 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			session.IterationContext.PhaseInput = phaseInput
 			handoffInjected = true
 			c.logInfo("Injected handoff context for phase %s (%d chars)", phase, len(phaseInput))
+		}
+	}
+
+	// Inject feedback from previous iteration for ITERATE cycles
+	// This ensures workers receive both reviewer analysis and judge directives
+	if c.memoryStore != nil {
+		taskID := taskKey(c.activeTaskType, c.activeTask)
+		state := c.taskStates[taskID]
+		if state != nil && state.PhaseIteration > 1 {
+			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration)
+			if feedbackSection != "" {
+				// Prepend to PhaseInput for maximum visibility
+				if session.IterationContext.PhaseInput != "" {
+					session.IterationContext.PhaseInput = feedbackSection + "\n\n" + session.IterationContext.PhaseInput
+				} else {
+					session.IterationContext.PhaseInput = feedbackSection
+				}
+				c.logInfo("Injected ITERATE feedback section (%d chars)", len(feedbackSection))
+			}
 		}
 	}
 

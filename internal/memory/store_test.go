@@ -402,20 +402,35 @@ func TestGetPreviousIterationFeedback_FiltersByTaskID(t *testing.T) {
 	}
 }
 
-func TestGetPreviousIterationFeedback_OnlyReturnsEvalFeedback(t *testing.T) {
+func TestGetPreviousIterationFeedback_OnlyReturnsFeedbackTypes(t *testing.T) {
 	s := NewStore(t.TempDir(), Config{})
 	s.UpdateWithPhaseIteration([]Signal{
 		{Type: EvalFeedback, Content: "eval feedback"},
+		{Type: JudgeDirective, Content: "judge directive"},
 		{Type: PhaseResult, Content: "phase result"},
 		{Type: KeyFact, Content: "key fact"},
 	}, 1, 1, "issue:42")
 
 	result := s.GetPreviousIterationFeedback("issue:42", 2)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 entry (only EvalFeedback), got %d", len(result))
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entries (EvalFeedback + JudgeDirective), got %d", len(result))
 	}
-	if result[0].Type != EvalFeedback {
-		t.Errorf("expected EvalFeedback type, got %s", result[0].Type)
+	// Check that both feedback types are returned
+	hasEval := false
+	hasJudge := false
+	for _, e := range result {
+		if e.Type == EvalFeedback {
+			hasEval = true
+		}
+		if e.Type == JudgeDirective {
+			hasJudge = true
+		}
+	}
+	if !hasEval {
+		t.Error("expected EvalFeedback in result")
+	}
+	if !hasJudge {
+		t.Error("expected JudgeDirective in result")
 	}
 }
 

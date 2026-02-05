@@ -7,6 +7,7 @@ import (
 
 // sectionOrder defines the priority of sections in the context output.
 var sectionOrder = []SignalType{
+	JudgeDirective,
 	EvalFeedback,
 	PhaseResult,
 	StepPending,
@@ -18,19 +19,21 @@ var sectionOrder = []SignalType{
 }
 
 var sectionHeaders = map[SignalType]string{
-	EvalFeedback: "Evaluator Feedback",
-	PhaseResult:  "Phase Results",
-	StepPending:  "Pending Steps",
-	KeyFact:      "Key Facts",
-	Decision:     "Decisions",
-	Error:        "Errors",
-	StepDone:     "Completed Steps",
-	FileModified: "Files Modified",
+	JudgeDirective: "Judge Directives",
+	EvalFeedback:   "Evaluator Feedback",
+	PhaseResult:    "Phase Results",
+	StepPending:    "Pending Steps",
+	KeyFact:        "Key Facts",
+	Decision:       "Decisions",
+	Error:          "Errors",
+	StepDone:       "Completed Steps",
+	FileModified:   "Files Modified",
 }
 
 // evalSectionOrder defines the priority of sections in the evaluator context output.
 // Only includes eval-relevant types, excluding agent-internal signals.
 var evalSectionOrder = []SignalType{
+	JudgeDirective,
 	EvalFeedback,
 	PhaseResult,
 }
@@ -52,7 +55,7 @@ func (s *Store) BuildEvalContext(taskID string) string {
 		if taskID != "" && e.TaskID != taskID {
 			continue
 		}
-		if e.Type == EvalFeedback || e.Type == PhaseResult {
+		if e.Type == EvalFeedback || e.Type == JudgeDirective || e.Type == PhaseResult {
 			groups[e.Type] = append(groups[e.Type], fmt.Sprintf("[iter %d] %s", e.Iteration, e.Content))
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/routing"
 )
 
@@ -1303,6 +1304,170 @@ func TestSanitizeBranchPrefix(t *testing.T) {
 			got := sanitizeBranchPrefix(tt.input)
 			if got != tt.want {
 				t.Errorf("sanitizeBranchPrefix(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildIterateFeedbackSection(t *testing.T) {
+	tests := []struct {
+		name        string
+		memoryStore bool
+		entries     []struct {
+			Type           memory.SignalType
+			Content        string
+			PhaseIteration int
+			TaskID         string
+		}
+		phaseIteration int
+		taskID         string
+		wantEmpty      bool
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name:        "nil memory store returns empty",
+			memoryStore: false,
+			wantEmpty:   true,
+		},
+		{
+			name:           "first iteration returns empty",
+			memoryStore:    true,
+			phaseIteration: 1,
+			wantEmpty:      true,
+		},
+		{
+			name:        "no feedback for previous iteration returns empty",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "some feedback", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 3, // Looking for iteration 2, but only iteration 1 exists
+			taskID:         "issue:42",
+			wantEmpty:      true,
+		},
+		{
+			name:        "returns reviewer feedback from previous iteration",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "Address the test coverage gap", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			wantContains: []string{
+				"## Feedback from Previous Iteration",
+				"### Reviewer Analysis (Context)",
+				"Address the test coverage gap",
+				"**How to use this feedback:**",
+			},
+		},
+		{
+			name:        "returns judge directive from previous iteration",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.JudgeDirective, Content: "Add unit tests for edge cases", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			wantContains: []string{
+				"## Feedback from Previous Iteration",
+				"### Judge Directives (REQUIRED)",
+				"Add unit tests for edge cases",
+			},
+		},
+		{
+			name:        "returns both reviewer feedback and judge directive",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "Detailed analysis of the implementation", PhaseIteration: 1, TaskID: "issue:42"},
+				{Type: memory.JudgeDirective, Content: "Fix the validation logic", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			wantContains: []string{
+				"### Reviewer Analysis (Context)",
+				"Detailed analysis of the implementation",
+				"### Judge Directives (REQUIRED)",
+				"Fix the validation logic",
+			},
+		},
+		{
+			name:        "filters by task ID",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "Feedback for issue 42", PhaseIteration: 1, TaskID: "issue:42"},
+				{Type: memory.EvalFeedback, Content: "Feedback for issue 99", PhaseIteration: 1, TaskID: "issue:99"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			wantContains:   []string{"Feedback for issue 42"},
+			wantNotContain: []string{"Feedback for issue 99"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				logger: log.New(io.Discard, "", 0),
+			}
+
+			if tt.memoryStore {
+				// Create a temp directory for the memory store
+				tempDir := t.TempDir()
+				store := memory.NewStore(tempDir, memory.Config{})
+
+				// Add entries
+				for _, e := range tt.entries {
+					store.UpdateWithPhaseIteration([]memory.Signal{
+						{Type: e.Type, Content: e.Content},
+					}, 1, e.PhaseIteration, e.TaskID)
+				}
+				c.memoryStore = store
+			}
+
+			got := c.buildIterateFeedbackSection(tt.taskID, tt.phaseIteration)
+
+			if tt.wantEmpty {
+				if got != "" {
+					t.Errorf("buildIterateFeedbackSection() = %q, want empty", got)
+				}
+				return
+			}
+
+			for _, substr := range tt.wantContains {
+				if !containsString(got, substr) {
+					t.Errorf("buildIterateFeedbackSection() missing %q in:\n%s", substr, got)
+				}
+			}
+			for _, substr := range tt.wantNotContain {
+				if containsString(got, substr) {
+					t.Errorf("buildIterateFeedbackSection() should not contain %q in:\n%s", substr, got)
+				}
 			}
 		})
 	}
