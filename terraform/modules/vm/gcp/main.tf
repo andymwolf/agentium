@@ -135,10 +135,9 @@ resource "google_project_iam_member" "compute_admin" {
 
 # Cloud-init script
 locals {
-  # Note: Auth files are mounted by the controller to agent containers, not to the controller itself.
-  # The controller reads auth files from /etc/agentium/ and mounts them when spawning agent containers.
-  # We no longer mount auth files directly to the controller to avoid Docker creating directories
-  # when files don't exist (which can happen due to cloud-init timing issues).
+  # Note: Auth credentials are passed via session.json and written to workspace by the controller.
+  # This workspace-based approach eliminates cloud-init timing issues and Docker directory
+  # creation problems that occurred with /etc/agentium file mounts.
 
   cloud_init = <<-EOF
 #cloud-config
@@ -149,23 +148,6 @@ write_files:
     owner: 'root:root'
     content: |
       ${var.session_config}
-  # Auth files use UID 1000 to match the agentium user in agent containers.
-  # The 'agentium' user doesn't exist on the host (Container-Optimized OS),
-  # so we use numeric UID/GID. Files are mounted read-only into containers.
-%{if var.claude_auth_mode == "oauth" && var.claude_auth_json != ""~}
-  - path: /etc/agentium/claude-auth.json
-    permissions: '0600'
-    owner: '1000:1000'
-    encoding: b64
-    content: ${var.claude_auth_json}
-%{endif~}
-%{if var.codex_auth_json != ""~}
-  - path: /etc/agentium/codex-auth.json
-    permissions: '0600'
-    owner: '1000:1000'
-    encoding: b64
-    content: ${var.codex_auth_json}
-%{endif~}
 
 runcmd:
   - |
@@ -193,17 +175,6 @@ runcmd:
       fi
       sleep 1
     done
-
-    # Fix ownership of auth files (cloud-init owner directive doesn't work on COS)
-    # Container runs as UID 1000, so files must be readable by that UID
-    if [ -f /etc/agentium/claude-auth.json ]; then
-      chown 1000:1000 /etc/agentium/claude-auth.json
-      log "Fixed ownership of claude-auth.json to 1000:1000"
-    fi
-    if [ -f /etc/agentium/codex-auth.json ]; then
-      chown 1000:1000 /etc/agentium/codex-auth.json
-      log "Fixed ownership of codex-auth.json to 1000:1000"
-    fi
 
     # Create workspace directory with tmpfs to ensure exec permission.
     # Container-Optimized OS mounts /home with noexec by default, which
@@ -246,11 +217,6 @@ runcmd:
     if ! docker image inspect ${var.controller_image} >/dev/null 2>&1; then
       log "ERROR: Failed to pull controller image after 3 attempts"
       exit 1
-    fi
-
-    # Debug: Verify OAuth credential file permissions after chown
-    if [ -f /etc/agentium/claude-auth.json ]; then
-      log "claude-auth.json permissions: $(ls -la /etc/agentium/claude-auth.json)"
     fi
 
     # Run controller
