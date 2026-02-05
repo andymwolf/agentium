@@ -40,9 +40,18 @@ jobs:
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           mkdir -p dist
-          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+
+          VERSION="${{ github.ref_name }}"
+          COMMIT="${{ github.sha }}"
+          BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          LDFLAGS="-s -w \
+            -X github.com/andywolf/agentium/internal/version.Version=${VERSION} \
+            -X github.com/andywolf/agentium/internal/version.Commit=${COMMIT} \
+            -X github.com/andywolf/agentium/internal/version.BuildDate=${BUILD_DATE}"
+
+          go build -ldflags="${LDFLAGS}" \
             -o dist/agentium-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/agentium
-          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+          go build -ldflags="${LDFLAGS}" \
             -o dist/controller-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/controller
 
       - name: Upload artifacts
@@ -125,5 +134,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

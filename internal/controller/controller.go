@@ -27,6 +27,7 @@ import (
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
 	"github.com/andywolf/agentium/internal/scope"
+	"github.com/andywolf/agentium/internal/version"
 	"github.com/andywolf/agentium/internal/workspace"
 	"github.com/andywolf/agentium/prompts/skills"
 )
@@ -59,9 +60,6 @@ const (
 	// MaxIssueBodyLen is the maximum length for issue body text before truncation.
 	MaxIssueBodyLen = 1000
 )
-
-// Version is the controller version, set at build time via ldflags.
-var Version = "dev"
 
 // TaskPhase represents the current phase of a task in its lifecycle
 type TaskPhase string
@@ -538,7 +536,7 @@ func (c *Controller) Run(ctx context.Context) error {
 // - Fetches task details (issues/PRs)
 // - Builds dependency graph
 func (c *Controller) initSession(ctx context.Context) error {
-	c.logInfo("Controller started (version %s)", Version)
+	c.logInfo("Controller started (%s)", version.Info())
 	c.logInfo("Starting session %s", c.config.ID)
 	c.logInfo("Repository: %s", c.config.Repository)
 	if len(c.config.Tasks) > 0 {
