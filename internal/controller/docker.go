@@ -90,25 +90,9 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		}
 	}
 
-	// Validate auth files exist in cloud mode before mounting
-	// This prevents Docker from creating directories at mount points when files are missing
-	// Only validate auth for the specific adapter being run to avoid false failures
-	if !c.config.Interactive {
-		switch params.Agent.Name() {
-		case "claude-code":
-			if c.config.ClaudeAuth.AuthMode == "oauth" {
-				if err := c.validateAuthFile("/etc/agentium/claude-auth.json", "Claude"); err != nil {
-					return nil, err
-				}
-			}
-		case "codex":
-			if c.config.CodexAuth.AuthJSONBase64 != "" {
-				if err := c.validateAuthFile("/etc/agentium/codex-auth.json", "Codex"); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
+	// Note: Auth file validation removed - we now use workspace fallback when
+	// /etc/agentium files are missing or corrupted (see mount logic below).
+	// This handles cloud-init timing issues and Docker directory creation gracefully.
 
 	// Build Docker arguments
 	args := []string{
