@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /agentium-controller ./cmd/controller
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.23
 
 # Version build args for labels and version file
 ARG VERSION=dev
