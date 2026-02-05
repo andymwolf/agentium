@@ -10,6 +10,8 @@ import (
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/agent/claudecode"
+	"github.com/andywolf/agentium/internal/agent/codex"
+	"github.com/andywolf/agentium/internal/agent/event"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/memory"
 )
@@ -108,10 +110,12 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	c.logTokenConsumption(result, params.Agent.Name(), params.Session)
 
 	// Log structured events at DEBUG level
-	if c.cloudLogger != nil && len(result.Events) > 0 {
-		c.logAgentEvents(result.Events)
+	if len(result.Events) > 0 {
+		c.logAgentEvents(result.Events, params.Agent.Name())
 		// Emit security audit events at INFO level
-		c.emitAuditEvents(result.Events, params.Agent.Name())
+		if c.cloudLogger != nil {
+			c.emitAuditEvents(result.Events, params.Agent.Name())
+		}
 	}
 
 	// Process memory signals using the adapter's parsed text content
@@ -250,24 +254,53 @@ func (c *Controller) prePullAgentImages(ctx context.Context) {
 	}
 }
 
-// logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.
-func (c *Controller) logAgentEvents(events []interface{}) {
+// logAgentEvents logs structured agent events at DEBUG level to Cloud Logging
+// and writes them to the file sink if configured. The adapterName parameter
+// identifies which adapter produced the events for proper conversion.
+func (c *Controller) logAgentEvents(events []interface{}, adapterName string) {
+	var unifiedEvents []*event.AgentEvent
+
 	for _, evt := range events {
-		se, ok := evt.(claudecode.StreamEvent)
-		if !ok {
+		var agentEvent *event.AgentEvent
+
+		// Convert adapter-specific events to unified AgentEvent
+		switch e := evt.(type) {
+		case claudecode.StreamEvent:
+			agentEvent = event.FromClaudeCode(e, c.config.ID, c.iteration)
+		case codex.CodexEvent:
+			agentEvent = event.FromCodex(e, c.config.ID, c.iteration)
+		default:
+			// Skip unknown event types
 			continue
 		}
-		labels := map[string]string{"event_type": string(se.Subtype)}
-		if se.ToolName != "" {
-			labels["tool_name"] = se.ToolName
+
+		unifiedEvents = append(unifiedEvents, agentEvent)
+
+		// Log to Cloud Logging if available
+		if c.cloudLogger != nil {
+			labels := map[string]string{
+				"event_type": string(agentEvent.Type),
+				"iteration":  fmt.Sprintf("%d", c.iteration),
+			}
+			for k, v := range agentEvent.Metadata {
+				labels[k] = v
+			}
+			msg := agentEvent.Content
+			if len(msg) > 2000 {
+				msg = msg[:2000] + "...(truncated)"
+			}
+			c.cloudLogger.LogWithLabels(gcp.SeverityDebug, msg, labels)
 		}
-		if se.Subtype == claudecode.BlockThinking {
-			labels["content_type"] = "thinking"
+	}
+
+	// Write unified events to file sink if configured
+	if c.eventSink != nil && len(unifiedEvents) > 0 {
+		if err := c.eventSink.WriteBatch(unifiedEvents); err != nil {
+			c.logWarning("failed to write events to sink: %v", err)
+		} else {
+			if err := c.eventSink.Flush(); err != nil {
+				c.logWarning("failed to flush event sink: %v", err)
+			}
 		}
-		msg := se.Content
-		if len(msg) > 2000 {
-			msg = msg[:2000] + "...(truncated)"
-		}
-		c.cloudLogger.LogWithLabels(gcp.SeverityDebug, msg, labels)
 	}
 }

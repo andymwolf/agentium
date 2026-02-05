@@ -380,6 +380,26 @@ func (p *GCPProvisioner) buildLogsArgs(sessionID string, opts LogsOptions) []str
 		}
 	}
 
+	// Filter by event type (e.g., tool_use,thinking)
+	if opts.EventType != "" {
+		eventTypes := strings.Split(opts.EventType, ",")
+		if len(eventTypes) == 1 {
+			filter += fmt.Sprintf(` AND jsonPayload.labels.event_type="%s"`, strings.TrimSpace(eventTypes[0]))
+		} else {
+			// Multiple event types: use OR
+			var typeFilters []string
+			for _, et := range eventTypes {
+				typeFilters = append(typeFilters, fmt.Sprintf(`jsonPayload.labels.event_type="%s"`, strings.TrimSpace(et)))
+			}
+			filter += fmt.Sprintf(` AND (%s)`, strings.Join(typeFilters, " OR "))
+		}
+	}
+
+	// Filter by iteration number
+	if opts.Iteration > 0 {
+		filter += fmt.Sprintf(` AND jsonPayload.labels.iteration="%d"`, opts.Iteration)
+	}
+
 	args := []string{
 		"logging", "read",
 		filter,
