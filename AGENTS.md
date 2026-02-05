@@ -142,9 +142,20 @@ Branch prefixes are determined by the first label on the issue:
 
 ### Commit Messages
 
+Use conventional commit prefixes for automated releases:
+
+| Prefix | When to use | Version bump |
+|--------|-------------|--------------|
+| `fix:` | Bug fixes | Patch (0.1.0 → 0.1.1) |
+| `feat:` | New features | Minor (0.1.0 → 0.2.0) |
+| `chore:` | Maintenance (no release) | None |
+| `docs:` | Documentation only | None |
+| `refactor:` | Code refactoring | None |
+| `test:` | Test changes only | None |
+
 Format:
 ```
-<short summary>
+<prefix> <short summary>
 
 <detailed description if needed>
 
