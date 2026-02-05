@@ -1311,9 +1311,9 @@ func TestSanitizeBranchPrefix(t *testing.T) {
 
 func TestBuildIterateFeedbackSection(t *testing.T) {
 	tests := []struct {
-		name             string
-		memoryStore      bool
-		entries          []struct {
+		name        string
+		memoryStore bool
+		entries     []struct {
 			Type           memory.SignalType
 			Content        string
 			PhaseIteration int
