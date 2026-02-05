@@ -10,6 +10,9 @@ on:
       - "internal/**"
       - "go.mod"
       - "go.sum"
+  schedule:
+    # Rebuild weekly to pick up new agent CLI versions (Claude Code, Codex, Aider)
+    - cron: "0 6 * * 1" # Every Monday at 6am UTC
   workflow_dispatch:
 
 env:
@@ -106,5 +109,7 @@ jobs:
             VERSION=dev
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          # Disable cache on scheduled builds to fetch latest agent CLI versions
+          no-cache: ${{ github.event_name == 'schedule' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
