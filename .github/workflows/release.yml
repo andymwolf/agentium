@@ -80,7 +80,7 @@ jobs:
           sha256sum * > checksums.txt
 
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
