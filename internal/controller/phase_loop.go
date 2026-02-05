@@ -457,7 +457,6 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			priorDirectives := ""
 			if c.memoryStore != nil && iter > 1 {
-				taskID := taskKey(c.activeTaskType, c.activeTask)
 				priorDirectives = c.memoryStore.BuildJudgeHistoryContext(taskID, iter)
 			}
 

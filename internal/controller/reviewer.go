@@ -17,12 +17,12 @@ type ReviewResult struct {
 
 // reviewRunParams holds parameters for running a reviewer agent.
 type reviewRunParams struct {
-	CompletedPhase       TaskPhase
-	PhaseOutput          string
-	Iteration            int
-	MaxIterations        int
-	PreviousFeedback       string // Feedback from iteration N-1 (for comparison)
-	WorkerHandoffSummary   string // What worker claims to have done this iteration
+	CompletedPhase          TaskPhase
+	PhaseOutput             string
+	Iteration               int
+	MaxIterations           int
+	PreviousFeedback        string // Feedback from iteration N-1 (for comparison)
+	WorkerHandoffSummary    string // What worker claims to have done this iteration
 	WorkerFeedbackResponses string // Worker's FEEDBACK_RESPONSE signals from current iteration
 }
 
