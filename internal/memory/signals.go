@@ -13,8 +13,9 @@ var validTypes = map[SignalType]bool{
 	StepPending:  true,
 	FileModified: true,
 	Error:        true,
-	EvalFeedback: true,
-	PhaseResult:  true,
+	EvalFeedback:    true,
+	PhaseResult:     true,
+	FeedbackResponse: true,
 }
 
 // ParseSignals extracts all memory signals from combined agent output.

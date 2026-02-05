@@ -13,8 +13,9 @@ const (
 	FileModified   SignalType = "FILE_MODIFIED"
 	Error          SignalType = "ERROR"
 	EvalFeedback   SignalType = "EVAL_FEEDBACK"
-	JudgeDirective SignalType = "JUDGE_DIRECTIVE"
-	PhaseResult    SignalType = "PHASE_RESULT"
+	JudgeDirective   SignalType = "JUDGE_DIRECTIVE"
+	PhaseResult      SignalType = "PHASE_RESULT"
+	FeedbackResponse SignalType = "FEEDBACK_RESPONSE"
 )
 
 // Signal is a parsed memory signal extracted from agent output.

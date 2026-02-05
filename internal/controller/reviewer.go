@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -20,8 +21,9 @@ type reviewRunParams struct {
 	PhaseOutput          string
 	Iteration            int
 	MaxIterations        int
-	PreviousFeedback     string // Feedback from iteration N-1 (for comparison)
-	WorkerHandoffSummary string // What worker claims to have done this iteration
+	PreviousFeedback       string // Feedback from iteration N-1 (for comparison)
+	WorkerHandoffSummary   string // What worker claims to have done this iteration
+	WorkerFeedbackResponses string // Worker's FEEDBACK_RESPONSE signals from current iteration
 }
 
 // runReviewer runs a reviewer agent against the completed phase output.
@@ -145,8 +147,14 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString(fmt.Sprintf("Repository: %s\n", c.config.Repository))
 	sb.WriteString(fmt.Sprintf("Issue: #%s\n\n", c.activeTask))
 
-	// Include previous iteration feedback for comparison (if iteration > 1)
-	if params.Iteration > 1 && params.PreviousFeedback != "" {
+	// Include worker's feedback responses or fall back to raw previous feedback
+	if params.Iteration > 1 && params.WorkerFeedbackResponses != "" {
+		sb.WriteString("## Worker's Response to Previous Feedback\n\n")
+		sb.WriteString("The worker provided the following responses to previous feedback points:\n\n")
+		sb.WriteString("```\n")
+		sb.WriteString(params.WorkerFeedbackResponses)
+		sb.WriteString("\n```\n\n")
+	} else if params.Iteration > 1 && params.PreviousFeedback != "" {
 		sb.WriteString("## Previous Iteration Feedback\n\n")
 		sb.WriteString("The following feedback was given in the previous iteration:\n\n")
 		sb.WriteString("```\n")
@@ -175,7 +183,7 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 
 	sb.WriteString("## Your Task\n\n")
 	sb.WriteString("Provide constructive, actionable review feedback on the phase output above.\n")
-	sb.WriteString("Be specific about what to improve. Do NOT emit any verdict — your role is to provide feedback only.\n\n")
+	sb.WriteString("Be specific about what to improve and indicate severity where relevant (e.g., critical bug, minor style issue, can be deferred).\n\n")
 
 	sb.WriteString("## Output Format\n\n")
 	sb.WriteString("**CRITICAL:** Output ONLY your feedback. Do NOT include:\n")
@@ -184,8 +192,14 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString("- Issue or PR metadata\n\n")
 	sb.WriteString("Start directly with your feedback content. Use concise bullet points or short paragraphs.\n")
 
-	// Add comparison task if we have previous feedback
-	if params.Iteration > 1 && params.PreviousFeedback != "" {
+	// Add comparison task if we have previous feedback or worker responses
+	if params.Iteration > 1 && params.WorkerFeedbackResponses != "" {
+		sb.WriteString("\n**Important:** Evaluate the worker's responses to previous feedback.\n")
+		sb.WriteString("- For ADDRESSED items: verify the claims against the actual phase output.\n")
+		sb.WriteString("- For DECLINED items: assess whether the justification is reasonable.\n")
+		sb.WriteString("- For PARTIAL items: note what remains to be done.\n")
+		sb.WriteString("- Are there any new issues introduced?\n")
+	} else if params.Iteration > 1 && params.PreviousFeedback != "" {
 		sb.WriteString("\n**Important:** Compare the current output against the previous iteration's feedback.\n")
 		sb.WriteString("- Did the worker address the issues raised previously?\n")
 		sb.WriteString("- What feedback items remain unresolved?\n")
@@ -193,6 +207,19 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	}
 
 	return sb.String()
+}
+
+// feedbackResponsePattern matches AGENTIUM_MEMORY: FEEDBACK_RESPONSE lines.
+var feedbackResponsePattern = regexp.MustCompile(`(?m)^AGENTIUM_MEMORY:\s+FEEDBACK_RESPONSE\s+(.+)$`)
+
+// extractFeedbackResponses parses FEEDBACK_RESPONSE signals from worker output.
+func extractFeedbackResponses(output string) []string {
+	matches := feedbackResponsePattern.FindAllStringSubmatch(output, -1)
+	results := make([]string, 0, len(matches))
+	for _, m := range matches {
+		results = append(results, m[1])
+	}
+	return results
 }
 
 // truncateString truncates a string to maxLen characters, adding "..." if truncated.

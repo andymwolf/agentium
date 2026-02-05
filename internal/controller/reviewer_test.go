@@ -27,7 +27,7 @@ func TestBuildReviewPrompt(t *testing.T) {
 		"#42",
 		"modify auth.go",
 		"constructive, actionable review feedback",
-		"Do NOT emit any verdict",
+		"indicate severity where relevant",
 	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {
@@ -155,5 +155,126 @@ func TestReviewerFallback_NotPRSummary(t *testing.T) {
 	// Verify failure fallback includes error info
 	if !strings.Contains(failureFallback, "API timeout") {
 		t.Error("failure fallback should include error information")
+	}
+}
+
+func TestExtractFeedbackResponses_ValidSignals(t *testing.T) {
+	output := `some output before
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [ADDRESSED] Fix nil pointer in auth handler - Added nil check at handler.go:45
+more output
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [DECLINED] Use sync.Map for concurrency - Current mutex is sufficient for our access pattern
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [PARTIAL] Improve test coverage - Added unit tests, integration tests deferred to follow-up
+trailing output`
+
+	responses := extractFeedbackResponses(output)
+	if len(responses) != 3 {
+		t.Fatalf("expected 3 responses, got %d", len(responses))
+	}
+
+	expected := []string{
+		"[ADDRESSED] Fix nil pointer in auth handler - Added nil check at handler.go:45",
+		"[DECLINED] Use sync.Map for concurrency - Current mutex is sufficient for our access pattern",
+		"[PARTIAL] Improve test coverage - Added unit tests, integration tests deferred to follow-up",
+	}
+	for i, exp := range expected {
+		if responses[i] != exp {
+			t.Errorf("response[%d] = %q, want %q", i, responses[i], exp)
+		}
+	}
+}
+
+func TestExtractFeedbackResponses_NoSignals(t *testing.T) {
+	output := "regular output with no feedback response signals\njust normal text"
+	responses := extractFeedbackResponses(output)
+	if len(responses) != 0 {
+		t.Fatalf("expected 0 responses, got %d", len(responses))
+	}
+}
+
+func TestExtractFeedbackResponses_MixedWithOtherSignals(t *testing.T) {
+	output := `AGENTIUM_MEMORY: KEY_FACT The API uses JWT tokens
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [ADDRESSED] Fix auth bug - Done
+AGENTIUM_MEMORY: STEP_DONE Implemented middleware
+AGENTIUM_MEMORY: FEEDBACK_RESPONSE [DECLINED] Refactor utils - Not needed
+AGENTIUM_MEMORY: ERROR Some error occurred`
+
+	responses := extractFeedbackResponses(output)
+	if len(responses) != 2 {
+		t.Fatalf("expected 2 responses, got %d", len(responses))
+	}
+	if responses[0] != "[ADDRESSED] Fix auth bug - Done" {
+		t.Errorf("response[0] = %q, want %q", responses[0], "[ADDRESSED] Fix auth bug - Done")
+	}
+	if responses[1] != "[DECLINED] Refactor utils - Not needed" {
+		t.Errorf("response[1] = %q, want %q", responses[1], "[DECLINED] Refactor utils - Not needed")
+	}
+}
+
+func TestExtractFeedbackResponses_EmptyOutput(t *testing.T) {
+	responses := extractFeedbackResponses("")
+	if len(responses) != 0 {
+		t.Fatalf("expected 0 responses for empty output, got %d", len(responses))
+	}
+}
+
+func TestBuildReviewPrompt_WorkerFeedbackResponses(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase:          PhasePlan,
+		PhaseOutput:             "Step 1: modify auth.go",
+		Iteration:               2,
+		MaxIterations:           3,
+		PreviousFeedback:        "Some old feedback",
+		WorkerFeedbackResponses: "[ADDRESSED] Fix auth - Done\n[DECLINED] Refactor - Not needed",
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	// Should contain worker feedback responses section
+	if !containsString(prompt, "Worker's Response to Previous Feedback") {
+		t.Error("expected 'Worker's Response to Previous Feedback' section")
+	}
+	if !containsString(prompt, "[ADDRESSED] Fix auth - Done") {
+		t.Error("expected feedback response content in prompt")
+	}
+
+	// Should NOT contain raw previous feedback (worker responses take priority)
+	if containsString(prompt, "Previous Iteration Feedback") {
+		t.Error("should not contain 'Previous Iteration Feedback' when worker responses are present")
+	}
+
+	// Should contain verification instructions
+	if !containsString(prompt, "ADDRESSED items: verify") {
+		t.Error("expected verification instructions for ADDRESSED items")
+	}
+}
+
+func TestBuildReviewPrompt_FallbackToPreviousFeedback(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase:   PhasePlan,
+		PhaseOutput:      "Step 1: modify auth.go",
+		Iteration:        2,
+		MaxIterations:    3,
+		PreviousFeedback: "Some old feedback",
+		// No WorkerFeedbackResponses — should fall back
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	// Should fall back to raw previous feedback
+	if !containsString(prompt, "Previous Iteration Feedback") {
+		t.Error("expected 'Previous Iteration Feedback' fallback section")
+	}
+	if containsString(prompt, "Worker's Response to Previous Feedback") {
+		t.Error("should not contain worker responses section when none provided")
 	}
 }
