@@ -139,8 +139,22 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 					args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
 				}
 			} else {
-				// In cloud mode, mount from VM path set up by provisioner
-				args = append(args, "-v", "/etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro")
+				// In cloud mode, try /etc/agentium first, fallback to workspace temp file
+				// This handles cases where cloud-init fails or Docker created a directory
+				etcPath := "/etc/agentium/claude-auth.json"
+				if info, err := os.Stat(etcPath); err == nil && !info.IsDir() {
+					// File exists and is not a directory - use it
+					args = append(args, "-v", etcPath+":/home/agentium/.claude/.credentials.json:ro")
+				} else {
+					// Fallback: write to workspace and mount from there
+					c.logWarning("Claude auth file missing/invalid at %s, using workspace fallback", etcPath)
+					authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
+					if err != nil {
+						c.logWarning("Failed to write Claude auth fallback: %v", err)
+					} else if authPath != "" {
+						args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
+					}
+				}
 			}
 		} else if c.config.ClaudeAuth.AuthMode != "" {
 			c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
@@ -156,8 +170,22 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 					args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
 				}
 			} else {
-				// In cloud mode, mount from VM path set up by provisioner
-				args = append(args, "-v", "/etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro")
+				// In cloud mode, try /etc/agentium first, fallback to workspace temp file
+				// This handles cases where cloud-init fails or Docker created a directory
+				etcPath := "/etc/agentium/codex-auth.json"
+				if info, err := os.Stat(etcPath); err == nil && !info.IsDir() {
+					// File exists and is not a directory - use it
+					args = append(args, "-v", etcPath+":/home/agentium/.codex/auth.json:ro")
+				} else {
+					// Fallback: write to workspace and mount from there
+					c.logWarning("Codex auth file missing/invalid at %s, using workspace fallback", etcPath)
+					authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
+					if err != nil {
+						c.logWarning("Failed to write Codex auth fallback: %v", err)
+					} else if authPath != "" {
+						args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
+					}
+				}
 			}
 		}
 	}
