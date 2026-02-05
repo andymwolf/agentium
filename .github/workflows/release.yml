@@ -95,13 +95,13 @@ jobs:
             context: .
             file: docker/controller/Dockerfile
           - name: claudecode
-            context: docker/claudecode
+            context: .
             file: docker/claudecode/Dockerfile
           - name: aider
-            context: docker/aider
+            context: .
             file: docker/aider/Dockerfile
           - name: codex
-            context: docker/codex
+            context: .
             file: docker/codex/Dockerfile
     steps:
       - uses: actions/checkout@v4
