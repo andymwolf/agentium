@@ -445,13 +445,20 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			reviewFeedbackComment := SummarizeForComment(reviewResult.Feedback, 250)
 			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewFeedbackComment)
 
+			priorDirectives := ""
+			if c.memoryStore != nil && iter > 1 {
+				taskID := taskKey(c.activeTaskType, c.activeTask)
+				priorDirectives = c.memoryStore.BuildJudgeHistoryContext(taskID, iter)
+			}
+
 			judgeResult, err := c.runJudge(ctx, judgeRunParams{
-				CompletedPhase: currentPhase,
-				PhaseOutput:    phaseOutput,
-				ReviewFeedback: reviewResult.Feedback,
-				Iteration:      iter,
-				MaxIterations:  maxIter,
-				PhaseIteration: iter,
+				CompletedPhase:  currentPhase,
+				PhaseOutput:     phaseOutput,
+				ReviewFeedback:  reviewResult.Feedback,
+				Iteration:       iter,
+				MaxIterations:   maxIter,
+				PhaseIteration:  iter,
+				PriorDirectives: priorDirectives,
 			})
 			if err != nil {
 				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)

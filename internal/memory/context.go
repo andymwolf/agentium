@@ -145,6 +145,50 @@ func (s *Store) BuildCurrentIterationEvalContext(taskID string, phaseIteration i
 	return result
 }
 
+// BuildJudgeHistoryContext generates a budget-aware list of the judge's own prior
+// ITERATE directives (JudgeDirective entries) from earlier phase iterations. This
+// enables the judge to detect diminishing-returns loops and redirect the worker
+// when stuck. Returns empty string if no prior directives exist (e.g. iteration 1).
+// If taskID is provided (non-empty), only entries for that task are included.
+func (s *Store) BuildJudgeHistoryContext(taskID string, currentPhaseIteration int) string {
+	if len(s.data.Entries) == 0 || currentPhaseIteration <= 1 {
+		return ""
+	}
+
+	// Collect only JudgeDirective entries from prior phase iterations
+	var items []string
+	for _, e := range s.data.Entries {
+		if taskID != "" && e.TaskID != taskID {
+			continue
+		}
+		if e.Type == JudgeDirective && e.PhaseIteration < currentPhaseIteration {
+			items = append(items, fmt.Sprintf("[iter %d] %s", e.PhaseIteration, e.Content))
+		}
+	}
+
+	if len(items) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	used := 0
+
+	for _, item := range items {
+		line := fmt.Sprintf("- %s\n", item)
+		if used+len(line) > s.contextBudget {
+			break
+		}
+		sb.WriteString(line)
+		used += len(line)
+	}
+
+	result := sb.String()
+	if result == "" {
+		return ""
+	}
+	return result
+}
+
 // BuildContext generates a budget-aware Markdown summary of the memory entries.
 // It groups entries by type and renders sections in priority order, stopping
 // when approaching the context budget limit.

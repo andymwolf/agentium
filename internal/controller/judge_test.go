@@ -1,6 +1,9 @@
 package controller
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseJudgeVerdict(t *testing.T) {
 	tests := []struct {
@@ -260,6 +263,83 @@ func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
 
 	if !containsString(prompt, "No feedback provided") {
 		t.Error("buildJudgePrompt() should indicate no feedback when ReviewFeedback is empty")
+	}
+}
+
+func TestBuildJudgePrompt_IncludesPriorDirectives(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase:  PhaseImplement,
+		PhaseOutput:     "code changes here",
+		ReviewFeedback:  "Still missing error handling",
+		Iteration:       3,
+		MaxIterations:   5,
+		PriorDirectives: "- [iter 1] Missing error handling for auth failures and no unit tests\n- [iter 2] Error handling added but unit tests still missing\n",
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if !containsString(prompt, "## Your Prior Directives") {
+		t.Error("buildJudgePrompt() missing Prior Directives section")
+	}
+	if !containsString(prompt, "[iter 1] Missing error handling") {
+		t.Error("buildJudgePrompt() missing iter 1 directive content")
+	}
+	if !containsString(prompt, "[iter 2] Error handling added") {
+		t.Error("buildJudgePrompt() missing iter 2 directive content")
+	}
+}
+
+func TestBuildJudgePrompt_NoPriorDirectivesOnIteration1(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase:  PhaseImplement,
+		PhaseOutput:     "code changes here",
+		ReviewFeedback:  "Looks good",
+		Iteration:       1,
+		MaxIterations:   5,
+		PriorDirectives: "",
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	if containsString(prompt, "Prior Directives") {
+		t.Error("buildJudgePrompt() should NOT include Prior Directives section on iteration 1")
+	}
+}
+
+func TestBuildJudgePrompt_PriorDirectivesBeforeReviewerFeedback(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "42",
+	}
+
+	params := judgeRunParams{
+		CompletedPhase:  PhaseImplement,
+		PhaseOutput:     "output",
+		ReviewFeedback:  "feedback",
+		Iteration:       2,
+		MaxIterations:   5,
+		PriorDirectives: "- [iter 1] some directive\n",
+	}
+
+	prompt := c.buildJudgePrompt(params)
+
+	priorIdx := strings.Index(prompt, "## Your Prior Directives")
+	reviewerIdx := strings.Index(prompt, "## Reviewer's Feedback")
+	if priorIdx == -1 || reviewerIdx == -1 {
+		t.Fatal("missing expected sections")
+	}
+	if priorIdx > reviewerIdx {
+		t.Error("Prior Directives section should appear before Reviewer's Feedback")
 	}
 }
 
