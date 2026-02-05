@@ -135,8 +135,10 @@ resource "google_project_iam_member" "compute_admin" {
 
 # Cloud-init script
 locals {
-  claude_auth_volume = var.claude_auth_mode == "oauth" ? "-v /etc/agentium/claude-auth.json:/home/agentium/.claude/.credentials.json:ro" : ""
-  codex_auth_volume  = var.codex_auth_json != "" ? "-v /etc/agentium/codex-auth.json:/home/agentium/.codex/auth.json:ro" : ""
+  # Note: Auth files are mounted by the controller to agent containers, not to the controller itself.
+  # The controller reads auth files from /etc/agentium/ and mounts them when spawning agent containers.
+  # We no longer mount auth files directly to the controller to avoid Docker creating directories
+  # when files don't exist (which can happen due to cloud-init timing issues).
 
   cloud_init = <<-EOF
 #cloud-config
@@ -261,8 +263,6 @@ runcmd:
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v /etc/agentium:/etc/agentium:rw \
       -v /home/workspace:/home/workspace \
-      ${local.claude_auth_volume} \
-      ${local.codex_auth_volume} \
       -e AGENTIUM_CONFIG_PATH=/etc/agentium/session.json \
       -e AGENTIUM_AUTH_MODE=${var.claude_auth_mode} \
       -e AGENTIUM_WORKDIR=/home/workspace \
