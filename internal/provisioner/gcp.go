@@ -380,6 +380,25 @@ func (p *GCPProvisioner) buildLogsArgs(sessionID string, opts LogsOptions) []str
 		}
 	}
 
+	// Filter by event types (when --events is used with --type)
+	if len(opts.TypeFilter) > 0 {
+		// Build OR clause for multiple types: labels.event_type="tool_use" OR labels.event_type="thinking"
+		var typeFilters []string
+		for _, t := range opts.TypeFilter {
+			typeFilters = append(typeFilters, fmt.Sprintf(`labels.event_type="%s"`, t))
+		}
+		if len(typeFilters) == 1 {
+			filter += " AND " + typeFilters[0]
+		} else {
+			filter += " AND (" + strings.Join(typeFilters, " OR ") + ")"
+		}
+	}
+
+	// Filter by iteration number
+	if opts.Iteration > 0 {
+		filter += fmt.Sprintf(` AND labels.iteration="%d"`, opts.Iteration)
+	}
+
 	args := []string{
 		"logging", "read",
 		filter,

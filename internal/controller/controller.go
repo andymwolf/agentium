@@ -21,6 +21,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
 	_ "github.com/andywolf/agentium/internal/agent/codex"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
+	"github.com/andywolf/agentium/internal/events"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
@@ -265,6 +266,9 @@ type Controller struct {
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
 	scopeValidator *scope.ScopeValidator // Validates file changes are within package scope (nil if not monorepo)
 
+	// Event logging support (for local debugging)
+	eventSink *events.FileSink // Local JSONL event sink (nil = disabled, only for interactive mode)
+
 	// Shutdown management
 	shutdownHooks []ShutdownHook
 	shutdownOnce  sync.Once
@@ -420,6 +424,17 @@ func New(config SessionConfig) (*Controller, error) {
 			}
 			c.adapters[DefaultFallbackAdapter] = a
 			c.logInfo("Initialized fallback adapter: %s", DefaultFallbackAdapter)
+		}
+	}
+
+	// Initialize local event sink for interactive mode (for debugging)
+	if config.Interactive {
+		eventSink, err := events.NewFileSink(workDir)
+		if err != nil {
+			logger.Printf("Warning: failed to initialize event sink: %v", err)
+		} else {
+			c.eventSink = eventSink
+			logger.Printf("Event sink initialized: %s", eventSink.Path())
 		}
 	}
 
@@ -1977,6 +1992,11 @@ func (c *Controller) gracefulShutdown() {
 		c.clearSensitiveData()
 
 		// Step 4: Close clients
+		if c.eventSink != nil {
+			if err := c.eventSink.Close(); err != nil {
+				c.logWarning("failed to close event sink: %v", err)
+			}
+		}
 		if c.metadataUpdater != nil {
 			if err := c.metadataUpdater.Close(); err != nil {
 				c.logWarning("failed to close metadata updater: %v", err)

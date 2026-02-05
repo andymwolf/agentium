@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/andywolf/agentium/internal/config"
@@ -20,7 +21,9 @@ Example:
   agentium logs agentium-abc12345
   agentium logs agentium-abc12345 --follow
   agentium logs agentium-abc12345 --events
-  agentium logs agentium-abc12345 --events --level debug`,
+  agentium logs agentium-abc12345 --events --level debug
+  agentium logs agentium-abc12345 --events --type tool_use,thinking
+  agentium logs agentium-abc12345 --events --iteration 3`,
 	Args: cobra.ExactArgs(1),
 	RunE: getLogs,
 }
@@ -33,6 +36,8 @@ func init() {
 	logsCmd.Flags().String("since", "", "Show logs since timestamp (e.g., 2024-01-01T00:00:00Z) or duration (e.g., 1h)")
 	logsCmd.Flags().Bool("events", false, "Show agent events (tool calls, decisions); implies --level=debug")
 	logsCmd.Flags().String("level", "info", "Minimum log level: debug, info, warning, error")
+	logsCmd.Flags().String("type", "", "Filter by event types (comma-separated, e.g., tool_use,thinking)")
+	logsCmd.Flags().Int("iteration", 0, "Filter by iteration number (0 = all iterations)")
 }
 
 func getLogs(cmd *cobra.Command, args []string) error {
@@ -60,6 +65,8 @@ func getLogs(cmd *cobra.Command, args []string) error {
 	sinceStr, _ := cmd.Flags().GetString("since")
 	showEvents, _ := cmd.Flags().GetBool("events")
 	level, _ := cmd.Flags().GetString("level")
+	typeFilter, _ := cmd.Flags().GetString("type")
+	iteration, _ := cmd.Flags().GetInt("iteration")
 
 	var since time.Time
 	if sinceStr != "" {
@@ -75,12 +82,23 @@ func getLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Parse type filter into slice
+	var types []string
+	if typeFilter != "" {
+		types = strings.Split(typeFilter, ",")
+		for i, t := range types {
+			types[i] = strings.TrimSpace(t)
+		}
+	}
+
 	logsOpts := provisioner.LogsOptions{
 		Follow:     follow,
 		Tail:       tail,
 		Since:      since,
 		ShowEvents: showEvents,
 		MinLevel:   level,
+		TypeFilter: types,
+		Iteration:  iteration,
 	}
 
 	logCh, errCh := prov.Logs(ctx, sessionID, logsOpts)

@@ -154,8 +154,10 @@ type LogsOptions struct {
 	Follow     bool
 	Tail       int
 	Since      time.Time
-	ShowEvents bool   // Include agent events (tool calls, decisions)
-	MinLevel   string // Minimum log level: debug, info, warning, error
+	ShowEvents bool     // Include agent events (tool calls, decisions)
+	MinLevel   string   // Minimum log level: debug, info, warning, error
+	TypeFilter []string // Filter by event types (e.g., "tool_use", "thinking")
+	Iteration  int      // Filter by iteration number (0 = all iterations)
 }
 
 // LogEntry represents a single log entry

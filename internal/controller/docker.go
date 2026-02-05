@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/agent/claudecode"
+	"github.com/andywolf/agentium/internal/agent/codex"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
+	"github.com/andywolf/agentium/internal/events"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
@@ -109,9 +113,14 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 
 	// Log structured events at DEBUG level
 	if c.cloudLogger != nil && len(result.Events) > 0 {
-		c.logAgentEvents(result.Events)
+		c.logAgentEvents(result.Events, params.Agent.Name())
 		// Emit security audit events at INFO level
 		c.emitAuditEvents(result.Events, params.Agent.Name())
+	}
+
+	// Write unified events to file sink (interactive mode only)
+	if c.eventSink != nil && len(result.Events) > 0 {
+		c.writeUnifiedEvents(result, params.Agent.Name())
 	}
 
 	// Process memory signals using the adapter's parsed text content
@@ -251,23 +260,72 @@ func (c *Controller) prePullAgentImages(ctx context.Context) {
 }
 
 // logAgentEvents logs structured agent events at DEBUG level to Cloud Logging.
-func (c *Controller) logAgentEvents(events []interface{}) {
-	for _, evt := range events {
-		se, ok := evt.(claudecode.StreamEvent)
-		if !ok {
+func (c *Controller) logAgentEvents(rawEvents []interface{}, adapterName string) {
+	iterationStr := strconv.Itoa(c.iteration)
+
+	for _, evt := range rawEvents {
+		labels := map[string]string{
+			"iteration": iterationStr,
+			"adapter":   adapterName,
+		}
+		var msg string
+
+		switch e := evt.(type) {
+		case claudecode.StreamEvent:
+			labels["event_type"] = string(e.Subtype)
+			if e.ToolName != "" {
+				labels["tool_name"] = e.ToolName
+			}
+			if e.Subtype == claudecode.BlockThinking {
+				labels["content_type"] = "thinking"
+			}
+			msg = e.Content
+
+		case codex.CodexEvent:
+			if e.Item == nil {
+				continue
+			}
+			labels["event_type"] = e.Item.Type
+			switch e.Item.Type {
+			case "command_execution":
+				labels["tool_name"] = "bash"
+				msg = e.Item.Command
+			case "file_change":
+				msg = e.Item.Action + ": " + e.Item.FilePath
+			case "agent_message":
+				msg = e.Item.Text
+			default:
+				msg = e.Item.Text
+			}
+
+		default:
 			continue
 		}
-		labels := map[string]string{"event_type": string(se.Subtype)}
-		if se.ToolName != "" {
-			labels["tool_name"] = se.ToolName
-		}
-		if se.Subtype == claudecode.BlockThinking {
-			labels["content_type"] = "thinking"
-		}
-		msg := se.Content
+
 		if len(msg) > 2000 {
 			msg = msg[:2000] + "...(truncated)"
 		}
 		c.cloudLogger.LogWithLabels(gcp.SeverityDebug, msg, labels)
+	}
+}
+
+// writeUnifiedEvents converts adapter events to unified AgentEvents and writes to the file sink.
+func (c *Controller) writeUnifiedEvents(result *agent.IterationResult, adapterName string) {
+	params := events.ConvertParams{
+		SessionID: c.config.ID,
+		Iteration: c.iteration,
+		Adapter:   adapterName,
+		Timestamp: time.Now(),
+	}
+
+	unifiedEvents := events.FromIterationResult(result, params)
+	if len(unifiedEvents) == 0 {
+		return
+	}
+
+	if err := c.eventSink.Write(unifiedEvents); err != nil {
+		c.logWarning("failed to write unified events: %v", err)
+	} else {
+		c.logInfo("Wrote %d unified events to %s", len(unifiedEvents), c.eventSink.Path())
 	}
 }
