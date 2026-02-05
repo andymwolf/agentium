@@ -3,11 +3,13 @@ package event
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/andywolf/agentium/internal/agent/claudecode"
 )
 
 func TestFromClaudeCode_Text(t *testing.T) {
+	before := time.Now().UTC()
 	se := claudecode.StreamEvent{
 		Type:    claudecode.EventAssistant,
 		Subtype: claudecode.BlockText,
@@ -15,6 +17,7 @@ func TestFromClaudeCode_Text(t *testing.T) {
 	}
 
 	evt := FromClaudeCode(se, "session-123", 1)
+	after := time.Now().UTC()
 
 	if evt.Type != EventText {
 		t.Errorf("Type = %q, want %q", evt.Type, EventText)
@@ -30,6 +33,13 @@ func TestFromClaudeCode_Text(t *testing.T) {
 	}
 	if evt.Iteration != 1 {
 		t.Errorf("Iteration = %d, want %d", evt.Iteration, 1)
+	}
+	// Verify Timestamp is set and within expected range
+	if evt.Timestamp.IsZero() {
+		t.Error("Timestamp should not be zero")
+	}
+	if evt.Timestamp.Before(before) || evt.Timestamp.After(after) {
+		t.Errorf("Timestamp = %v, want between %v and %v", evt.Timestamp, before, after)
 	}
 }
 

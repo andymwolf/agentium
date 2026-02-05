@@ -278,12 +278,18 @@ func (c *Controller) logAgentEvents(events []interface{}, adapterName string) {
 
 		// Log to Cloud Logging if available
 		if c.cloudLogger != nil {
+			// Restrict labels to a safe set to avoid exceeding label limits
+			// and high-cardinality issues. Only include short, bounded values.
 			labels := map[string]string{
 				"event_type": string(agentEvent.Type),
 				"iteration":  fmt.Sprintf("%d", c.iteration),
 			}
-			for k, v := range agentEvent.Metadata {
-				labels[k] = v
+			// Only copy safe metadata keys (bounded, short values)
+			safeKeys := []string{"tool_name", "action"}
+			for _, k := range safeKeys {
+				if v, ok := agentEvent.Metadata[k]; ok && len(v) <= 100 {
+					labels[k] = v
+				}
 			}
 			msg := agentEvent.Content
 			if len(msg) > 2000 {

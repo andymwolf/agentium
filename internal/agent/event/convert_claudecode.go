@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/andywolf/agentium/internal/agent/claudecode"
 )
@@ -9,6 +10,7 @@ import (
 // FromClaudeCode converts a Claude Code StreamEvent to a unified AgentEvent.
 func FromClaudeCode(se claudecode.StreamEvent, sessionID string, iteration int) *AgentEvent {
 	evt := &AgentEvent{
+		Timestamp: time.Now().UTC(),
 		SessionID: sessionID,
 		Iteration: iteration,
 		Adapter:   "claude-code",

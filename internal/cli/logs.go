@@ -67,6 +67,11 @@ func getLogs(cmd *cobra.Command, args []string) error {
 	eventType, _ := cmd.Flags().GetString("type")
 	iteration, _ := cmd.Flags().GetInt("iteration")
 
+	// If --type or --iteration are specified, implicitly enable --events
+	if eventType != "" || iteration > 0 {
+		showEvents = true
+	}
+
 	var since time.Time
 	if sinceStr != "" {
 		// Try parsing as duration first

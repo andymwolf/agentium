@@ -18,8 +18,9 @@ type FileSink struct {
 
 // NewFileSink creates a new FileSink that writes to the specified file path.
 // The file is created if it doesn't exist, or appended to if it does.
+// Uses mode 0600 for security since events may contain sensitive tool input/output.
 func NewFileSink(path string) (*FileSink, error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open event file: %w", err)
 	}

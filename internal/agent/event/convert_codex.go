@@ -1,12 +1,15 @@
 package event
 
 import (
+	"time"
+
 	"github.com/andywolf/agentium/internal/agent/codex"
 )
 
 // FromCodex converts a Codex CodexEvent to a unified AgentEvent.
 func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent {
 	evt := &AgentEvent{
+		Timestamp: time.Now().UTC(),
 		SessionID: sessionID,
 		Iteration: iteration,
 		Adapter:   "codex",
@@ -27,7 +30,7 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 				evt.Content = ce.Item.Output
 				evt.Summary = TruncateSummary(ce.Item.Command)
 				evt.Metadata = map[string]string{
-					"command": ce.Item.Command,
+					"action": "command_execution",
 				}
 
 			case "file_change":
@@ -35,8 +38,7 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 				evt.Summary = ce.Item.Action + ": " + ce.Item.FilePath
 				evt.Content = ce.Item.FilePath
 				evt.Metadata = map[string]string{
-					"file_path": ce.Item.FilePath,
-					"action":    ce.Item.Action,
+					"action": ce.Item.Action,
 				}
 
 			default:
@@ -46,6 +48,10 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 					evt.Content = ce.Item.Text
 				}
 			}
+		} else {
+			// item.completed with nil Item - provide meaningful fallback
+			evt.Type = EventSystem
+			evt.Summary = "item.completed"
 		}
 
 	case "item.delta", "response.output_text.delta":
