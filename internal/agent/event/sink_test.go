@@ -18,7 +18,7 @@ func TestFileSink_WriteAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileSink failed: %v", err)
 	}
-	defer sink.Close()
+	defer func() { _ = sink.Close() }()
 
 	// Write some events
 	evt1 := &AgentEvent{
@@ -43,13 +43,16 @@ func TestFileSink_WriteAndRead(t *testing.T) {
 		},
 	}
 
-	if err := sink.Write(evt1); err != nil {
+	err = sink.Write(evt1)
+	if err != nil {
 		t.Fatalf("Write(evt1) failed: %v", err)
 	}
-	if err := sink.Write(evt2); err != nil {
+	err = sink.Write(evt2)
+	if err != nil {
 		t.Fatalf("Write(evt2) failed: %v", err)
 	}
-	if err := sink.Flush(); err != nil {
+	err = sink.Flush()
+	if err != nil {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
@@ -58,14 +61,14 @@ func TestFileSink_WriteAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	var events []*AgentEvent
 	for scanner.Scan() {
 		var evt AgentEvent
-		if err := json.Unmarshal(scanner.Bytes(), &evt); err != nil {
-			t.Fatalf("Unmarshal failed: %v", err)
+		if unmarshalErr := json.Unmarshal(scanner.Bytes(), &evt); unmarshalErr != nil {
+			t.Fatalf("Unmarshal failed: %v", unmarshalErr)
 		}
 		events = append(events, &evt)
 	}
@@ -99,10 +102,12 @@ func TestFileSink_WriteBatch(t *testing.T) {
 		NewEvent("session-1", 1, "codex", EventText, "Third", "Third message"),
 	}
 
-	if err := sink.WriteBatch(events); err != nil {
+	err = sink.WriteBatch(events)
+	if err != nil {
 		t.Fatalf("WriteBatch failed: %v", err)
 	}
-	if err := sink.Close(); err != nil {
+	err = sink.Close()
+	if err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 
@@ -111,7 +116,7 @@ func TestFileSink_WriteBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
@@ -132,7 +137,7 @@ func TestFileSink_Path(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileSink failed: %v", err)
 	}
-	defer sink.Close()
+	defer func() { _ = sink.Close() }()
 
 	if sink.Path() != path {
 		t.Errorf("Path() = %q, want %q", sink.Path(), path)
@@ -148,10 +153,12 @@ func TestFileSink_AppendMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileSink (1) failed: %v", err)
 	}
-	if err := sink1.Write(NewEvent("s1", 1, "a", EventText, "First", "First")); err != nil {
+	err = sink1.Write(NewEvent("s1", 1, "a", EventText, "First", "First"))
+	if err != nil {
 		t.Fatalf("Write (1) failed: %v", err)
 	}
-	if err := sink1.Close(); err != nil {
+	err = sink1.Close()
+	if err != nil {
 		t.Fatalf("Close (1) failed: %v", err)
 	}
 
@@ -160,10 +167,12 @@ func TestFileSink_AppendMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileSink (2) failed: %v", err)
 	}
-	if err := sink2.Write(NewEvent("s1", 2, "a", EventText, "Second", "Second")); err != nil {
+	err = sink2.Write(NewEvent("s1", 2, "a", EventText, "Second", "Second"))
+	if err != nil {
 		t.Fatalf("Write (2) failed: %v", err)
 	}
-	if err := sink2.Close(); err != nil {
+	err = sink2.Close()
+	if err != nil {
 		t.Fatalf("Close (2) failed: %v", err)
 	}
 
@@ -172,7 +181,7 @@ func TestFileSink_AppendMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	lineCount := 0

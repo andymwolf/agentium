@@ -111,7 +111,7 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 
 	// Log structured events at DEBUG level
 	if len(result.Events) > 0 {
-		c.logAgentEvents(result.Events, params.Agent.Name())
+		c.logAgentEvents(result.Events)
 		// Emit security audit events at INFO level
 		if c.cloudLogger != nil {
 			c.emitAuditEvents(result.Events, params.Agent.Name())
@@ -255,9 +255,8 @@ func (c *Controller) prePullAgentImages(ctx context.Context) {
 }
 
 // logAgentEvents logs structured agent events at DEBUG level to Cloud Logging
-// and writes them to the file sink if configured. The adapterName parameter
-// identifies which adapter produced the events for proper conversion.
-func (c *Controller) logAgentEvents(events []interface{}, adapterName string) {
+// and writes them to the file sink if configured.
+func (c *Controller) logAgentEvents(events []interface{}) {
 	var unifiedEvents []*event.AgentEvent
 
 	for _, evt := range events {
@@ -284,16 +283,23 @@ func (c *Controller) logAgentEvents(events []interface{}, adapterName string) {
 				"event_type": string(agentEvent.Type),
 				"iteration":  fmt.Sprintf("%d", c.iteration),
 			}
-			// Only copy safe metadata keys (bounded, short values)
+			// Only copy safe metadata keys with bounded values to avoid
+			// exceeding Cloud Logging label limits (63 byte max).
 			safeKeys := []string{"tool_name", "action"}
 			for _, k := range safeKeys {
-				if v, ok := agentEvent.Metadata[k]; ok && len(v) <= 100 {
+				if v, ok := agentEvent.Metadata[k]; ok {
+					if len(v) > 63 {
+						v = v[:63]
+					}
 					labels[k] = v
 				}
 			}
-			msg := agentEvent.Content
-			if len(msg) > 2000 {
-				msg = msg[:2000] + "...(truncated)"
+			// Log Summary (not Content) to Cloud Logging to avoid leaking
+			// sensitive data from tool results, command output, etc.
+			// Full Content is only written to the local FileSink.
+			msg := agentEvent.Summary
+			if msg == "" {
+				msg = string(agentEvent.Type)
 			}
 			c.cloudLogger.LogWithLabels(gcp.SeverityDebug, msg, labels)
 		}

@@ -24,6 +24,11 @@ func NewFileSink(path string) (*FileSink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open event file: %w", err)
 	}
+	// Ensure 0600 permissions even if the file already existed with looser mode
+	if err := file.Chmod(0600); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("failed to set event file permissions: %w", err)
+	}
 
 	return &FileSink{
 		file:   file,
@@ -34,6 +39,10 @@ func NewFileSink(path string) (*FileSink, error) {
 
 // Write writes a single event to the JSONL file.
 func (s *FileSink) Write(event *AgentEvent) error {
+	if event == nil {
+		return fmt.Errorf("cannot write nil event")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -58,6 +67,9 @@ func (s *FileSink) WriteBatch(events []*AgentEvent) error {
 	defer s.mu.Unlock()
 
 	for _, event := range events {
+		if event == nil {
+			continue
+		}
 		data, err := event.MarshalJSONL()
 		if err != nil {
 			return fmt.Errorf("failed to marshal event: %w", err)

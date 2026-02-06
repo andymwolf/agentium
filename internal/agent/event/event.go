@@ -58,7 +58,7 @@ func (e *AgentEvent) MarshalJSONL() ([]byte, error) {
 // NewEvent creates a new AgentEvent with the given parameters.
 func NewEvent(sessionID string, iteration int, adapter string, eventType EventType, summary, content string) *AgentEvent {
 	return &AgentEvent{
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		SessionID: sessionID,
 		Iteration: iteration,
 		Adapter:   adapter,

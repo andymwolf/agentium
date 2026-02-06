@@ -35,7 +35,7 @@ func init() {
 	logsCmd.Flags().String("since", "", "Show logs since timestamp (e.g., 2024-01-01T00:00:00Z) or duration (e.g., 1h)")
 	logsCmd.Flags().Bool("events", false, "Show agent events (tool calls, decisions); implies --level=debug")
 	logsCmd.Flags().String("level", "info", "Minimum log level: debug, info, warning, error")
-	logsCmd.Flags().String("type", "", "Filter by event type (comma-separated: tool_use,thinking,text,command,file_change,error)")
+	logsCmd.Flags().String("type", "", "Filter by event type (comma-separated: text,thinking,tool_use,tool_result,command,file_change,error,system)")
 	logsCmd.Flags().Int("iteration", 0, "Filter by iteration number (0 = all iterations)")
 }
 

@@ -62,6 +62,9 @@ func TestFromCodex_CommandExecution(t *testing.T) {
 	if evt.Metadata["action"] != "command_execution" {
 		t.Errorf("Metadata[action] = %q, want %q", evt.Metadata["action"], "command_execution")
 	}
+	if evt.Metadata["command"] != "git status" {
+		t.Errorf("Metadata[command] = %q, want %q", evt.Metadata["command"], "git status")
+	}
 }
 
 func TestFromCodex_FileChange(t *testing.T) {
@@ -85,7 +88,9 @@ func TestFromCodex_FileChange(t *testing.T) {
 	if evt.Metadata["action"] != "modified" {
 		t.Errorf("Metadata[action] = %q, want %q", evt.Metadata["action"], "modified")
 	}
-	// file_path is in Content and Summary, not in Metadata (to avoid high-cardinality labels)
+	if evt.Metadata["file_path"] != "src/main.go" {
+		t.Errorf("Metadata[file_path] = %q, want %q", evt.Metadata["file_path"], "src/main.go")
+	}
 	if evt.Content != "src/main.go" {
 		t.Errorf("Content = %q, want %q", evt.Content, "src/main.go")
 	}
@@ -230,6 +235,9 @@ func TestFromCodex_ItemCompletedNilItem(t *testing.T) {
 	}
 	if evt.Summary != "item.completed" {
 		t.Errorf("Summary = %q, want %q", evt.Summary, "item.completed")
+	}
+	if evt.Content != "item.completed (missing item)" {
+		t.Errorf("Content = %q, want %q", evt.Content, "item.completed (missing item)")
 	}
 	if evt.Timestamp.IsZero() {
 		t.Error("Timestamp should not be zero")

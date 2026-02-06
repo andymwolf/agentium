@@ -30,7 +30,8 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 				evt.Content = ce.Item.Output
 				evt.Summary = TruncateSummary(ce.Item.Command)
 				evt.Metadata = map[string]string{
-					"action": "command_execution",
+					"action":  "command_execution",
+					"command": ce.Item.Command,
 				}
 
 			case "file_change":
@@ -38,7 +39,8 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 				evt.Summary = ce.Item.Action + ": " + ce.Item.FilePath
 				evt.Content = ce.Item.FilePath
 				evt.Metadata = map[string]string{
-					"action": ce.Item.Action,
+					"action":    ce.Item.Action,
+					"file_path": ce.Item.FilePath,
 				}
 
 			default:
@@ -52,6 +54,7 @@ func FromCodex(ce codex.CodexEvent, sessionID string, iteration int) *AgentEvent
 			// item.completed with nil Item - provide meaningful fallback
 			evt.Type = EventSystem
 			evt.Summary = "item.completed"
+			evt.Content = "item.completed (missing item)"
 		}
 
 	case "item.delta", "response.output_text.delta":

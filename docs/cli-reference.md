@@ -177,7 +177,7 @@ agentium run --repo github.com/org/repo --issues 42 --model claude-code:claude-o
 # Per-phase model selection
 agentium run --repo github.com/org/repo --issues 42 \
   --phase-model "IMPLEMENT=claude-code:claude-opus-4-20250514" \
-  --phase-model "TEST=aider:claude-3-5-sonnet-20241022"
+  --phase-model "IMPLEMENT_REVIEW=aider:claude-3-5-sonnet-20241022"
 
 # Custom instructions
 agentium run --repo github.com/org/repo --issues 42 --prompt "Focus on error handling and add tests"
@@ -301,8 +301,8 @@ agentium logs <session-id> [flags]
 | `--since` | string | - | Show logs since timestamp (RFC3339) or duration (e.g., `1h`, `30m`) |
 | `--events` | bool | `false` | Show agent events (tool calls, decisions); implies `--level=debug` |
 | `--level` | string | `info` | Minimum log level: `debug`, `info`, `warning`, `error` |
-| `--type` | string | - | Filter by event type (comma-separated: `tool_use`, `thinking`, `text`, `command`, `file_change`, `error`) |
-| `--iteration` | int | `0` | Filter by iteration number (0 = all iterations) |
+| `--type` | string | - | Filter by event type (comma-separated: `text`, `thinking`, `tool_use`, `tool_result`, `command`, `file_change`, `error`, `system`). Specifying `--type` implicitly enables `--events`. |
+| `--iteration` | int | `0` | Filter by iteration number (0 = all iterations). Specifying `--iteration` implicitly enables `--events`. |
 
 **Examples:**
 
@@ -413,7 +413,7 @@ Where `PHASE` is one of: `PLAN`, `IMPLEMENT`, `DOCS`, `COMPLETE`, `BLOCKED`, `NO
 ```bash
 agentium run --repo github.com/org/repo --issues 42 \
   --phase-model "IMPLEMENT=claude-code:claude-opus-4-20250514" \
-  --phase-model "TEST=aider:claude-3-5-sonnet-20241022"
+  --phase-model "IMPLEMENT_REVIEW=aider:claude-3-5-sonnet-20241022"
 ```
 
 ## Duration Format
