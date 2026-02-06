@@ -20,7 +20,9 @@ Example:
   agentium logs agentium-abc12345
   agentium logs agentium-abc12345 --follow
   agentium logs agentium-abc12345 --events
-  agentium logs agentium-abc12345 --events --level debug`,
+  agentium logs agentium-abc12345 --events --level debug
+  agentium logs agentium-abc12345 --events --type tool_use,thinking
+  agentium logs agentium-abc12345 --events --iteration 3`,
 	Args: cobra.ExactArgs(1),
 	RunE: getLogs,
 }
@@ -33,6 +35,8 @@ func init() {
 	logsCmd.Flags().String("since", "", "Show logs since timestamp (e.g., 2024-01-01T00:00:00Z) or duration (e.g., 1h)")
 	logsCmd.Flags().Bool("events", false, "Show agent events (tool calls, decisions); implies --level=debug")
 	logsCmd.Flags().String("level", "info", "Minimum log level: debug, info, warning, error")
+	logsCmd.Flags().String("type", "", "Filter by event type (comma-separated: text,thinking,tool_use,tool_result,command,file_change,error,system)")
+	logsCmd.Flags().Int("iteration", 0, "Filter by iteration number (0 = all iterations)")
 }
 
 func getLogs(cmd *cobra.Command, args []string) error {
@@ -60,6 +64,13 @@ func getLogs(cmd *cobra.Command, args []string) error {
 	sinceStr, _ := cmd.Flags().GetString("since")
 	showEvents, _ := cmd.Flags().GetBool("events")
 	level, _ := cmd.Flags().GetString("level")
+	eventType, _ := cmd.Flags().GetString("type")
+	iteration, _ := cmd.Flags().GetInt("iteration")
+
+	// If --type or --iteration are specified, implicitly enable --events
+	if eventType != "" || iteration > 0 {
+		showEvents = true
+	}
 
 	var since time.Time
 	if sinceStr != "" {
@@ -81,6 +92,8 @@ func getLogs(cmd *cobra.Command, args []string) error {
 		Since:      since,
 		ShowEvents: showEvents,
 		MinLevel:   level,
+		EventType:  eventType,
+		Iteration:  iteration,
 	}
 
 	logCh, errCh := prov.Logs(ctx, sessionID, logsOpts)

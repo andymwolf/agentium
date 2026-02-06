@@ -20,6 +20,7 @@ import (
 	_ "github.com/andywolf/agentium/internal/agent/aider"
 	_ "github.com/andywolf/agentium/internal/agent/claudecode"
 	_ "github.com/andywolf/agentium/internal/agent/codex"
+	"github.com/andywolf/agentium/internal/agent/event"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/handoff"
@@ -260,6 +261,7 @@ type Controller struct {
 	adapters               map[string]agent.Agent  // All initialized adapters (for multi-adapter routing)
 	orchestrator           *SubTaskOrchestrator    // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater     // Instance metadata updater (nil if unavailable)
+	eventSink              *event.FileSink         // Local JSONL event sink (nil = disabled)
 
 	// Monorepo support
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
@@ -846,6 +848,17 @@ func (c *Controller) loadPrompts() error {
 		c.handoffParser = handoff.NewParser()
 		c.handoffValidator = handoff.NewValidator()
 		c.logInfo("Handoff store initialized")
+	}
+
+	// Initialize local event sink if AGENTIUM_EVENT_FILE is set
+	if eventFile := os.Getenv("AGENTIUM_EVENT_FILE"); eventFile != "" {
+		sink, err := event.NewFileSink(eventFile)
+		if err != nil {
+			c.logWarning("failed to initialize event sink: %v", err)
+		} else {
+			c.eventSink = sink
+			c.logInfo("Event sink initialized: %s", eventFile)
+		}
 	}
 
 	return nil
@@ -2068,6 +2081,11 @@ func (c *Controller) gracefulShutdown() {
 		c.clearSensitiveData()
 
 		// Step 4: Close clients
+		if c.eventSink != nil {
+			if err := c.eventSink.Close(); err != nil {
+				c.logWarning("failed to close event sink: %v", err)
+			}
+		}
 		if c.metadataUpdater != nil {
 			if err := c.metadataUpdater.Close(); err != nil {
 				c.logWarning("failed to close metadata updater: %v", err)

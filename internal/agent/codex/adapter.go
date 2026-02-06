@@ -205,13 +205,13 @@ func (a *Adapter) BuildPrompt(session *agent.Session, iteration int) string {
 }
 
 // CodexEvent represents a JSONL event from Codex CLI --json output.
-// This type is exported for use by the audit package.
+// This type is exported for use by the audit and event packages.
 type CodexEvent struct {
 	Type    string          `json:"type"`
 	Item    *EventItem      `json:"item,omitempty"`
-	Delta   *eventDelta     `json:"delta,omitempty"`
+	Delta   *EventDelta     `json:"delta,omitempty"`
 	Usage   *usage          `json:"usage,omitempty"`
-	Error   *eventError     `json:"error,omitempty"`
+	Error   *EventError     `json:"error,omitempty"`
 	Content []contentBlock  `json:"content,omitempty"` // For "message" type events
 	Message *messageContent `json:"message,omitempty"` // Alternative message structure
 }
@@ -227,8 +227,9 @@ type EventItem struct {
 	Action   string `json:"action,omitempty"`
 }
 
-// eventDelta represents a streaming text delta
-type eventDelta struct {
+// EventDelta represents a streaming text delta.
+// This type is exported for use by the event package.
+type EventDelta struct {
 	Text string `json:"text,omitempty"`
 }
 
@@ -250,8 +251,9 @@ type usage struct {
 	CachedInputTokens int `json:"cached_input_tokens"`
 }
 
-// eventError represents an error in a Codex event
-type eventError struct {
+// EventError represents an error in a Codex event.
+// This type is exported for use by the event package.
+type EventError struct {
 	Message string `json:"message"`
 }
 

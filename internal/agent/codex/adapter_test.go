@@ -663,11 +663,11 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 		stdout := makeJSONL(
 			CodexEvent{
 				Type:  "item.delta",
-				Delta: &eventDelta{Text: "Hello "},
+				Delta: &EventDelta{Text: "Hello "},
 			},
 			CodexEvent{
 				Type:  "item.delta",
-				Delta: &eventDelta{Text: "world"},
+				Delta: &EventDelta{Text: "world"},
 			},
 		)
 
@@ -685,7 +685,7 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 		stdout := makeJSONL(
 			CodexEvent{
 				Type:  "response.output_text.delta",
-				Delta: &eventDelta{Text: "streaming text here"},
+				Delta: &EventDelta{Text: "streaming text here"},
 			},
 		)
 
@@ -721,7 +721,7 @@ func TestAdapter_ParseOutput_JSONL(t *testing.T) {
 		stdout := makeJSONL(
 			CodexEvent{
 				Type:  "item.delta",
-				Delta: &eventDelta{Text: "Working on it...\nAGENTIUM_STATUS: COMPLETE"},
+				Delta: &EventDelta{Text: "Working on it...\nAGENTIUM_STATUS: COMPLETE"},
 			},
 		)
 
@@ -966,7 +966,7 @@ func TestAdapter_ParseOutput_Errors(t *testing.T) {
 	t.Run("turn.failed event", func(t *testing.T) {
 		stdout := makeJSONL(CodexEvent{
 			Type:  "turn.failed",
-			Error: &eventError{Message: "API rate limit exceeded"},
+			Error: &EventError{Message: "API rate limit exceeded"},
 		})
 
 		result, err := a.ParseOutput(1, stdout, "")
@@ -985,7 +985,7 @@ func TestAdapter_ParseOutput_Errors(t *testing.T) {
 	t.Run("error event", func(t *testing.T) {
 		stdout := makeJSONL(CodexEvent{
 			Type:  "error",
-			Error: &eventError{Message: "Connection timeout"},
+			Error: &EventError{Message: "Connection timeout"},
 		})
 
 		result, err := a.ParseOutput(1, stdout, "")
