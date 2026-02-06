@@ -1772,6 +1772,10 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 	sb.WriteString("**How to use this feedback:**\n")
 	sb.WriteString("- **Reviewer feedback**: Detailed analysis - consider all points as context\n")
 	sb.WriteString("- **Judge directives**: Required action items - you MUST address these\n\n")
+	sb.WriteString("**Approach:**\n")
+	sb.WriteString("- Your implementation already exists on this branch. Run `git log --oneline main..HEAD` and `git diff main..HEAD` to review your existing work before making changes.\n")
+	sb.WriteString("- Make **targeted, surgical fixes** to address the feedback. Do not rewrite or start over unless the judge directive explicitly says to take a different approach.\n")
+	sb.WriteString("- If a directive asks for a specific fix, make that fix and nothing else. If it asks to reconsider the approach, then a broader change is warranted.\n\n")
 
 	// Separate reviewer feedback and judge directives
 	var reviewerFeedback, judgeDirectives []string

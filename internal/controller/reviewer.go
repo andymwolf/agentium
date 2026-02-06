@@ -182,8 +182,14 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString("\n```\n\n")
 
 	sb.WriteString("## Your Task\n\n")
-	sb.WriteString("Provide constructive, actionable review feedback on the phase output above.\n")
-	sb.WriteString("Be specific about what to improve and indicate severity where relevant (e.g., critical bug, minor style issue, can be deferred).\n\n")
+	sb.WriteString("Review the code changes produced in this phase.\n\n")
+	sb.WriteString("**IMPORTANT:** Do not rely solely on the phase output log above. The log shows agent activity, not a clean view of the code. You MUST:\n")
+	sb.WriteString("1. Run `git diff main..HEAD` to see all code changes on this branch\n")
+	sb.WriteString("2. Open and read key modified files to check surrounding context\n")
+	sb.WriteString("3. Verify that the changes match what the worker claims to have done\n\n")
+	sb.WriteString("Provide constructive, actionable review feedback.\n")
+	sb.WriteString("Be specific about what to improve and indicate severity (critical/security, functional bug, minor style).\n")
+	sb.WriteString("Security issues (data leakage, missing input validation, unguarded nil access) should always be flagged as critical.\n\n")
 
 	sb.WriteString("## Output Format\n\n")
 	sb.WriteString("**CRITICAL:** Output ONLY your feedback. Do NOT include:\n")
