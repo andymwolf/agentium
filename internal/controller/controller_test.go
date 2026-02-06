@@ -1369,6 +1369,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 				"### Reviewer Analysis (Context)",
 				"Address the test coverage gap",
 				"**How to use this feedback:**",
+				"targeted, surgical fixes",
 			},
 		},
 		{

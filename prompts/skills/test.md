@@ -25,11 +25,13 @@ Repeat the following cycle until all tests pass and code is ready:
 #### 6b. Review Your Own Code
 Before committing, critically review your changes:
 - Does the code correctly implement the issue requirements?
-- Are there any edge cases not handled?
+- Are there edge cases not handled? (nil inputs, empty strings, trailing delimiters, whitespace-only values)
 - Is the code readable and maintainable?
-- Are there any security concerns?
 - Does it follow the project's coding conventions?
-- Are error cases handled appropriately?
+- **Data sensitivity:** If the code logs or sends data to external services, does it separate sensitive content (full command output, tool results) from safe summaries? Only summaries should cross trust boundaries.
+- **External service constraints:** If integrating with external services, are platform limits respected? (e.g., label length limits, payload size restrictions). Prefer truncation over rejection.
+- **Defensive coding:** Do public functions guard against nil arguments? Do file operations handle pre-existing files with wrong permissions? Are unused parameters removed?
+- **Documentation:** Do help text, examples, and comments reference valid values? (correct phase names, valid flag combinations, accurate type lists)
 
 #### 6c. Fix Issues Found
 If tests fail or review reveals problems:

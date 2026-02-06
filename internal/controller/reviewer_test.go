@@ -26,8 +26,8 @@ func TestBuildReviewPrompt(t *testing.T) {
 		"github.com/org/repo",
 		"#42",
 		"modify auth.go",
-		"constructive, actionable review feedback",
-		"indicate severity where relevant",
+		"git diff main..HEAD",
+		"Security issues",
 	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {

@@ -243,6 +243,9 @@ func TestBuildJudgePrompt_FinalIteration(t *testing.T) {
 	if !containsString(prompt, "Prefer ADVANCE") {
 		t.Error("buildJudgePrompt() should tell judge to prefer ADVANCE on final iteration")
 	}
+	if !containsString(prompt, "security issues") {
+		t.Error("buildJudgePrompt() should mention security issues override on final iteration")
+	}
 }
 
 func TestBuildJudgePrompt_EmptyReviewFeedback(t *testing.T) {
