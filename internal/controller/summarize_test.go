@@ -188,9 +188,9 @@ End`,
 
 func TestStripPreamble(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input string
-		want string
+		want  string
 	}{
 		{
 			name:  "empty input",
