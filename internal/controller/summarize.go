@@ -6,6 +6,89 @@ import (
 	"strings"
 )
 
+// agentiumSignalPattern matches single-line AGENTIUM_STATUS and AGENTIUM_MEMORY signals.
+var agentiumSignalPattern = regexp.MustCompile(`(?m)^AGENTIUM_(?:STATUS|MEMORY):\s+.*$`)
+
+// agentiumHandoffPattern matches multi-line AGENTIUM_HANDOFF: { ... } blocks.
+var agentiumHandoffPattern = regexp.MustCompile(`(?ms)^AGENTIUM_HANDOFF:\s*\{.*?\n\}`)
+
+// StripAgentiumSignals removes AGENTIUM_STATUS, AGENTIUM_MEMORY, and
+// multi-line AGENTIUM_HANDOFF blocks from content. These are internal
+// protocol signals not intended for human readers.
+func StripAgentiumSignals(content string) string {
+	if content == "" {
+		return ""
+	}
+	content = agentiumHandoffPattern.ReplaceAllString(content, "")
+	content = agentiumSignalPattern.ReplaceAllString(content, "")
+	// Collapse runs of blank lines left by removed signals
+	content = collapseBlankLines(content)
+	return strings.TrimSpace(content)
+}
+
+// preamblePatterns match common stream-of-thought leading lines that agents
+// produce before their actual output (e.g., "Let me examine...", "I'll review...").
+var preamblePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^(let me|i'll|i will|i need to|i should|i want to|i'm going to)\b`),
+	regexp.MustCompile(`(?i)^(excellent|great|good|perfect|okay|alright|now i|now let)\b`),
+	regexp.MustCompile(`(?i)^(looking at|examining|reviewing|reading|checking|analyzing|starting)\b`),
+	regexp.MustCompile(`(?i)^(first,?\s|next,?\s|to begin|to start)\b`),
+	regexp.MustCompile(`(?i)^(i now have|i have a|i can see|i understand)\b`),
+	regexp.MustCompile(`(?i)^(file created|file updated|file written|file saved|changes saved)\b`),
+	regexp.MustCompile(`(?i)^(based on|given the|considering)\b`),
+}
+
+// StripPreamble removes leading conversational/stream-of-thought lines from
+// content. It stops at the first non-blank, non-preamble line to preserve the
+// agent's substantive output.
+func StripPreamble(content string) string {
+	if content == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	startIdx := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if isPreambleLine(trimmed) {
+			startIdx = i + 1
+			continue
+		}
+		// First non-blank, non-preamble line — stop stripping
+		break
+	}
+	if startIdx >= len(lines) {
+		return ""
+	}
+	result := strings.Join(lines[startIdx:], "\n")
+	return strings.TrimSpace(result)
+}
+
+// isPreambleLine returns true if the line matches a stream-of-thought pattern.
+func isPreambleLine(line string) bool {
+	for _, p := range preamblePatterns {
+		if p.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// collapseBlankLines replaces runs of 3+ consecutive blank lines with a single blank line.
+func collapseBlankLines(s string) string {
+	prev := ""
+	for {
+		next := strings.ReplaceAll(s, "\n\n\n", "\n\n")
+		if next == prev {
+			return next
+		}
+		prev = next
+		s = next
+	}
+}
+
 // diffStartPatterns match the beginning of unified diff format
 var diffStartPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^diff --git\s+`),
