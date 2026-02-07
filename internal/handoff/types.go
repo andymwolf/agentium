@@ -49,7 +49,6 @@ type PlanOutput struct {
 	FilesToCreate       []string             `json:"files_to_create"`
 	ImplementationSteps []ImplementationStep `json:"implementation_steps"`
 	TestingApproach     string               `json:"testing_approach"`
-	Complexity          string               `json:"complexity,omitempty"` // SIMPLE or COMPLEX
 }
 
 // -----------------------------------------------------------------------------
