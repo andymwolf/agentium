@@ -319,6 +319,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if commentContent == "" {
 					commentContent = phaseOutput
 				}
+				commentContent = StripAgentiumSignals(commentContent)
+				commentContent = StripPreamble(commentContent)
 				commentContent = SummarizeForComment(commentContent, 250)
 			}
 
@@ -387,7 +389,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					}
 					// Post implementation plan as a comment (follows "append only" principle)
 					if phaseOutput != "" {
-						c.postImplementationPlan(ctx, phaseOutput)
+						c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
 					}
 					advanced = true
 					break
@@ -452,7 +454,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 
 			// Post reviewer feedback to appropriate location (filtered for readability)
-			reviewFeedbackComment := SummarizeForComment(reviewResult.Feedback, 250)
+			reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
+			reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
+			reviewFeedbackComment = SummarizeForComment(reviewFeedbackComment, 250)
 			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewFeedbackComment)
 
 			priorDirectives := ""
@@ -508,7 +512,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				// Post implementation plan as a comment after PLAN phase advances
 				// (postImplementationPlan follows "append only" principle)
 				if currentPhase == PhasePlan && phaseOutput != "" {
-					c.postImplementationPlan(ctx, phaseOutput)
+					c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
 				}
 
 				advanced = true
@@ -687,4 +691,59 @@ func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase, c
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// formatPlanForComment formats the implementation plan for posting as a GitHub
+// comment. When structured handoff data is available, it renders a clean
+// markdown summary. Otherwise it falls back to stripping signals from the raw output.
+func (c *Controller) formatPlanForComment(taskID, rawOutput string) string {
+	if c.isHandoffEnabled() && c.handoffStore != nil {
+		hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhasePlan)
+		if hd != nil && hd.PlanOutput != nil {
+			return formatPlanOutput(hd.PlanOutput)
+		}
+	}
+	// Fallback: strip signals from raw output
+	return StripAgentiumSignals(rawOutput)
+}
+
+// formatPlanOutput renders a PlanOutput struct as clean markdown.
+func formatPlanOutput(plan *handoff.PlanOutput) string {
+	var sb strings.Builder
+
+	if plan.Summary != "" {
+		sb.WriteString(plan.Summary)
+		sb.WriteString("\n\n")
+	}
+
+	if len(plan.FilesToModify) > 0 || len(plan.FilesToCreate) > 0 {
+		sb.WriteString("### Files\n\n")
+		for _, f := range plan.FilesToModify {
+			sb.WriteString(fmt.Sprintf("- `%s` (modify)\n", f))
+		}
+		for _, f := range plan.FilesToCreate {
+			sb.WriteString(fmt.Sprintf("- `%s` (create)\n", f))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(plan.ImplementationSteps) > 0 {
+		sb.WriteString("### Steps\n\n")
+		for _, step := range plan.ImplementationSteps {
+			sb.WriteString(fmt.Sprintf("%d. %s", step.Order, step.Description))
+			if step.File != "" {
+				sb.WriteString(fmt.Sprintf(" (`%s`)", step.File))
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if plan.TestingApproach != "" {
+		sb.WriteString("### Testing\n\n")
+		sb.WriteString(plan.TestingApproach)
+		sb.WriteString("\n")
+	}
+
+	return strings.TrimSpace(sb.String())
 }

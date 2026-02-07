@@ -119,10 +119,15 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		return ReviewResult{}, fmt.Errorf("reviewer failed: %w", err)
 	}
 
-	feedback := result.RawTextContent
+	// Prefer AssistantText (excludes tool results like diffs/file contents),
+	// falling back to RawTextContent for adapters that don't populate it.
+	feedback := result.AssistantText
+	if feedback == "" {
+		feedback = result.RawTextContent
+	}
 	if feedback == "" {
 		// Log warning - this indicates a parsing issue that should be investigated
-		c.logWarning("Reviewer for phase %s produced no RawTextContent (parsed summary: %s)",
+		c.logWarning("Reviewer for phase %s produced no text content (parsed summary: %s)",
 			params.CompletedPhase, truncateString(result.Summary, 200))
 		// Use a descriptive fallback instead of misleading PR/summary content
 		if result.Success {

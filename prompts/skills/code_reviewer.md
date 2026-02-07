@@ -30,6 +30,8 @@ You are reviewing **code changes** produced by an agent during the REVIEW phase.
 
 ### Output
 
+**CRITICAL:** Do NOT include preamble or process descriptions. Start directly with your feedback. Do not begin with "Let me review...", "I'll examine...", or similar phrases.
+
 Provide your review feedback below. Be specific about what to improve.
 
 For critical architectural issues that require re-planning, clearly state: "Recommend REGRESS to PLAN phase: <reason>"
