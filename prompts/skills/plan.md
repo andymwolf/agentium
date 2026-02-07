@@ -25,6 +25,7 @@ Your plan should include:
 - Focus solely on understanding the problem and designing the solution
 - Be specific about file paths and function names where possible
 - Consider edge cases and backward compatibility
+- Do NOT assess or declare the complexity of the task (SIMPLE/COMPLEX) — a separate Complexity Assessor agent handles this
 
 ### Planning Rigor
 
@@ -54,8 +55,7 @@ AGENTIUM_HANDOFF: {
     {"order": 1, "description": "Step 1 description", "file": "path/to/file.go"},
     {"order": 2, "description": "Step 2 description", "file": "path/to/file.go"}
   ],
-  "testing_approach": "How the changes will be verified",
-  "complexity": "SIMPLE or COMPLEX"
+  "testing_approach": "How the changes will be verified"
 }
 ```
 

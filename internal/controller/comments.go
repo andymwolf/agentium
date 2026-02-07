@@ -7,6 +7,17 @@ import (
 	"strings"
 )
 
+// CommentRole identifies which agent or controller component posted a comment.
+type CommentRole string
+
+const (
+	RoleWorker             CommentRole = "Worker"
+	RoleComplexityAssessor CommentRole = "Complexity Assessor"
+	RoleReviewer           CommentRole = "Reviewer"
+	RoleJudge              CommentRole = "Judge"
+	RoleController         CommentRole = "Controller"
+)
+
 // instanceSignature returns a signature like "agentium:gcp:agentium-abc123" for debugging.
 // This is appended to comments to help identify which instance posted them.
 func (c *Controller) instanceSignature() string {
@@ -25,30 +36,31 @@ func (c *Controller) appendSignature(body string) string {
 
 // postPhaseComment posts a progress comment on the GitHub issue for the current task.
 // This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, summary string) {
+func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, role CommentRole, summary string) {
 	if c.activeTaskType != "issue" {
 		return
 	}
 
-	body := fmt.Sprintf("### Phase: %s (iteration %d)\n\n%s", phase, iteration, summary)
+	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, role, iteration, summary)
 	c.postIssueComment(ctx, body)
 }
 
 // postJudgeComment posts a judge verdict comment on the GitHub issue.
 // This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, result JudgeResult) {
+func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, iteration int, result JudgeResult) {
 	if c.activeTaskType != "issue" {
 		return
 	}
 
+	header := fmt.Sprintf("### Phase: %s — %s (iteration %d)", phase, RoleJudge, iteration)
 	var body string
 	switch result.Verdict {
 	case VerdictAdvance:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — ADVANCE", phase)
+		body = fmt.Sprintf("%s\n\n**Verdict:** ADVANCE", header)
 	case VerdictIterate:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("%s\n\n**Verdict:** ITERATE\n\n> %s", header, result.Feedback)
 	case VerdictBlocked:
-		body = fmt.Sprintf("**Judge:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("%s\n\n**Verdict:** BLOCKED\n\n> %s", header, result.Feedback)
 	}
 
 	c.postIssueComment(ctx, body)
@@ -102,7 +114,7 @@ func (c *Controller) postReviewerFeedback(ctx context.Context, phase TaskPhase, 
 		return
 	}
 
-	body := fmt.Sprintf("### Reviewer Feedback: %s (iteration %d)\n\n%s", phase, iteration, feedback)
+	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, feedback)
 	c.postIssueComment(ctx, body)
 }
 
@@ -113,13 +125,13 @@ func (c *Controller) postPRReviewSummary(ctx context.Context, prNumber string, p
 		return
 	}
 
-	body := fmt.Sprintf("### Review Summary: %s (iteration %d)\n\n%s", phase, iteration, reviewFeedback)
+	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, reviewFeedback)
 	c.postPRComment(ctx, prNumber, body)
 }
 
 // postPRJudgeVerdict posts a judge verdict comment on the associated PR.
 // This is called when the verdict is ITERATE or BLOCKED to make it visible on the PR.
-func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, phase TaskPhase, result JudgeResult) {
+func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, phase TaskPhase, iteration int, result JudgeResult) {
 	if prNumber == "" {
 		return
 	}
@@ -129,12 +141,13 @@ func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, ph
 		return
 	}
 
+	header := fmt.Sprintf("### Phase: %s — %s (iteration %d)", phase, RoleJudge, iteration)
 	var body string
 	switch result.Verdict {
 	case VerdictIterate:
-		body = fmt.Sprintf("**🔄 Judge Verdict:** Phase `%s` — ITERATE\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("%s\n\n**Verdict:** ITERATE\n\n> %s", header, result.Feedback)
 	case VerdictBlocked:
-		body = fmt.Sprintf("**⛔ Judge Verdict:** Phase `%s` — BLOCKED\n\n> %s", phase, result.Feedback)
+		body = fmt.Sprintf("%s\n\n**Verdict:** BLOCKED\n\n> %s", header, result.Feedback)
 	}
 
 	c.postPRComment(ctx, prNumber, body)

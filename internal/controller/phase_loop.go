@@ -292,7 +292,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", currentPhase)
 				phaseOutput = planContent
 				skipIteration = true
-				c.postPhaseComment(ctx, currentPhase, iter, "Pre-existing plan detected in issue body (skipped planning agent)")
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController, "Pre-existing plan detected in issue body (skipped planning agent)")
 			}
 
 			if !skipIteration {
@@ -334,7 +334,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// For DOCS phase: skip reviewer/judge if no documentation changes were made
 			if currentPhase == PhaseDocs && c.docsOutputIndicatesNoChanges(taskID) {
 				c.logInfo("Phase %s: no documentation changes detected, skipping review/judge", currentPhase)
-				c.postPhaseComment(ctx, currentPhase, iter,
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
 					"No documentation changes detected — skipping review (auto-advance)")
 
 				// Clear feedback and record phase result
@@ -349,7 +349,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 
 			// Post phase comment with filtered content (no tool results, max 250 lines)
-			c.postPhaseComment(ctx, currentPhase, iter, commentContent)
+			c.postPhaseComment(ctx, currentPhase, iter, RoleWorker, commentContent)
 
 			// Create draft PR after first IMPLEMENT iteration with commits
 			if currentPhase == PhaseImplement && !state.DraftPRCreated {
@@ -374,7 +374,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 
 				// Post complexity verdict comment
-				c.postPhaseComment(ctx, currentPhase, iter,
+				c.postPhaseComment(ctx, currentPhase, iter, RoleComplexityAssessor,
 					fmt.Sprintf("Complexity assessment: **%s**\n\n%s", state.WorkflowPath, complexityResult.Feedback))
 
 				// For SIMPLE tasks, auto-advance from PLAN (skip reviewer/judge)
@@ -494,7 +494,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			state.LastJudgeFeedback = judgeResult.Feedback
 
 			// Post judge comment
-			c.postJudgeComment(ctx, currentPhase, judgeResult)
+			c.postJudgeComment(ctx, currentPhase, iter, judgeResult)
 
 			switch judgeResult.Verdict {
 			case VerdictAdvance:
@@ -522,7 +522,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
 				// Post judge verdict to PR if available (makes ITERATE visible)
 				if prNumber := c.getPRNumberForTask(); prNumber != "" {
-					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, judgeResult)
+					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
 				}
 				continue
 
@@ -531,7 +531,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
 				// Post judge verdict to PR if available (makes BLOCKED visible)
 				if prNumber := c.getPRNumberForTask(); prNumber != "" {
-					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, judgeResult)
+					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
 				}
 				return nil
 			}
@@ -546,13 +546,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			if currentPhase == PhaseDocs {
 				// DOCS phase auto-succeeds - documentation should not block PR finalization
 				c.logInfo("Phase %s: exhausted %d iterations, auto-advancing (non-blocking)", currentPhase, maxIter)
-				c.postPhaseComment(ctx, currentPhase, maxIter,
+				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
 					fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", maxIter))
 			} else {
 				// Set ControllerOverrode flag for NOMERGE handling during PR finalization
 				state.ControllerOverrode = true
 				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance (NOMERGE flag set)", currentPhase, maxIter)
-				c.postPhaseComment(ctx, currentPhase, maxIter,
+				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
 					fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE (PR will require human review)", maxIter))
 			}
 			if c.memoryStore != nil {

@@ -22,7 +22,7 @@ func TestPostPhaseComment_OnlyForIssues(t *testing.T) {
 	}
 
 	// Should not panic or crash - just return silently
-	c.postPhaseComment(context.Background(), PhaseImplement, 1, "test summary")
+	c.postPhaseComment(context.Background(), PhaseImplement, 1, RoleWorker, "test summary")
 }
 
 func TestPostJudgeComment_OnlyForIssues(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPostJudgeComment_OnlyForIssues(t *testing.T) {
 	}
 
 	// Should not panic or crash - just return silently
-	c.postJudgeComment(context.Background(), PhaseImplement, JudgeResult{Verdict: VerdictAdvance})
+	c.postJudgeComment(context.Background(), PhaseImplement, 1, JudgeResult{Verdict: VerdictAdvance})
 }
 
 func TestJudgeResultFormatting(t *testing.T) {
@@ -102,7 +102,7 @@ func TestPostPRJudgeVerdict_SkipsAdvance(t *testing.T) {
 	}
 
 	// Should not attempt to post for ADVANCE verdict
-	c.postPRJudgeVerdict(context.Background(), "123", PhaseImplement, JudgeResult{Verdict: VerdictAdvance})
+	c.postPRJudgeVerdict(context.Background(), "123", PhaseImplement, 1, JudgeResult{Verdict: VerdictAdvance})
 }
 
 func TestPostPRJudgeVerdict_EmptyPRNumber(t *testing.T) {
@@ -114,7 +114,7 @@ func TestPostPRJudgeVerdict_EmptyPRNumber(t *testing.T) {
 	}
 
 	// Should not panic or crash - just return silently
-	c.postPRJudgeVerdict(context.Background(), "", PhaseImplement, JudgeResult{Verdict: VerdictIterate, Feedback: "needs work"})
+	c.postPRJudgeVerdict(context.Background(), "", PhaseImplement, 1, JudgeResult{Verdict: VerdictIterate, Feedback: "needs work"})
 }
 
 func TestGetPRNumberForTask(t *testing.T) {

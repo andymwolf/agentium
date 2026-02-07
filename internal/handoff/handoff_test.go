@@ -354,22 +354,6 @@ func TestValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("ValidatePlanOutput invalid complexity", func(t *testing.T) {
-		out := &PlanOutput{
-			Summary:         "Plan",
-			TestingApproach: "unit tests",
-			Complexity:      "INVALID",
-			ImplementationSteps: []ImplementationStep{
-				{Order: 1, Description: "Step 1"},
-			},
-		}
-
-		errs := validator.ValidatePhaseOutput(PhasePlan, out)
-		if !errs.HasErrors() {
-			t.Error("Expected validation error for invalid complexity")
-		}
-	})
-
 	t.Run("ValidateImplementOutput success", func(t *testing.T) {
 		out := &ImplementOutput{
 			BranchName:   "feature/test",

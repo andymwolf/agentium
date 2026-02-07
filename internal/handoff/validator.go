@@ -118,11 +118,6 @@ func (v *Validator) validatePlanOutput(out *PlanOutput) ValidationErrors {
 		errs = append(errs, ValidationError{Phase: PhasePlan, Field: "testing_approach", Message: "testing approach is required"})
 	}
 
-	// Validate complexity if set
-	if out.Complexity != "" && out.Complexity != "SIMPLE" && out.Complexity != "COMPLEX" {
-		errs = append(errs, ValidationError{Phase: PhasePlan, Field: "complexity", Message: "complexity must be SIMPLE or COMPLEX"})
-	}
-
 	return errs
 }
 
