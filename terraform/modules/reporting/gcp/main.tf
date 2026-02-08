@@ -44,6 +44,68 @@ resource "google_bigquery_dataset_iam_member" "sink_writer" {
 }
 
 # -----------------------------------------------------------------------------
+# BigQuery Base Table (placeholder for Cloud Logging)
+# -----------------------------------------------------------------------------
+
+# Cloud Logging auto-creates this table on the first log entry, but views
+# cannot be created until the table exists. This placeholder uses the minimum
+# schema needed by our views. Cloud Logging will extend it with additional
+# columns (severity, insertId, resource, etc.) on first write.
+resource "google_bigquery_table" "log_entries" {
+  project             = var.project_id
+  dataset_id          = google_bigquery_dataset.token_usage.dataset_id
+  table_id            = local.bigquery_table_name
+  deletion_protection = false
+
+  time_partitioning {
+    type  = "DAY"
+    field = "timestamp"
+  }
+
+  schema = jsonencode([
+    {
+      name = "timestamp"
+      type = "TIMESTAMP"
+      mode = "NULLABLE"
+    },
+    {
+      name = "severity"
+      type = "STRING"
+      mode = "NULLABLE"
+    },
+    {
+      name = "textPayload"
+      type = "STRING"
+      mode = "NULLABLE"
+    },
+    {
+      name = "logName"
+      type = "STRING"
+      mode = "NULLABLE"
+    },
+    {
+      name = "labels"
+      type = "RECORD"
+      mode = "REPEATED"
+      fields = [
+        {
+          name = "key"
+          type = "STRING"
+          mode = "NULLABLE"
+        },
+        {
+          name = "value"
+          type = "STRING"
+          mode = "NULLABLE"
+        }
+      ]
+    }
+  ])
+
+  depends_on = [google_bigquery_dataset.token_usage]
+}
+
+# -----------------------------------------------------------------------------
 # BigQuery Views
 # -----------------------------------------------------------------------------
 
@@ -73,7 +135,7 @@ resource "google_bigquery_table" "token_usage_flat" {
     use_legacy_sql = false
   }
 
-  depends_on = [google_bigquery_dataset.token_usage]
+  depends_on = [google_bigquery_table.log_entries]
 }
 
 # Usage by issue (task_id): total tokens per issue across all phases.
