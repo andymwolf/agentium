@@ -238,6 +238,45 @@ func (c *Controller) updateHandoffWithPRInfo(taskID, prNumber, prURL string, ite
 	}
 }
 
+// markPRReady marks the draft PR as ready for review, triggering CI checks.
+func (c *Controller) markPRReady(ctx context.Context, prNumber string) error {
+	c.logInfo("Marking PR #%s as ready for review", prNumber)
+
+	readyCmd := exec.CommandContext(ctx, "gh", "pr", "ready", prNumber,
+		"--repo", c.config.Repository,
+	)
+	readyCmd.Dir = c.workDir
+	readyCmd.Env = c.envWithGitHubToken()
+
+	output, err := readyCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to mark PR as ready: %w (output: %s)", err, string(output))
+	}
+
+	c.logInfo("PR #%s is now ready for review", prNumber)
+	return nil
+}
+
+// attemptPRMerge attempts to squash-merge the PR and delete the branch.
+func (c *Controller) attemptPRMerge(ctx context.Context, prNumber string) error {
+	c.logInfo("Attempting to merge PR #%s", prNumber)
+
+	mergeCmd := exec.CommandContext(ctx, "gh", "pr", "merge", prNumber,
+		"--squash", "--delete-branch",
+		"--repo", c.config.Repository,
+	)
+	mergeCmd.Dir = c.workDir
+	mergeCmd.Env = c.envWithGitHubToken()
+
+	output, err := mergeCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to merge PR: %w (output: %s)", err, string(output))
+	}
+
+	c.logInfo("PR #%s merged successfully", prNumber)
+	return nil
+}
+
 // finalizeDraftPR marks the draft PR as ready for review, or posts a NOMERGE
 // comment if the controller forced advancement at max iterations.
 // This is called when the workflow reaches PhaseComplete.
@@ -253,6 +292,12 @@ func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 		return nil
 	}
 
+	// Skip if PR was already merged by auto-merge
+	if state.PRMerged {
+		c.logInfo("Skipping PR finalization: PR #%s already merged by auto-merge", state.PRNumber)
+		return nil
+	}
+
 	// Check if NOMERGE handling is needed (controller forced ADVANCE at max iterations)
 	if state.ControllerOverrode {
 		reason := "Controller forced ADVANCE at max iterations"
@@ -262,20 +307,10 @@ func (c *Controller) finalizeDraftPR(ctx context.Context, taskID string) error {
 		return nil
 	}
 
-	c.logInfo("Marking PR #%s as ready for review", state.PRNumber)
-
-	readyCmd := exec.CommandContext(ctx, "gh", "pr", "ready", state.PRNumber,
-		"--repo", c.config.Repository,
-	)
-	readyCmd.Dir = c.workDir
-	readyCmd.Env = c.envWithGitHubToken()
-
-	output, err := readyCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to mark PR as ready: %w (output: %s)", err, string(output))
+	if err := c.markPRReady(ctx, state.PRNumber); err != nil {
+		return err
 	}
 
-	c.logInfo("PR #%s is now ready for review", state.PRNumber)
 	return nil
 }
 

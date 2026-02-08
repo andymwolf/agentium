@@ -51,6 +51,10 @@ var ValidPhases = map[string]bool{
 	"PLAN_REVIEW":      true,
 	"IMPLEMENT_REVIEW": true,
 	"DOCS_REVIEW":      true,
+	// Compound phase keys for VERIFY
+	"VERIFY":        true,
+	"VERIFY_REVIEW": true,
+	"VERIFY_JUDGE":  true,
 	// Compound phase keys for judge
 	"JUDGE":           true,
 	"PLAN_JUDGE":      true,

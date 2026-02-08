@@ -137,6 +137,26 @@ func TestMaybeCreateDraftPR_ErrorsOnMissingState(t *testing.T) {
 	}
 }
 
+func TestFinalizeDraftPR_SkipsWhenPRMerged(t *testing.T) {
+	c := &Controller{
+		taskStates: map[string]*TaskState{
+			"issue:123": {
+				ID:       "123",
+				Type:     "issue",
+				PRNumber: "42",
+				PRMerged: true,
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Should return nil without doing anything (PR already merged)
+	err := c.finalizeDraftPR(context.TODO(), "issue:123")
+	if err != nil {
+		t.Errorf("expected nil error when PR already merged, got %v", err)
+	}
+}
+
 func TestFinalizeDraftPR_SkipsWhenNoPRNumber(t *testing.T) {
 	c := &Controller{
 		taskStates: map[string]*TaskState{

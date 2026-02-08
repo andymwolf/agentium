@@ -50,25 +50,33 @@ var embeddedCodeReviewer string
 //go:embed docs_reviewer.md
 var embeddedDocsReviewer string
 
+//go:embed verify.md
+var embeddedVerify string
+
+//go:embed verify_reviewer.md
+var embeddedVerifyReviewer string
+
 //go:embed judge.md
 var embeddedJudge string
 
 // skillFiles maps filenames to their embedded content.
 var skillFiles = map[string]string{
-	"scope.md":          embeddedScope,
-	"workflow.md":       embeddedWorkflow,
-	"safety.md":         embeddedSafety,
-	"environment.md":    embeddedEnvironment,
-	"status_signals.md": embeddedStatusSignals,
-	"plan.md":           embeddedPlan,
-	"implement.md":      embeddedImplement,
-	"test.md":           embeddedTest,
-	"pr_update.md":      embeddedPRUpdate,
-	"docs.md":           embeddedDocs,
-	"plan_reviewer.md":  embeddedPlanReviewer,
-	"code_reviewer.md":  embeddedCodeReviewer,
-	"docs_reviewer.md":  embeddedDocsReviewer,
-	"judge.md":          embeddedJudge,
+	"scope.md":           embeddedScope,
+	"workflow.md":        embeddedWorkflow,
+	"safety.md":          embeddedSafety,
+	"environment.md":     embeddedEnvironment,
+	"status_signals.md":  embeddedStatusSignals,
+	"plan.md":            embeddedPlan,
+	"implement.md":       embeddedImplement,
+	"test.md":            embeddedTest,
+	"pr_update.md":       embeddedPRUpdate,
+	"docs.md":            embeddedDocs,
+	"plan_reviewer.md":   embeddedPlanReviewer,
+	"code_reviewer.md":   embeddedCodeReviewer,
+	"docs_reviewer.md":   embeddedDocsReviewer,
+	"verify.md":          embeddedVerify,
+	"verify_reviewer.md": embeddedVerifyReviewer,
+	"judge.md":           embeddedJudge,
 }
 
 // LoadManifest parses the embedded manifest YAML.

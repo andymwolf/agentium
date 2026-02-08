@@ -78,6 +78,7 @@ type SessionConfig struct {
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
 	Fallback      *ProvFallbackConfig   `json:"fallback,omitempty"`
+	AutoMerge     bool                  `json:"auto_merge,omitempty"`
 	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
 
@@ -103,6 +104,7 @@ type ProvPhaseLoopConfig struct {
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
 	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`
 	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
+	VerifyMaxIterations    int  `json:"verify_max_iterations,omitempty"`
 	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
 }

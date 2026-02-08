@@ -51,6 +51,7 @@ func init() {
 	runCmd.Flags().String("model", "", "Override model for all phases (format: adapter:model)")
 	runCmd.Flags().StringSlice("phase-model", nil, "Per-phase model override (format: PHASE=adapter:model)")
 	runCmd.Flags().Bool("local", false, "Run locally for interactive debugging (no VM provisioning)")
+	runCmd.Flags().Bool("auto-merge", false, "Automatically merge PR after CI checks pass")
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -121,6 +122,10 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if authMode := viper.GetString("claude.auth_mode"); authMode != "" {
 		cfg.Claude.AuthMode = authMode
 	}
+	if cmd.Flags().Changed("auto-merge") {
+		autoMerge, _ := cmd.Flags().GetBool("auto-merge")
+		cfg.Session.AutoMerge = autoMerge
+	}
 
 	// Validate configuration after applying CLI flags
 	if err = cfg.ValidateForRun(); err != nil {
@@ -156,6 +161,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Provider: %s\n", cfg.Cloud.Provider)
 	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
 	fmt.Printf("Max duration: %s\n", cfg.Session.MaxDuration)
+	if cfg.Session.AutoMerge {
+		fmt.Println("Auto-merge: enabled")
+	}
 	fmt.Println()
 
 	if dryRun {
@@ -179,6 +187,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		MaxIterations: cfg.Session.MaxIterations,
 		MaxDuration:   cfg.Session.MaxDuration,
 		Prompt:        cfg.Session.Prompt,
+		AutoMerge:     cfg.Session.AutoMerge,
 		GitHub: provisioner.GitHubConfig{
 			AppID:            cfg.GitHub.AppID,
 			InstallationID:   cfg.GitHub.InstallationID,
@@ -273,6 +282,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
 		ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
 		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+		VerifyMaxIterations:    cfg.PhaseLoop.VerifyMaxIterations,
 		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
 		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}

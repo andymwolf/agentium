@@ -7,6 +7,7 @@ import (
 )
 
 func TestAdvancePhase(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
 	tests := []struct {
 		name    string
 		current TaskPhase
@@ -21,11 +22,63 @@ func TestAdvancePhase(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := advancePhase(tt.current)
+			got := c.advancePhase(tt.current)
 			if got != tt.want {
 				t.Errorf("advancePhase(%q) = %q, want %q", tt.current, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAdvancePhase_WithAutoMerge(t *testing.T) {
+	c := &Controller{config: SessionConfig{AutoMerge: true}}
+	tests := []struct {
+		name    string
+		current TaskPhase
+		want    TaskPhase
+	}{
+		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
+		{"IMPLEMENT advances to DOCS", PhaseImplement, PhaseDocs},
+		{"DOCS advances to VERIFY", PhaseDocs, PhaseVerify},
+		{"VERIFY advances to COMPLETE", PhaseVerify, PhaseComplete},
+		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.advancePhase(tt.current)
+			if got != tt.want {
+				t.Errorf("advancePhase(%q) = %q, want %q", tt.current, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPhaseOrder_WithAutoMerge(t *testing.T) {
+	c := &Controller{config: SessionConfig{AutoMerge: true}}
+	order := c.phaseOrder()
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhaseVerify}
+	if len(order) != len(expected) {
+		t.Fatalf("phaseOrder() length = %d, want %d", len(order), len(expected))
+	}
+	for i, phase := range expected {
+		if order[i] != phase {
+			t.Errorf("phaseOrder()[%d] = %q, want %q", i, order[i], phase)
+		}
+	}
+}
+
+func TestPhaseOrder_WithoutAutoMerge(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	order := c.phaseOrder()
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs}
+	if len(order) != len(expected) {
+		t.Fatalf("phaseOrder() length = %d, want %d", len(order), len(expected))
+	}
+	for i, phase := range expected {
+		if order[i] != phase {
+			t.Errorf("phaseOrder()[%d] = %q, want %q", i, order[i], phase)
+		}
 	}
 }
 
@@ -43,6 +96,7 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 		{PhasePlan, defaultPlanMaxIter},
 		{PhaseImplement, defaultImplementMaxIter},
 		{PhaseDocs, defaultDocsMaxIter},
+		{PhaseVerify, defaultVerifyMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
 
@@ -117,6 +171,7 @@ func TestPhaseMaxIterations_SimplePath(t *testing.T) {
 		{PhasePlan, simplePlanMaxIter},
 		{PhaseImplement, simpleImplementMaxIter},
 		{PhaseDocs, simpleDocsMaxIter},
+		{PhaseVerify, simpleVerifyMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
 
@@ -476,5 +531,33 @@ func TestShouldSkipPlanIteration(t *testing.T) {
 				t.Errorf("shouldSkipPlanIteration(%s, %d) = %v, want %v", tt.phase, tt.iter, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPhaseMaxIterations_VerifyCustomConfig(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				VerifyMaxIterations: 5,
+			},
+		},
+	}
+
+	got := c.phaseMaxIterations(PhaseVerify, WorkflowPathComplex)
+	if got != 5 {
+		t.Errorf("phaseMaxIterations(VERIFY, COMPLEX) = %d, want 5", got)
+	}
+}
+
+func TestPhaseMaxIterations_VerifyDefault(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{},
+		},
+	}
+
+	got := c.phaseMaxIterations(PhaseVerify, WorkflowPathUnset)
+	if got != defaultVerifyMaxIter {
+		t.Errorf("phaseMaxIterations(VERIFY, UNSET) = %d, want %d", got, defaultVerifyMaxIter)
 	}
 }

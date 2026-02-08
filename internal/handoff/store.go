@@ -128,6 +128,8 @@ func (s *Store) StorePhaseOutput(taskID string, phase Phase, iteration int, outp
 		hd.ReviewOutput = v
 	case *DocsOutput:
 		hd.DocsOutput = v
+	case *VerifyOutput:
+		hd.VerifyOutput = v
 	default:
 		return fmt.Errorf("unknown output type for phase %s: %T", phase, output)
 	}
@@ -189,6 +191,15 @@ func (s *Store) GetDocsOutput(taskID string) *DocsOutput {
 	return hd.DocsOutput
 }
 
+// GetVerifyOutput is a convenience method to get typed verify output.
+func (s *Store) GetVerifyOutput(taskID string) *VerifyOutput {
+	hd := s.GetPhaseOutput(taskID, PhaseVerify)
+	if hd == nil {
+		return nil
+	}
+	return hd.VerifyOutput
+}
+
 // ClearFromPhase clears all handoff data from the specified phase onwards.
 func (s *Store) ClearFromPhase(taskID string, phase Phase) {
 	s.mu.Lock()
@@ -203,6 +214,7 @@ func (s *Store) ClearFromPhase(taskID string, phase Phase) {
 		PhasePlan:      0,
 		PhaseImplement: 1,
 		PhaseDocs:      2,
+		PhaseVerify:    3,
 	}
 
 	targetOrder := phaseOrder[phase]

@@ -69,6 +69,7 @@ const (
 	PhasePlan        TaskPhase = "PLAN"
 	PhaseImplement   TaskPhase = "IMPLEMENT"
 	PhaseDocs        TaskPhase = "DOCS"
+	PhaseVerify      TaskPhase = "VERIFY"
 	PhaseComplete    TaskPhase = "COMPLETE"
 	PhaseBlocked     TaskPhase = "BLOCKED"
 	PhaseNothingToDo TaskPhase = "NOTHING_TO_DO"
@@ -107,6 +108,7 @@ type TaskState struct {
 	DraftPRCreated     bool         // Whether draft PR has been created for this task
 	WorkflowPath       WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
 	ControllerOverrode bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
+	PRMerged           bool         // True if auto-merge successfully merged the PR
 	ParentBranch       string       // Parent issue's branch to base this task on (for dependency chains)
 }
 
@@ -116,6 +118,7 @@ type PhaseLoopConfig struct {
 	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
 	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
+	VerifyMaxIterations    int  `json:"verify_max_iterations,omitempty"`
 	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
 }
@@ -166,6 +169,7 @@ type SessionConfig struct {
 	PhaseLoop  *PhaseLoopConfig       `json:"phase_loop,omitempty"`
 	Fallback   *FallbackConfig        `json:"fallback,omitempty"`
 	Verbose    bool                   `json:"verbose,omitempty"`
+	AutoMerge  bool                   `json:"auto_merge,omitempty"`
 	Monorepo   *MonorepoSessionConfig `json:"monorepo,omitempty"`
 }
 
@@ -1297,7 +1301,8 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 
 	// Only include detailed implementation instructions for IMPLEMENT phase (or when phase is empty/unspecified)
 	// For PLAN, DOCS, and other phases, defer to the phase-specific system prompt
-	if phase == PhaseImplement || phase == "" {
+	switch phase {
+	case PhaseImplement, "":
 		if existingWork != nil {
 			if existingWork.PRNumber != "" {
 				sb.WriteString("### Instructions\n\n")
@@ -1362,7 +1367,18 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		}
 		sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
 		sb.WriteString(fmt.Sprintf("The repository is already cloned at %s.\n", c.workDir))
-	} else {
+	case PhaseVerify:
+		// VERIFY phase: provide PR number and repo context for CI checking and merging
+		taskID := taskKey("issue", issueNumber)
+		state := c.taskStates[taskID]
+		sb.WriteString("### Instructions\n\n")
+		sb.WriteString("Follow the instructions in your system prompt to verify CI checks and merge the PR.\n\n")
+		if state != nil && state.PRNumber != "" {
+			sb.WriteString(fmt.Sprintf("**PR Number:** %s\n", state.PRNumber))
+		}
+		sb.WriteString(fmt.Sprintf("**Repository:** %s\n", c.config.Repository))
+		sb.WriteString(fmt.Sprintf("The repository is cloned at %s.\n", c.workDir))
+	default:
 		// For PLAN, DOCS, and other phases: defer to the phase-specific system prompt
 		sb.WriteString("### Instructions\n\n")
 		sb.WriteString("Follow the instructions in your system prompt to complete this phase.\n")

@@ -12,6 +12,7 @@ const (
 	PhasePlan      Phase = "PLAN"
 	PhaseImplement Phase = "IMPLEMENT"
 	PhaseDocs      Phase = "DOCS"
+	PhaseVerify    Phase = "VERIFY"
 )
 
 // IssueContext contains the minimal context about the issue being worked on.
@@ -132,6 +133,26 @@ type DocsOutput struct {
 }
 
 // -----------------------------------------------------------------------------
+// VERIFY Phase
+// -----------------------------------------------------------------------------
+
+// VerifyInput is the curated input for the VERIFY phase.
+type VerifyInput struct {
+	Issue      IssueContext `json:"issue"`
+	PRNumber   string       `json:"pr_number"`
+	Repository string       `json:"repository"`
+}
+
+// VerifyOutput is the structured output from the VERIFY phase.
+type VerifyOutput struct {
+	ChecksPassed      bool     `json:"checks_passed"`
+	MergeSuccessful   bool     `json:"merge_successful"`
+	MergeSHA          string   `json:"merge_sha,omitempty"`
+	FailuresResolved  []string `json:"failures_resolved,omitempty"`
+	RemainingFailures []string `json:"remaining_failures,omitempty"`
+}
+
+// -----------------------------------------------------------------------------
 // Handoff Envelope
 // -----------------------------------------------------------------------------
 
@@ -147,6 +168,7 @@ type HandoffData struct {
 	ImplementOutput *ImplementOutput `json:"implement_output,omitempty"`
 	ReviewOutput    *ReviewOutput    `json:"review_output,omitempty"`
 	DocsOutput      *DocsOutput      `json:"docs_output,omitempty"`
+	VerifyOutput    *VerifyOutput    `json:"verify_output,omitempty"`
 }
 
 // GetOutput returns the populated output based on the phase, or nil if none.
@@ -158,6 +180,8 @@ func (h *HandoffData) GetOutput() interface{} {
 		return h.ImplementOutput
 	case PhaseDocs:
 		return h.DocsOutput
+	case PhaseVerify:
+		return h.VerifyOutput
 	default:
 		return nil
 	}
