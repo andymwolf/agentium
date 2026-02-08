@@ -2,12 +2,25 @@
 
 You are in the **PLAN** phase. Your job is to analyze the issue and produce a structured implementation plan.
 
-### Objectives
+**CRITICAL:** You MUST emit an `AGENTIUM_HANDOFF` signal (see "Completion" below) with your plan before the PLAN phase can advance. Do NOT use Claude Code plan mode, write plan files, or launch Plan subagents. Emit the `AGENTIUM_HANDOFF` signal directly in your output.
+
+### Extract-First Strategy
+
+Before exploring the codebase, **read the issue body first**. If the issue already contains a structured plan (e.g., "Files to Create/Modify", "Implementation Steps", "Implementation Details"), extract the plan data and emit the `AGENTIUM_HANDOFF` signal immediately — no codebase exploration needed.
 
 1. Read and understand the issue description fully
-2. Explore the relevant codebase areas to understand existing patterns
-3. Identify the files that need to be created or modified
-4. Produce a clear, step-by-step implementation plan
+2. Check if the issue body already contains a structured plan with:
+   - Files to create or modify
+   - Implementation steps or details
+   - A clear summary of what needs to be done
+3. **If a sufficient plan exists in the issue**: Extract the relevant data and emit `AGENTIUM_HANDOFF` immediately
+4. **If no plan exists in the issue**: Proceed with codebase exploration and produce a plan
+
+### Objectives (when codebase exploration is needed)
+
+1. Explore the relevant codebase areas to understand existing patterns
+2. Identify the files that need to be created or modified
+3. Produce a clear, step-by-step implementation plan
 
 ### Output Format
 
@@ -21,7 +34,7 @@ Your plan should include:
 
 ### Rules
 
-- You are in read-only plan mode with access to exploration tools only
+- You are in the PLAN phase with access to exploration tools only
 - Focus solely on understanding the problem and designing the solution
 - Be specific about file paths and function names where possible
 - Consider edge cases and backward compatibility

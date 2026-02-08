@@ -253,6 +253,49 @@ func TestBuildReviewPrompt_WorkerFeedbackResponses(t *testing.T) {
 	}
 }
 
+func TestExtractReviewerVerdict(t *testing.T) {
+	tests := []struct {
+		name     string
+		feedback string
+		want     JudgeVerdict
+	}{
+		{
+			name:     "ITERATE verdict",
+			feedback: "Some feedback text\nAGENTIUM_EVAL: ITERATE needs more work\nmore text",
+			want:     VerdictIterate,
+		},
+		{
+			name:     "ADVANCE verdict",
+			feedback: "Looks good\nAGENTIUM_EVAL: ADVANCE\nfinished",
+			want:     VerdictAdvance,
+		},
+		{
+			name:     "BLOCKED verdict",
+			feedback: "Critical issue\nAGENTIUM_EVAL: BLOCKED cannot proceed",
+			want:     VerdictBlocked,
+		},
+		{
+			name:     "no verdict",
+			feedback: "Just some regular feedback without a signal",
+			want:     "",
+		},
+		{
+			name:     "empty feedback",
+			feedback: "",
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractReviewerVerdict(tt.feedback)
+			if got != tt.want {
+				t.Errorf("extractReviewerVerdict() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildReviewPrompt_FallbackToPreviousFeedback(t *testing.T) {
 	c := &Controller{
 		config:     SessionConfig{Repository: "github.com/org/repo"},

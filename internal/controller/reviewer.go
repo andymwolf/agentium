@@ -233,6 +233,26 @@ func extractFeedbackResponses(output string) []string {
 	return results
 }
 
+// extractReviewerVerdict parses the reviewer's recommended verdict from its feedback.
+// The reviewer emits AGENTIUM_EVAL: ADVANCE|ITERATE|BLOCKED in its output, which is
+// normally only consumed by the judge prompt. This function extracts it for the controller
+// to detect when the judge overrides the reviewer's recommendation.
+func extractReviewerVerdict(feedback string) JudgeVerdict {
+	matches := judgePattern.FindStringSubmatch(feedback)
+	if len(matches) < 2 {
+		return ""
+	}
+	switch matches[1] {
+	case "ITERATE":
+		return VerdictIterate
+	case "BLOCKED":
+		return VerdictBlocked
+	case "ADVANCE":
+		return VerdictAdvance
+	}
+	return ""
+}
+
 // truncateString truncates a string to maxLen characters, adding "..." if truncated.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {

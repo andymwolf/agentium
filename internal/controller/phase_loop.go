@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/andywolf/agentium/internal/handoff"
@@ -277,7 +278,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				state.Phase = PhaseComplete
 				continue
 			}
-			if state.ControllerOverrode {
+			if state.ControllerOverrode || state.JudgeOverrodeReviewer {
 				c.logWarning("VERIFY phase: NOMERGE flag set, skipping auto-merge")
 				state.Phase = PhaseComplete
 				continue
@@ -366,6 +367,26 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			if c.isHandoffEnabled() && phaseOutput != "" {
 				if handoffErr := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); handoffErr != nil {
 					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, handoffErr)
+				}
+			}
+
+			// When plan skip triggers and processHandoffOutput didn't store a PlanOutput
+			// (because the issue body doesn't contain AGENTIUM_HANDOFF), create a minimal
+			// PlanOutput from the issue body's structured plan sections.
+			if skipIteration && c.isHandoffEnabled() {
+				hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhasePlan)
+				if hd == nil || hd.PlanOutput == nil {
+					planOutput := extractPlanFromIssueBody(phaseOutput)
+					if planOutput != nil {
+						if storeErr := c.handoffStore.StorePhaseOutput(taskID, handoff.PhasePlan, iter, planOutput); storeErr != nil {
+							c.logWarning("Failed to store extracted plan from issue body: %v", storeErr)
+						} else {
+							c.logInfo("Stored plan extracted from issue body in handoff store")
+							if saveErr := c.handoffStore.Save(); saveErr != nil {
+								c.logWarning("Failed to persist handoff store: %v", saveErr)
+							}
+						}
+					}
 				}
 			}
 
@@ -530,6 +551,30 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			state.LastJudgeVerdict = string(judgeResult.Verdict)
 			state.LastJudgeFeedback = judgeResult.Feedback
+
+			// Hard-gate: PLAN phase cannot advance without a valid PlanOutput in the handoff store
+			if currentPhase == PhasePlan && judgeResult.Verdict == VerdictAdvance && c.isHandoffEnabled() {
+				hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhasePlan)
+				if hd == nil || hd.PlanOutput == nil {
+					c.logWarning("PLAN: judge ADVANCE but no AGENTIUM_HANDOFF signal — forcing ITERATE")
+					judgeResult = JudgeResult{
+						Verdict:     VerdictIterate,
+						Feedback:    "No AGENTIUM_HANDOFF signal detected. You must emit the structured handoff signal with your plan before the PLAN phase can advance.",
+						SignalFound: true,
+					}
+					state.LastJudgeVerdict = string(judgeResult.Verdict)
+					state.LastJudgeFeedback = judgeResult.Feedback
+				}
+			}
+
+			// Detect when judge overrides reviewer's recommendation (NOMERGE trigger)
+			if judgeResult.Verdict == VerdictAdvance {
+				reviewerVerdict := extractReviewerVerdict(reviewResult.Feedback)
+				if reviewerVerdict == VerdictIterate || reviewerVerdict == VerdictBlocked {
+					state.JudgeOverrodeReviewer = true
+					c.logWarning("Phase %s: judge ADVANCE overrode reviewer %s", currentPhase, reviewerVerdict)
+				}
+			}
 
 			// Post judge comment
 			c.postJudgeComment(ctx, currentPhase, iter, judgeResult)
@@ -781,8 +826,9 @@ func (c *Controller) formatPlanForComment(taskID, rawOutput string) string {
 			return formatPlanOutput(hd.PlanOutput)
 		}
 	}
-	// Fallback: strip signals from raw output
-	return StripAgentiumSignals(rawOutput)
+	// Fallback: strip signals and cap length for GitHub comment limit
+	stripped := StripAgentiumSignals(rawOutput)
+	return SummarizeForComment(stripped, 200)
 }
 
 // formatPlanOutput renders a PlanOutput struct as clean markdown.
@@ -824,4 +870,132 @@ func formatPlanOutput(plan *handoff.PlanOutput) string {
 	}
 
 	return strings.TrimSpace(sb.String())
+}
+
+// issuePlanSectionPattern matches markdown headings for plan-related sections.
+var issuePlanSectionPattern = regexp.MustCompile(`(?im)^##?\s+(Summary|Files to (?:Create|Modify)|Files to Create/Modify|Implementation (?:Steps|Details|Plan)|Testing|Test Plan)\s*$`)
+
+// issuePlanFilePattern matches file paths in list items (e.g., "- `path/to/file.go`" or "- path/to/file.go").
+var issuePlanFilePattern = regexp.MustCompile(`(?m)^[\s]*[-*]\s+` + "`?" + `([\w./\-]+\.\w+)` + "`?")
+
+// issuePlanStepPattern matches numbered list items (e.g., "1. Do something").
+var issuePlanStepPattern = regexp.MustCompile(`(?m)^[\s]*(\d+)\.\s+(.+)$`)
+
+// extractPlanFromIssueBody parses an issue body's structured plan sections into a
+// handoff.PlanOutput. This is deterministic regex/string parsing — no LLM call needed.
+// Returns nil if the body does not contain enough plan structure.
+func extractPlanFromIssueBody(body string) *handoff.PlanOutput {
+	if body == "" {
+		return nil
+	}
+
+	plan := &handoff.PlanOutput{}
+
+	// Extract sections by splitting on markdown headings
+	sections := splitMarkdownSections(body)
+
+	for heading, content := range sections {
+		normalizedHeading := strings.ToLower(strings.TrimSpace(heading))
+		switch {
+		case strings.Contains(normalizedHeading, "summary"):
+			plan.Summary = strings.TrimSpace(content)
+		case strings.Contains(normalizedHeading, "files to modify"):
+			plan.FilesToModify = extractFilePaths(content)
+		case strings.Contains(normalizedHeading, "files to create"):
+			plan.FilesToCreate = extractFilePaths(content)
+		case strings.Contains(normalizedHeading, "files to create/modify"):
+			// Combined section: treat all as files to modify
+			plan.FilesToModify = extractFilePaths(content)
+		case strings.Contains(normalizedHeading, "implementation"):
+			plan.ImplementationSteps = extractSteps(content)
+		case strings.Contains(normalizedHeading, "test"):
+			plan.TestingApproach = strings.TrimSpace(content)
+		}
+	}
+
+	// Only return a plan if we extracted something meaningful
+	if plan.Summary == "" && len(plan.FilesToModify) == 0 && len(plan.FilesToCreate) == 0 && len(plan.ImplementationSteps) == 0 {
+		return nil
+	}
+
+	return plan
+}
+
+// splitMarkdownSections splits markdown content by ## or # headings, returning
+// a map of heading text to section content.
+func splitMarkdownSections(body string) map[string]string {
+	sections := make(map[string]string)
+	lines := strings.Split(body, "\n")
+
+	currentHeading := ""
+	var currentContent strings.Builder
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "# ") {
+			// Save previous section
+			if currentHeading != "" {
+				sections[currentHeading] = currentContent.String()
+			}
+			currentHeading = strings.TrimLeft(trimmed, "# ")
+			currentContent.Reset()
+		} else if currentHeading != "" {
+			currentContent.WriteString(line)
+			currentContent.WriteString("\n")
+		}
+	}
+
+	// Save last section
+	if currentHeading != "" {
+		sections[currentHeading] = currentContent.String()
+	}
+
+	return sections
+}
+
+// extractFilePaths extracts file paths from markdown list items.
+func extractFilePaths(content string) []string {
+	matches := issuePlanFilePattern.FindAllStringSubmatch(content, -1)
+	paths := make([]string, 0, len(matches))
+	seen := make(map[string]bool)
+	for _, m := range matches {
+		path := m[1]
+		if !seen[path] {
+			paths = append(paths, path)
+			seen[path] = true
+		}
+	}
+	return paths
+}
+
+// extractSteps extracts numbered steps from markdown content.
+func extractSteps(content string) []handoff.ImplementationStep {
+	matches := issuePlanStepPattern.FindAllStringSubmatch(content, -1)
+	steps := make([]handoff.ImplementationStep, 0, len(matches))
+	for i, m := range matches {
+		order := i + 1
+		if len(m) >= 3 {
+			// Try to parse the step number; fallback to sequential
+			if n := parseStepNumber(m[1]); n > 0 {
+				order = n
+			}
+			steps = append(steps, handoff.ImplementationStep{
+				Order:       order,
+				Description: strings.TrimSpace(m[2]),
+			})
+		}
+	}
+	return steps
+}
+
+// parseStepNumber converts a string like "1" to an int, returning 0 on failure.
+func parseStepNumber(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

@@ -107,8 +107,9 @@ type TaskState struct {
 	LastJudgeFeedback  string       // Last judge feedback text
 	DraftPRCreated     bool         // Whether draft PR has been created for this task
 	WorkflowPath       WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
-	ControllerOverrode bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
-	PRMerged           bool         // True if auto-merge successfully merged the PR
+	ControllerOverrode    bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
+	JudgeOverrodeReviewer bool         // True if judge ADVANCE overrode reviewer ITERATE/BLOCKED (triggers NOMERGE)
+	PRMerged              bool         // True if auto-merge successfully merged the PR
 	ParentBranch       string       // Parent issue's branch to base this task on (for dependency chains)
 }
 

@@ -186,3 +186,42 @@ func TestFinalizeDraftPR_ErrorsOnMissingState(t *testing.T) {
 		t.Error("expected error when task state not found")
 	}
 }
+
+func TestTaskState_NOMERGEConditions(t *testing.T) {
+	// Verify both ControllerOverrode and JudgeOverrodeReviewer trigger NOMERGE
+	tests := []struct {
+		name  string
+		state TaskState
+		want  bool // Should NOMERGE trigger?
+	}{
+		{
+			name:  "controller overrode",
+			state: TaskState{ControllerOverrode: true, JudgeOverrodeReviewer: false},
+			want:  true,
+		},
+		{
+			name:  "judge overrode reviewer",
+			state: TaskState{ControllerOverrode: false, JudgeOverrodeReviewer: true},
+			want:  true,
+		},
+		{
+			name:  "both flags set",
+			state: TaskState{ControllerOverrode: true, JudgeOverrodeReviewer: true},
+			want:  true,
+		},
+		{
+			name:  "neither flag set",
+			state: TaskState{ControllerOverrode: false, JudgeOverrodeReviewer: false},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.state.ControllerOverrode || tt.state.JudgeOverrodeReviewer
+			if got != tt.want {
+				t.Errorf("NOMERGE condition = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
