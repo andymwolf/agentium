@@ -54,10 +54,12 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
 	}
-	if maxIter := viper.GetInt("session.max_iterations"); maxIter > 0 {
+	if cmd.Flags().Changed("max-iterations") {
+		maxIter, _ := cmd.Flags().GetInt("max-iterations")
 		cfg.Session.MaxIterations = maxIter
 	}
-	if maxDur := viper.GetString("session.max_duration"); maxDur != "" {
+	if cmd.Flags().Changed("max-duration") {
+		maxDur, _ := cmd.Flags().GetString("max-duration")
 		cfg.Session.MaxDuration = maxDur
 	}
 	if prompt, _ := cmd.Flags().GetString("prompt"); prompt != "" {

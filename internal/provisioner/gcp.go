@@ -53,6 +53,14 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result
 		return nil, err
 	}
 
+	// Convert max_duration from Go duration format (e.g. "6h") to seconds for Terraform
+	maxRunDuration := "7200s" // default 2h
+	if config.Session.MaxDuration != "" {
+		if d, parseErr := time.ParseDuration(config.Session.MaxDuration); parseErr == nil {
+			maxRunDuration = fmt.Sprintf("%ds", int(d.Seconds()))
+		}
+	}
+
 	// Create terraform.tfvars
 	tfvars := fmt.Sprintf(`
 session_id         = "%s"
@@ -64,6 +72,7 @@ disk_size_gb       = %d
 controller_image   = "%s"
 session_config     = %s
 claude_auth_mode   = "%s"
+max_run_duration   = "%s"
 `,
 		config.Session.ID,
 		config.Project,
@@ -74,6 +83,7 @@ claude_auth_mode   = "%s"
 		config.ControllerImage,
 		fmt.Sprintf("%q", string(sessionJSON)),
 		config.Session.ClaudeAuth.AuthMode,
+		maxRunDuration,
 	)
 
 	// Add auth JSON only when oauth mode with auth data present
