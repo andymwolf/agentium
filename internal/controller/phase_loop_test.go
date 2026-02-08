@@ -811,9 +811,12 @@ func TestTryVerifyMerge_HandoffMergeSuccessful(t *testing.T) {
 	}
 
 	state := &TaskState{PRNumber: "42"}
-	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	got, failures := c.tryVerifyMerge(context.Background(), taskID, state)
 	if !got {
-		t.Error("tryVerifyMerge() = false, want true when handoff reports merge successful")
+		t.Error("tryVerifyMerge() merged = false, want true when handoff reports merge successful")
+	}
+	if len(failures) != 0 {
+		t.Errorf("tryVerifyMerge() remainingFailures = %v, want nil on successful merge", failures)
 	}
 }
 
@@ -841,9 +844,12 @@ func TestTryVerifyMerge_HandoffChecksPassed_ControllerMerge(t *testing.T) {
 	// Controller merge will fail (nonexistent repo),
 	// so tryVerifyMerge returns false — this is the expected fallback behavior.
 	state := &TaskState{PRNumber: "99999"}
-	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	got, failures := c.tryVerifyMerge(context.Background(), taskID, state)
 	if got {
-		t.Error("tryVerifyMerge() = true, want false when controller merge fails")
+		t.Error("tryVerifyMerge() merged = true, want false when controller merge fails")
+	}
+	if len(failures) != 0 {
+		t.Errorf("tryVerifyMerge() remainingFailures = %v, want nil when checks passed", failures)
 	}
 }
 
@@ -868,9 +874,12 @@ func TestTryVerifyMerge_HandoffChecksFailed(t *testing.T) {
 	}
 
 	state := &TaskState{PRNumber: "42"}
-	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	got, failures := c.tryVerifyMerge(context.Background(), taskID, state)
 	if got {
-		t.Error("tryVerifyMerge() = true, want false when CI checks have not passed")
+		t.Error("tryVerifyMerge() merged = true, want false when CI checks have not passed")
+	}
+	if len(failures) != 2 || failures[0] != "lint" || failures[1] != "test" {
+		t.Errorf("tryVerifyMerge() remainingFailures = %v, want [lint test]", failures)
 	}
 }
 
@@ -891,8 +900,11 @@ func TestTryVerifyMerge_NoHandoffData(t *testing.T) {
 
 	// No handoff data stored — controller tries merge directly, which fails (nonexistent repo).
 	state := &TaskState{PRNumber: "99999"}
-	got := c.tryVerifyMerge(context.Background(), "issue:999", state)
+	got, failures := c.tryVerifyMerge(context.Background(), "issue:999", state)
 	if got {
-		t.Error("tryVerifyMerge() = true, want false when no handoff data and merge fails")
+		t.Error("tryVerifyMerge() merged = true, want false when no handoff data and merge fails")
+	}
+	if len(failures) != 0 {
+		t.Errorf("tryVerifyMerge() remainingFailures = %v, want nil when no handoff data", failures)
 	}
 }

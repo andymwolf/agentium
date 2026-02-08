@@ -194,26 +194,27 @@ func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
 }
 
 // tryVerifyMerge checks if the PR was merged by the worker (via handoff) or
-// attempts a controller-side merge if CI checks passed. Returns true if merged.
-func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *TaskState) bool {
+// attempts a controller-side merge if CI checks passed. Returns true if merged,
+// and any remaining CI failures reported by the worker (for retry feedback).
+func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *TaskState) (bool, []string) {
 	// Check handoff for worker-reported merge
-	if c.isHandoffEnabled() && c.handoffStore != nil {
+	if c.isHandoffEnabled() {
 		vo := c.handoffStore.GetVerifyOutput(taskID)
 		if vo != nil {
-			if vo.MergeSuccessful {
+			if vo.MergeSuccessful && state.PRNumber != "" {
 				c.logInfo("VERIFY: agent reported successful merge via handoff")
-				return true
+				return true, nil
 			}
 			if vo.ChecksPassed && state.PRNumber != "" {
 				// CI passed but agent didn't merge — controller tries
 				if err := c.attemptPRMerge(ctx, state.PRNumber); err == nil {
 					c.logInfo("VERIFY: controller merge fallback succeeded (CI passed)")
-					return true
+					return true, nil
 				}
 				c.logWarning("VERIFY: controller merge fallback failed despite CI passing")
 			}
 			// CI not passed — don't try merge
-			return false
+			return false, vo.RemainingFailures
 		}
 	}
 
@@ -221,10 +222,10 @@ func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *T
 	if state.PRNumber != "" {
 		if err := c.attemptPRMerge(ctx, state.PRNumber); err == nil {
 			c.logInfo("VERIFY: controller merge succeeded (no handoff data)")
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // phaseOrder returns the active phase sequence based on auto-merge config.
@@ -443,7 +444,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			// For VERIFY phase: skip reviewer/judge (CI check/merge is mechanical, not creative)
 			if currentPhase == PhaseVerify {
-				merged := c.tryVerifyMerge(ctx, taskID, state)
+				merged, remainingFailures := c.tryVerifyMerge(ctx, taskID, state)
 				if merged {
 					state.PRMerged = true
 					c.postPhaseComment(ctx, currentPhase, iter, RoleController,
@@ -457,10 +458,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					advanced = true
 					break
 				}
-				// Not merged — continue to next iteration so worker can retry
+				// Not merged — surface remaining failures so worker knows what to fix
+				retryMsg := "Merge not yet successful — iterating"
+				if len(remainingFailures) > 0 {
+					retryMsg = fmt.Sprintf("Merge not yet successful — remaining failures: %s", strings.Join(remainingFailures, ", "))
+				}
 				c.logInfo("VERIFY: not yet merged, continuing to iteration %d/%d", iter+1, maxIter)
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
-					"Merge not yet successful — iterating")
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController, retryMsg)
 				continue
 			}
 
