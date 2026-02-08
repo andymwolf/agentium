@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/andywolf/agentium/internal/handoff"
@@ -559,5 +560,232 @@ func TestPhaseMaxIterations_VerifyDefault(t *testing.T) {
 	got := c.phaseMaxIterations(PhaseVerify, WorkflowPathUnset)
 	if got != defaultVerifyMaxIter {
 		t.Errorf("phaseMaxIterations(VERIFY, UNSET) = %d, want %d", got, defaultVerifyMaxIter)
+	}
+}
+
+func TestExtractPlanFromIssueBody_FullPlan(t *testing.T) {
+	body := `## Summary
+Add authentication middleware to the API server.
+
+## Files to Modify
+- ` + "`" + `internal/server/router.go` + "`" + `
+- ` + "`" + `internal/middleware/auth.go` + "`" + `
+
+## Files to Create
+- ` + "`" + `internal/middleware/jwt.go` + "`" + `
+
+## Implementation Steps
+1. Add JWT validation helper in jwt.go
+2. Create auth middleware function in auth.go
+3. Wire middleware into router.go
+
+## Testing
+Run go test ./internal/middleware/... and verify 401 on unauthenticated requests.
+`
+
+	plan := extractPlanFromIssueBody(body)
+	if plan == nil {
+		t.Fatal("expected non-nil plan")
+	}
+
+	if plan.Summary != "Add authentication middleware to the API server." {
+		t.Errorf("Summary = %q", plan.Summary)
+	}
+
+	if len(plan.FilesToModify) != 2 {
+		t.Errorf("FilesToModify count = %d, want 2", len(plan.FilesToModify))
+	} else {
+		if plan.FilesToModify[0] != "internal/server/router.go" {
+			t.Errorf("FilesToModify[0] = %q", plan.FilesToModify[0])
+		}
+	}
+
+	if len(plan.FilesToCreate) != 1 {
+		t.Errorf("FilesToCreate count = %d, want 1", len(plan.FilesToCreate))
+	} else if plan.FilesToCreate[0] != "internal/middleware/jwt.go" {
+		t.Errorf("FilesToCreate[0] = %q", plan.FilesToCreate[0])
+	}
+
+	if len(plan.ImplementationSteps) != 3 {
+		t.Errorf("ImplementationSteps count = %d, want 3", len(plan.ImplementationSteps))
+	} else {
+		if plan.ImplementationSteps[0].Order != 1 {
+			t.Errorf("Step[0].Order = %d, want 1", plan.ImplementationSteps[0].Order)
+		}
+		if plan.ImplementationSteps[0].Description != "Add JWT validation helper in jwt.go" {
+			t.Errorf("Step[0].Description = %q", plan.ImplementationSteps[0].Description)
+		}
+	}
+
+	if plan.TestingApproach == "" {
+		t.Error("expected non-empty TestingApproach")
+	}
+}
+
+func TestExtractPlanFromIssueBody_EmptyBody(t *testing.T) {
+	plan := extractPlanFromIssueBody("")
+	if plan != nil {
+		t.Errorf("expected nil plan for empty body, got %+v", plan)
+	}
+}
+
+func TestExtractPlanFromIssueBody_NoPlanStructure(t *testing.T) {
+	body := "Please fix the login button. It doesn't work when clicked."
+	plan := extractPlanFromIssueBody(body)
+	if plan != nil {
+		t.Errorf("expected nil plan for unstructured body, got %+v", plan)
+	}
+}
+
+func TestExtractPlanFromIssueBody_PartialPlan(t *testing.T) {
+	body := `## Summary
+Fix the login button click handler.
+
+## Implementation Steps
+1. Update the onClick handler in LoginButton.tsx
+2. Add error handling for failed auth requests
+`
+
+	plan := extractPlanFromIssueBody(body)
+	if plan == nil {
+		t.Fatal("expected non-nil plan for partial plan")
+	}
+	if plan.Summary == "" {
+		t.Error("expected non-empty Summary")
+	}
+	if len(plan.ImplementationSteps) != 2 {
+		t.Errorf("ImplementationSteps count = %d, want 2", len(plan.ImplementationSteps))
+	}
+}
+
+func TestFormatPlanForComment_FallbackCapsLength(t *testing.T) {
+	// Generate a long raw output (500 lines)
+	var lines []string
+	for i := 0; i < 500; i++ {
+		lines = append(lines, "This is a line of agent output that needs to be capped")
+	}
+	longOutput := strings.Join(lines, "\n")
+
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: nil, // no handoff store → fallback path
+	}
+
+	result := c.formatPlanForComment("issue:123", longOutput)
+
+	// Result should be shorter than the input (capped at 200 lines)
+	resultLines := strings.Split(result, "\n")
+	if len(resultLines) > 210 { // allow some margin for truncation message
+		t.Errorf("formatPlanForComment fallback produced %d lines, expected ≤ ~200", len(resultLines))
+	}
+}
+
+func TestExtractFilePaths(t *testing.T) {
+	content := `
+- ` + "`" + `internal/server/router.go` + "`" + `
+- ` + "`" + `internal/middleware/auth.go` + "`" + `
+- internal/config/config.go
+- ` + "`" + `internal/server/router.go` + "`" + ` (duplicate)
+`
+
+	paths := extractFilePaths(content)
+
+	// Should deduplicate
+	if len(paths) != 3 {
+		t.Errorf("extractFilePaths() returned %d paths, want 3: %v", len(paths), paths)
+	}
+}
+
+func TestExtractSteps(t *testing.T) {
+	content := `
+1. First step description
+2. Second step description
+3. Third step with more detail
+`
+
+	steps := extractSteps(content)
+	if len(steps) != 3 {
+		t.Fatalf("extractSteps() returned %d steps, want 3", len(steps))
+	}
+	if steps[0].Order != 1 || steps[0].Description != "First step description" {
+		t.Errorf("steps[0] = %+v", steps[0])
+	}
+	if steps[2].Order != 3 || steps[2].Description != "Third step with more detail" {
+		t.Errorf("steps[2] = %+v", steps[2])
+	}
+}
+
+func TestParseStepNumber(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"1", 1},
+		{"10", 10},
+		{"0", 0},
+		{"abc", 0},
+		{"", 0},
+	}
+	for _, tt := range tests {
+		got := parseStepNumber(tt.input)
+		if got != tt.want {
+			t.Errorf("parseStepNumber(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestSplitMarkdownSections(t *testing.T) {
+	body := `Some preamble text
+
+## Summary
+This is the summary.
+
+## Files to Modify
+- file1.go
+- file2.go
+
+# Top-Level Heading
+Content under top-level heading.
+
+## Implementation Steps
+1. Do something
+2. Do another thing
+`
+
+	sections := splitMarkdownSections(body)
+
+	if len(sections) != 4 {
+		t.Errorf("splitMarkdownSections() returned %d sections, want 4: %v", len(sections), sections)
+	}
+
+	if summary, ok := sections["Summary"]; !ok {
+		t.Error("missing 'Summary' section")
+	} else if !strings.Contains(summary, "This is the summary.") {
+		t.Errorf("Summary content = %q", summary)
+	}
+
+	if files, ok := sections["Files to Modify"]; !ok {
+		t.Error("missing 'Files to Modify' section")
+	} else if !strings.Contains(files, "file1.go") {
+		t.Errorf("Files to Modify content = %q", files)
+	}
+
+	if topLevel, ok := sections["Top-Level Heading"]; !ok {
+		t.Error("missing 'Top-Level Heading' section")
+	} else if !strings.Contains(topLevel, "Content under top-level heading.") {
+		t.Errorf("Top-Level Heading content = %q", topLevel)
+	}
+
+	if steps, ok := sections["Implementation Steps"]; !ok {
+		t.Error("missing 'Implementation Steps' section")
+	} else if !strings.Contains(steps, "Do something") {
+		t.Errorf("Implementation Steps content = %q", steps)
+	}
+
+	// Preamble text (before any heading) should not appear in any section
+	for heading, content := range sections {
+		if strings.Contains(content, "Some preamble text") {
+			t.Errorf("preamble text leaked into section %q", heading)
+		}
 	}
 }

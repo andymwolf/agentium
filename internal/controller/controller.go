@@ -95,21 +95,22 @@ const (
 // Example: When an agent emits "TESTS_PASSED", LastStatus is set to "TESTS_PASSED" while
 // Phase transitions to PhaseDocs.
 type TaskState struct {
-	ID                 string
-	Type               string    // "issue" or "pr"
-	Phase              TaskPhase // Derived workflow state (computed from signals and phase transitions)
-	TestRetries        int
-	LastStatus         string       // Raw agent signal string for debugging/audit (e.g., "TESTS_PASSED")
-	PRNumber           string       // Linked PR number (for issues that create PRs)
-	PhaseIteration     int          // Current iteration within the active phase (phase loop)
-	MaxPhaseIterations int          // Max iterations for current phase (phase loop)
-	LastJudgeVerdict   string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
-	LastJudgeFeedback  string       // Last judge feedback text
-	DraftPRCreated     bool         // Whether draft PR has been created for this task
-	WorkflowPath       WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
-	ControllerOverrode bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
-	PRMerged           bool         // True if auto-merge successfully merged the PR
-	ParentBranch       string       // Parent issue's branch to base this task on (for dependency chains)
+	ID                    string
+	Type                  string    // "issue" or "pr"
+	Phase                 TaskPhase // Derived workflow state (computed from signals and phase transitions)
+	TestRetries           int
+	LastStatus            string       // Raw agent signal string for debugging/audit (e.g., "TESTS_PASSED")
+	PRNumber              string       // Linked PR number (for issues that create PRs)
+	PhaseIteration        int          // Current iteration within the active phase (phase loop)
+	MaxPhaseIterations    int          // Max iterations for current phase (phase loop)
+	LastJudgeVerdict      string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
+	LastJudgeFeedback     string       // Last judge feedback text
+	DraftPRCreated        bool         // Whether draft PR has been created for this task
+	WorkflowPath          WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
+	ControllerOverrode    bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
+	JudgeOverrodeReviewer bool         // True if judge ADVANCE overrode reviewer ITERATE/BLOCKED (triggers NOMERGE)
+	PRMerged              bool         // True if auto-merge successfully merged the PR
+	ParentBranch          string       // Parent issue's branch to base this task on (for dependency chains)
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
