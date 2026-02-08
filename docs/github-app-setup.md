@@ -38,7 +38,7 @@ Under **"Permissions"**, configure the following:
 | **Actions** | Read | View CI workflow run logs and results |
 | **Checks** | Read | View check run details and annotations |
 | **Contents** | Read & write | Clone repos, push branches |
-| **Issues** | Read | Read issue descriptions and comments |
+| **Issues** | Read & write | Read issue descriptions and comments; create issues for agent findings |
 | **Pull requests** | Read & write | Create and update PRs |
 | **Metadata** | Read | Access basic repository info |
 
