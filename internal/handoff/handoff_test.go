@@ -307,6 +307,89 @@ More output`
 	})
 }
 
+func TestStore_VerifyOutput(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "handoff-verify-test")
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+
+	taskID := "issue:verify-test"
+	verifyOut := &VerifyOutput{
+		ChecksPassed:    true,
+		MergeSuccessful: true,
+		MergeSHA:        "abc123def",
+	}
+
+	err = store.StorePhaseOutput(taskID, PhaseVerify, 1, verifyOut)
+	if err != nil {
+		t.Fatalf("StorePhaseOutput failed: %v", err)
+	}
+
+	retrieved := store.GetVerifyOutput(taskID)
+	if retrieved == nil {
+		t.Fatal("GetVerifyOutput returned nil")
+	}
+	if !retrieved.ChecksPassed {
+		t.Error("Expected ChecksPassed to be true")
+	}
+	if !retrieved.MergeSuccessful {
+		t.Error("Expected MergeSuccessful to be true")
+	}
+	if retrieved.MergeSHA != "abc123def" {
+		t.Errorf("Expected MergeSHA 'abc123def', got %s", retrieved.MergeSHA)
+	}
+}
+
+func TestParser_VerifyOutput(t *testing.T) {
+	parser := NewParser()
+
+	output := `AGENTIUM_HANDOFF: {"checks_passed":true,"merge_successful":true,"merge_sha":"abc123","failures_resolved":["lint fix"],"remaining_failures":[]}`
+
+	result, err := parser.ParseOutput(output, PhaseVerify)
+	if err != nil {
+		t.Fatalf("ParseOutput failed: %v", err)
+	}
+
+	verify, ok := result.(*VerifyOutput)
+	if !ok {
+		t.Fatalf("Expected *VerifyOutput, got %T", result)
+	}
+	if !verify.ChecksPassed {
+		t.Error("Expected ChecksPassed to be true")
+	}
+	if !verify.MergeSuccessful {
+		t.Error("Expected MergeSuccessful to be true")
+	}
+	if verify.MergeSHA != "abc123" {
+		t.Errorf("Expected MergeSHA 'abc123', got %s", verify.MergeSHA)
+	}
+	if len(verify.FailuresResolved) != 1 || verify.FailuresResolved[0] != "lint fix" {
+		t.Errorf("Expected FailuresResolved ['lint fix'], got %v", verify.FailuresResolved)
+	}
+}
+
+func TestParseAny_DetectsVerify(t *testing.T) {
+	parser := NewParser()
+
+	output := `AGENTIUM_HANDOFF: {"checks_passed":false,"merge_successful":false,"remaining_failures":["test timeout"]}`
+
+	phase, result, err := parser.ParseAny(output)
+	if err != nil {
+		t.Fatalf("ParseAny failed: %v", err)
+	}
+	if phase != PhaseVerify {
+		t.Errorf("Expected VERIFY phase, got %s", phase)
+	}
+
+	verify := result.(*VerifyOutput)
+	if verify.ChecksPassed {
+		t.Error("Expected ChecksPassed to be false")
+	}
+}
+
 func TestValidator(t *testing.T) {
 	validator := NewValidator()
 
@@ -416,6 +499,41 @@ func TestValidator(t *testing.T) {
 		errs = validator.ValidatePhaseInput(store, taskID, PhaseImplement)
 		if errs.HasErrors() {
 			t.Errorf("IMPLEMENT should pass with plan: %v", errs)
+		}
+
+		// VERIFY should fail without implement output
+		errs = validator.ValidatePhaseInput(store, taskID, PhaseVerify)
+		if !errs.HasErrors() {
+			t.Error("VERIFY should fail without implement output")
+		}
+
+		// Add implement output
+		_ = store.StorePhaseOutput(taskID, PhaseImplement, 1, &ImplementOutput{BranchName: "test"})
+
+		// VERIFY should now pass
+		errs = validator.ValidatePhaseInput(store, taskID, PhaseVerify)
+		if errs.HasErrors() {
+			t.Errorf("VERIFY should pass with implement output: %v", errs)
+		}
+	})
+
+	t.Run("ValidateVerifyOutput success", func(t *testing.T) {
+		out := &VerifyOutput{
+			ChecksPassed:    true,
+			MergeSuccessful: true,
+			MergeSHA:        "abc123",
+		}
+
+		errs := validator.ValidatePhaseOutput(PhaseVerify, out)
+		if errs.HasErrors() {
+			t.Errorf("Expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("ValidateVerifyOutput nil", func(t *testing.T) {
+		errs := validator.ValidatePhaseOutput(PhaseVerify, (*VerifyOutput)(nil))
+		if !errs.HasErrors() {
+			t.Error("Expected validation error for nil output")
 		}
 	})
 }

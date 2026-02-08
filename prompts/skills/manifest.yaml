@@ -16,9 +16,11 @@ skills:
       - PLAN
       - IMPLEMENT
       - DOCS
+      - VERIFY
       - PLAN_REVIEW
       - IMPLEMENT_REVIEW
       - DOCS_REVIEW
+      - VERIFY_REVIEW
 
   - name: environment
     file: environment.md
@@ -53,14 +55,22 @@ skills:
     priority: 70
     phases:
       - DOCS
+      - VERIFY
       - IMPLEMENT_REVIEW
       - DOCS_REVIEW
+      - VERIFY_REVIEW
 
   - name: docs
     file: docs.md
     priority: 77
     phases:
       - DOCS
+
+  - name: verify
+    file: verify.md
+    priority: 78
+    phases:
+      - VERIFY
 
   - name: plan_reviewer
     file: plan_reviewer.md
@@ -80,6 +90,12 @@ skills:
     phases:
       - DOCS_REVIEW
 
+  - name: verify_reviewer
+    file: verify_reviewer.md
+    priority: 93
+    phases:
+      - VERIFY_REVIEW
+
   - name: judge
     file: judge.md
     priority: 95
@@ -88,3 +104,4 @@ skills:
       - PLAN_JUDGE
       - IMPLEMENT_JUDGE
       - DOCS_JUDGE
+      - VERIFY_JUDGE

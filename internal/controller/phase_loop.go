@@ -23,6 +23,7 @@ const (
 	defaultPlanMaxIter      = 3
 	defaultImplementMaxIter = 5
 	defaultDocsMaxIter      = 2
+	defaultVerifyMaxIter    = 3
 )
 
 // SIMPLE path max iterations - fewer iterations for straightforward changes.
@@ -30,6 +31,7 @@ const (
 	simplePlanMaxIter      = 1
 	simpleImplementMaxIter = 2
 	simpleDocsMaxIter      = 1
+	simpleVerifyMaxIter    = 2
 )
 
 // defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
@@ -62,6 +64,10 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase, workflowPath WorkflowPa
 		if cfg.DocsMaxIterations > 0 {
 			return cfg.DocsMaxIterations
 		}
+	case PhaseVerify:
+		if cfg.VerifyMaxIterations > 0 {
+			return cfg.VerifyMaxIterations
+		}
 	}
 	return defaultMaxIter(phase)
 }
@@ -74,6 +80,8 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultImplementMaxIter
 	case PhaseDocs:
 		return defaultDocsMaxIter
+	case PhaseVerify:
+		return defaultVerifyMaxIter
 	default:
 		return 1
 	}
@@ -87,6 +95,8 @@ func simpleMaxIter(phase TaskPhase) int {
 		return simpleImplementMaxIter
 	case PhaseDocs:
 		return simpleDocsMaxIter
+	case PhaseVerify:
+		return simpleVerifyMaxIter
 	default:
 		return 1
 	}
@@ -182,13 +192,23 @@ func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
 	return len(hd.DocsOutput.DocsUpdated) == 0 && !hd.DocsOutput.ReadmeChanged
 }
 
+// phaseOrder returns the active phase sequence based on auto-merge config.
+// When auto-merge is enabled, VERIFY is appended after DOCS.
+func (c *Controller) phaseOrder() []TaskPhase {
+	if c.config.AutoMerge {
+		return []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhaseVerify}
+	}
+	return issuePhaseOrder
+}
+
 // advancePhase returns the next phase in the issue phase order.
 // If the current phase is the last one (or not found), returns PhaseComplete.
-func advancePhase(current TaskPhase) TaskPhase {
-	for i, p := range issuePhaseOrder {
+func (c *Controller) advancePhase(current TaskPhase) TaskPhase {
+	order := c.phaseOrder()
+	for i, p := range order {
 		if p == current {
-			if i+1 < len(issuePhaseOrder) {
-				return issuePhaseOrder[i+1]
+			if i+1 < len(order) {
+				return order[i+1]
 			}
 			return PhaseComplete
 		}
@@ -248,6 +268,24 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		if c.shouldTerminate() {
 			c.logInfo("Phase loop: global termination condition met")
 			return nil
+		}
+
+		// VERIFY phase pre-checks: skip if no PR or if NOMERGE flag is set
+		if currentPhase == PhaseVerify {
+			if state.PRNumber == "" {
+				c.logWarning("VERIFY phase: no PR number available, skipping to COMPLETE")
+				state.Phase = PhaseComplete
+				continue
+			}
+			if state.ControllerOverrode {
+				c.logWarning("VERIFY phase: NOMERGE flag set, skipping auto-merge")
+				state.Phase = PhaseComplete
+				continue
+			}
+			// Mark PR as ready to trigger CI checks
+			if err := c.markPRReady(ctx, state.PRNumber); err != nil {
+				c.logWarning("VERIFY phase: failed to mark PR as ready: %v", err)
+			}
 		}
 
 		maxIter := c.phaseMaxIterations(currentPhase, state.WorkflowPath)
@@ -515,6 +553,29 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
 				}
 
+				// VERIFY phase: attempt merge when judge says ADVANCE
+				if currentPhase == PhaseVerify && state.PRNumber != "" {
+					// Check if agent already merged via handoff
+					merged := false
+					if c.isHandoffEnabled() && c.handoffStore != nil {
+						if vo := c.handoffStore.GetVerifyOutput(taskID); vo != nil && vo.MergeSuccessful {
+							merged = true
+							c.logInfo("VERIFY: agent reported successful merge")
+						}
+					}
+					// Fallback: controller attempts merge
+					if !merged {
+						if mergeErr := c.attemptPRMerge(ctx, state.PRNumber); mergeErr != nil {
+							c.logWarning("VERIFY: controller merge attempt failed: %v", mergeErr)
+						} else {
+							merged = true
+						}
+					}
+					if merged {
+						state.PRMerged = true
+					}
+				}
+
 				advanced = true
 
 			case VerdictIterate:
@@ -543,12 +604,18 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		if !advanced {
 			// Exhausted max iterations without ADVANCE
-			if currentPhase == PhaseDocs {
+			switch currentPhase {
+			case PhaseDocs:
 				// DOCS phase auto-succeeds - documentation should not block PR finalization
 				c.logInfo("Phase %s: exhausted %d iterations, auto-advancing (non-blocking)", currentPhase, maxIter)
 				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
 					fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", maxIter))
-			} else {
+			case PhaseVerify:
+				// VERIFY phase exhaustion: PR is already ready for review, note that auto-merge failed
+				c.logWarning("Phase %s: exhausted %d iterations, auto-merge failed (PR remains ready for human review)", currentPhase, maxIter)
+				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
+					fmt.Sprintf("Auto-merge failed: exhausted %d iterations. PR is ready for human review.", maxIter))
+			default:
 				// Set ControllerOverrode flag for NOMERGE handling during PR finalization
 				state.ControllerOverrode = true
 				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance (NOMERGE flag set)", currentPhase, maxIter)
@@ -561,7 +628,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		}
 
 		// Move to next phase
-		nextPhase := advancePhase(currentPhase)
+		nextPhase := c.advancePhase(currentPhase)
 		c.logInfo("Phase loop: advancing from %s to %s", currentPhase, nextPhase)
 		state.Phase = nextPhase
 	}
@@ -682,6 +749,17 @@ func (c *Controller) buildWorkerHandoffSummary(taskID string, phase TaskPhase, c
 			}
 			if hd.DocsOutput.ReadmeChanged {
 				parts = append(parts, "README: Updated")
+			}
+		}
+	case PhaseVerify:
+		if hd.VerifyOutput != nil {
+			if hd.VerifyOutput.ChecksPassed {
+				parts = append(parts, "CI checks: Passed")
+			} else if len(hd.VerifyOutput.RemainingFailures) > 0 {
+				parts = append(parts, fmt.Sprintf("Remaining failures: %v", hd.VerifyOutput.RemainingFailures))
+			}
+			if hd.VerifyOutput.MergeSuccessful {
+				parts = append(parts, fmt.Sprintf("Merge: Successful (SHA: %s)", hd.VerifyOutput.MergeSHA))
 			}
 		}
 	}

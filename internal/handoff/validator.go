@@ -72,6 +72,14 @@ func (v *Validator) ValidatePhaseOutput(phase Phase, output interface{}) Validat
 		}
 		errs = append(errs, v.validateDocsOutput(out)...)
 
+	case PhaseVerify:
+		out, ok := output.(*VerifyOutput)
+		if !ok {
+			errs = append(errs, ValidationError{Phase: phase, Field: "type", Message: "expected *VerifyOutput"})
+			return errs
+		}
+		errs = append(errs, v.validateVerifyOutput(out)...)
+
 	default:
 		errs = append(errs, ValidationError{Phase: phase, Field: "phase", Message: "unknown phase"})
 	}
@@ -174,6 +182,21 @@ func (v *Validator) validateDocsOutput(out *DocsOutput) ValidationErrors {
 	return errs
 }
 
+// validateVerifyOutput validates VERIFY phase output.
+func (v *Validator) validateVerifyOutput(out *VerifyOutput) ValidationErrors {
+	var errs ValidationErrors
+
+	if out == nil {
+		errs = append(errs, ValidationError{Phase: PhaseVerify, Field: "output", Message: "output is nil"})
+		return errs
+	}
+
+	// VerifyOutput is valid as long as it's present - checks_passed and merge_successful
+	// are booleans that convey the result regardless of value
+
+	return errs
+}
+
 // ValidatePhaseInput validates that required inputs are present for a phase.
 func (v *Validator) ValidatePhaseInput(store *Store, taskID string, phase Phase) ValidationErrors {
 	var errs ValidationErrors
@@ -199,6 +222,11 @@ func (v *Validator) ValidatePhaseInput(store *Store, taskID string, phase Phase)
 		}
 		if store.GetImplementOutput(taskID) == nil {
 			errs = append(errs, ValidationError{Phase: phase, Field: "implement_output", Message: "implement output is required for DOCS phase"})
+		}
+
+	case PhaseVerify:
+		if store.GetImplementOutput(taskID) == nil {
+			errs = append(errs, ValidationError{Phase: phase, Field: "implement_output", Message: "implement output is required for VERIFY phase"})
 		}
 	}
 

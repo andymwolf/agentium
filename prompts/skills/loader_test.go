@@ -19,8 +19,8 @@ func TestLoadManifest(t *testing.T) {
 	expectedNames := []string{
 		"scope", "safety", "environment", "status_signals",
 		"plan", "implement", "test",
-		"pr_update", "docs",
-		"plan_reviewer", "code_reviewer", "docs_reviewer", "judge",
+		"pr_update", "docs", "verify",
+		"plan_reviewer", "code_reviewer", "docs_reviewer", "verify_reviewer", "judge",
 	}
 
 	names := make(map[string]bool)
@@ -46,18 +46,20 @@ func TestLoadManifest_Phases(t *testing.T) {
 		wantPhases []string
 	}{
 		{"scope", nil},
-		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
+		{"safety", []string{"PLAN", "IMPLEMENT", "DOCS", "VERIFY", "PLAN_REVIEW", "IMPLEMENT_REVIEW", "DOCS_REVIEW", "VERIFY_REVIEW"}},
 		{"environment", nil},
 		{"status_signals", nil},
 		{"plan", []string{"PLAN"}},
 		{"implement", []string{"IMPLEMENT"}},
 		{"test", []string{"IMPLEMENT"}},
-		{"pr_update", []string{"DOCS", "IMPLEMENT_REVIEW", "DOCS_REVIEW"}},
+		{"pr_update", []string{"DOCS", "VERIFY", "IMPLEMENT_REVIEW", "DOCS_REVIEW", "VERIFY_REVIEW"}},
 		{"docs", []string{"DOCS"}},
 		{"plan_reviewer", []string{"PLAN_REVIEW"}},
 		{"code_reviewer", []string{"IMPLEMENT_REVIEW"}},
 		{"docs_reviewer", []string{"DOCS_REVIEW"}},
-		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "DOCS_JUDGE"}},
+		{"verify", []string{"VERIFY"}},
+		{"verify_reviewer", []string{"VERIFY_REVIEW"}},
+		{"judge", []string{"JUDGE", "PLAN_JUDGE", "IMPLEMENT_JUDGE", "DOCS_JUDGE", "VERIFY_JUDGE"}},
 	}
 
 	skillMap := make(map[string]SkillEntry)
@@ -147,19 +149,21 @@ func TestLoadSkills_ContentValidation(t *testing.T) {
 
 	// Spot-check that key content exists in expected skills
 	contentChecks := map[string]string{
-		"scope":          "SCOPE",
-		"safety":         "CRITICAL SAFETY CONSTRAINTS",
-		"environment":    "ENVIRONMENT",
-		"status_signals": "STATUS SIGNALING",
-		"plan":           "PLAN PHASE",
-		"implement":      "Pre-Flight Check",
-		"test":           "Development Loop",
-		"pr_update":      "PR Update Skill",
-		"docs":           "DOCS PHASE",
-		"plan_reviewer":  "PLAN REVIEWER",
-		"code_reviewer":  "CODE REVIEWER",
-		"docs_reviewer":  "DOCS REVIEWER",
-		"judge":          "JUDGE",
+		"scope":           "SCOPE",
+		"safety":          "CRITICAL SAFETY CONSTRAINTS",
+		"environment":     "ENVIRONMENT",
+		"status_signals":  "STATUS SIGNALING",
+		"plan":            "PLAN PHASE",
+		"implement":       "Pre-Flight Check",
+		"test":            "Development Loop",
+		"pr_update":       "PR Update Skill",
+		"docs":            "DOCS PHASE",
+		"verify":          "VERIFY PHASE",
+		"plan_reviewer":   "PLAN REVIEWER",
+		"code_reviewer":   "CODE REVIEWER",
+		"docs_reviewer":   "DOCS REVIEWER",
+		"verify_reviewer": "VERIFY REVIEWER",
+		"judge":           "JUDGE",
 	}
 
 	skillMap := make(map[string]Skill)

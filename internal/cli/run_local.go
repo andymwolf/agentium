@@ -68,6 +68,10 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	if authMode := viper.GetString("claude.auth_mode"); authMode != "" {
 		cfg.Claude.AuthMode = authMode
 	}
+	if cmd.Flags().Changed("auto-merge") {
+		autoMerge, _ := cmd.Flags().GetBool("auto-merge")
+		cfg.Session.AutoMerge = autoMerge
+	}
 
 	// Validate configuration for local run (relaxed validation)
 	if err = cfg.ValidateForLocalRun(); err != nil {
@@ -100,6 +104,9 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	fmt.Printf("Workspace: %s\n", workDir)
 	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
 	fmt.Printf("Max duration: %s\n", cfg.Session.MaxDuration)
+	if cfg.Session.AutoMerge {
+		fmt.Println("Auto-merge: enabled")
+	}
 	fmt.Println()
 	fmt.Println("Running in local interactive mode - agent will prompt for permission approvals")
 	fmt.Println()
@@ -142,6 +149,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		Interactive:          true, // Enable interactive mode
 		CloneInsideContainer: true, // Clone inside Docker container for reliable auth
 		Verbose:              viper.GetBool("verbose"),
+		AutoMerge:            cfg.Session.AutoMerge,
 	}
 
 	// Set Claude auth config
@@ -156,6 +164,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
 		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
+		VerifyMaxIterations:    cfg.PhaseLoop.VerifyMaxIterations,
 		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
 		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}

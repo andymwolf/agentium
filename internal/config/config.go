@@ -31,6 +31,7 @@ type PhaseLoopConfig struct {
 	ImplementMaxIterations int  `mapstructure:"implement_max_iterations"`
 	ReviewMaxIterations    int  `mapstructure:"review_max_iterations"`
 	DocsMaxIterations      int  `mapstructure:"docs_max_iterations"`
+	VerifyMaxIterations    int  `mapstructure:"verify_max_iterations"`
 	JudgeContextBudget     int  `mapstructure:"judge_context_budget"`
 	JudgeNoSignalLimit     int  `mapstructure:"judge_no_signal_limit"`
 }
@@ -105,6 +106,7 @@ type SessionConfig struct {
 	MaxIterations int      `mapstructure:"max_iterations"`
 	MaxDuration   string   `mapstructure:"max_duration"`
 	Prompt        string   `mapstructure:"prompt"`
+	AutoMerge     bool     `mapstructure:"auto_merge"`
 }
 
 // ControllerConfig contains session controller settings

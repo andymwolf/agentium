@@ -28,6 +28,8 @@ func (b *Builder) BuildInputForPhase(taskID string, phase Phase) (string, error)
 		input, err = b.buildImplementInput(taskID)
 	case PhaseDocs:
 		input, err = b.buildDocsInput(taskID)
+	case PhaseVerify:
+		input, err = b.buildVerifyInput(taskID)
 	default:
 		return "", fmt.Errorf("unknown phase: %s", phase)
 	}
@@ -117,6 +119,26 @@ func (b *Builder) buildDocsInput(taskID string) (*DocsInput, error) {
 		Issue:        *issue,
 		PlanSummary:  plan.Summary,
 		FilesChanged: impl.FilesChanged,
+	}, nil
+}
+
+// buildVerifyInput constructs input for the VERIFY phase.
+func (b *Builder) buildVerifyInput(taskID string) (*VerifyInput, error) {
+	issue := b.store.GetIssueContext(taskID)
+	if issue == nil {
+		return nil, fmt.Errorf("no issue context found for task %s", taskID)
+	}
+
+	impl := b.store.GetImplementOutput(taskID)
+	prNumber := ""
+	if impl != nil && impl.DraftPRNumber > 0 {
+		prNumber = fmt.Sprintf("%d", impl.DraftPRNumber)
+	}
+
+	return &VerifyInput{
+		Issue:      *issue,
+		PRNumber:   prNumber,
+		Repository: issue.Repository,
 	}, nil
 }
 
