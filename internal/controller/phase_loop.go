@@ -193,6 +193,40 @@ func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
 	return len(hd.DocsOutput.DocsUpdated) == 0 && !hd.DocsOutput.ReadmeChanged
 }
 
+// tryVerifyMerge checks if the PR was merged by the worker (via handoff) or
+// attempts a controller-side merge if CI checks passed. Returns true if merged.
+func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *TaskState) bool {
+	// Check handoff for worker-reported merge
+	if c.isHandoffEnabled() && c.handoffStore != nil {
+		vo := c.handoffStore.GetVerifyOutput(taskID)
+		if vo != nil {
+			if vo.MergeSuccessful {
+				c.logInfo("VERIFY: agent reported successful merge via handoff")
+				return true
+			}
+			if vo.ChecksPassed && state.PRNumber != "" {
+				// CI passed but agent didn't merge — controller tries
+				if err := c.attemptPRMerge(ctx, state.PRNumber); err == nil {
+					c.logInfo("VERIFY: controller merge fallback succeeded (CI passed)")
+					return true
+				}
+				c.logWarning("VERIFY: controller merge fallback failed despite CI passing")
+			}
+			// CI not passed — don't try merge
+			return false
+		}
+	}
+
+	// No handoff data — try merge directly (GitHub branch protection will gate it)
+	if state.PRNumber != "" {
+		if err := c.attemptPRMerge(ctx, state.PRNumber); err == nil {
+			c.logInfo("VERIFY: controller merge succeeded (no handoff data)")
+			return true
+		}
+	}
+	return false
+}
+
 // phaseOrder returns the active phase sequence based on auto-merge config.
 // When auto-merge is enabled, VERIFY is appended after DOCS.
 func (c *Controller) phaseOrder() []TaskPhase {
@@ -407,6 +441,29 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
+			// For VERIFY phase: skip reviewer/judge (CI check/merge is mechanical, not creative)
+			if currentPhase == PhaseVerify {
+				merged := c.tryVerifyMerge(ctx, taskID, state)
+				if merged {
+					state.PRMerged = true
+					c.postPhaseComment(ctx, currentPhase, iter, RoleController,
+						"Merge successful — skipping review (auto-advance)")
+					if c.memoryStore != nil {
+						c.memoryStore.ClearByType(memory.EvalFeedback)
+						c.memoryStore.Update([]memory.Signal{
+							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (merge successful, iteration %d)", currentPhase, iter)},
+						}, c.iteration, taskID)
+					}
+					advanced = true
+					break
+				}
+				// Not merged — continue to next iteration so worker can retry
+				c.logInfo("VERIFY: not yet merged, continuing to iteration %d/%d", iter+1, maxIter)
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
+					"Merge not yet successful — iterating")
+				continue
+			}
+
 			// Post phase comment with filtered content (no tool results, max 250 lines)
 			c.postPhaseComment(ctx, currentPhase, iter, RoleWorker, commentContent)
 
@@ -598,29 +655,6 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				// (postImplementationPlan follows "append only" principle)
 				if currentPhase == PhasePlan && phaseOutput != "" {
 					c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
-				}
-
-				// VERIFY phase: attempt merge when judge says ADVANCE
-				if currentPhase == PhaseVerify && state.PRNumber != "" {
-					// Check if agent already merged via handoff
-					merged := false
-					if c.isHandoffEnabled() && c.handoffStore != nil {
-						if vo := c.handoffStore.GetVerifyOutput(taskID); vo != nil && vo.MergeSuccessful {
-							merged = true
-							c.logInfo("VERIFY: agent reported successful merge")
-						}
-					}
-					// Fallback: controller attempts merge
-					if !merged {
-						if mergeErr := c.attemptPRMerge(ctx, state.PRNumber); mergeErr != nil {
-							c.logWarning("VERIFY: controller merge attempt failed: %v", mergeErr)
-						} else {
-							merged = true
-						}
-					}
-					if merged {
-						state.PRMerged = true
-					}
 				}
 
 				advanced = true

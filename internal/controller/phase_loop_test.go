@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -787,5 +788,111 @@ Content under top-level heading.
 		if strings.Contains(content, "Some preamble text") {
 			t.Errorf("preamble text leaked into section %q", heading)
 		}
+	}
+}
+
+func TestTryVerifyMerge_HandoffMergeSuccessful(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	taskID := "issue:123"
+	_ = store.StorePhaseOutput(taskID, handoff.PhaseVerify, 1, &handoff.VerifyOutput{
+		MergeSuccessful: true,
+		MergeSHA:        "abc123",
+	})
+
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: store,
+		logger:       newTestLogger(),
+	}
+
+	state := &TaskState{PRNumber: "42"}
+	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	if !got {
+		t.Error("tryVerifyMerge() = false, want true when handoff reports merge successful")
+	}
+}
+
+func TestTryVerifyMerge_HandoffChecksPassed_ControllerMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	taskID := "issue:456"
+	_ = store.StorePhaseOutput(taskID, handoff.PhaseVerify, 1, &handoff.VerifyOutput{
+		ChecksPassed:    true,
+		MergeSuccessful: false,
+	})
+
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "nonexistent-org/nonexistent-repo-xyzzy",
+		},
+		handoffStore: store,
+		logger:       newTestLogger(),
+	}
+
+	// Controller merge will fail (nonexistent repo),
+	// so tryVerifyMerge returns false — this is the expected fallback behavior.
+	state := &TaskState{PRNumber: "99999"}
+	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	if got {
+		t.Error("tryVerifyMerge() = true, want false when controller merge fails")
+	}
+}
+
+func TestTryVerifyMerge_HandoffChecksFailed(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	taskID := "issue:789"
+	_ = store.StorePhaseOutput(taskID, handoff.PhaseVerify, 1, &handoff.VerifyOutput{
+		ChecksPassed:      false,
+		MergeSuccessful:   false,
+		RemainingFailures: []string{"lint", "test"},
+	})
+
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: store,
+		logger:       newTestLogger(),
+	}
+
+	state := &TaskState{PRNumber: "42"}
+	got := c.tryVerifyMerge(context.Background(), taskID, state)
+	if got {
+		t.Error("tryVerifyMerge() = true, want false when CI checks have not passed")
+	}
+}
+
+func TestTryVerifyMerge_NoHandoffData(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "nonexistent-org/nonexistent-repo-xyzzy",
+		},
+		handoffStore: store,
+		logger:       newTestLogger(),
+	}
+
+	// No handoff data stored — controller tries merge directly, which fails (nonexistent repo).
+	state := &TaskState{PRNumber: "99999"}
+	got := c.tryVerifyMerge(context.Background(), "issue:999", state)
+	if got {
+		t.Error("tryVerifyMerge() = true, want false when no handoff data and merge fails")
 	}
 }
