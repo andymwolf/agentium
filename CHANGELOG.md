@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/andymwolf/agentium/compare/v0.4.0...v0.4.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* Pass --max-duration to Terraform and fix CLI flag precedence ([#404](https://github.com/andymwolf/agentium/issues/404)) ([9a8ed6a](https://github.com/andymwolf/agentium/commit/9a8ed6ad0e836a4c95d28e62ba347b927f69f173))
+
 ## [0.4.0](https://github.com/andymwolf/agentium/compare/v0.3.0...v0.4.0) (2026-02-07)
 
 
