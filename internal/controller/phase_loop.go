@@ -558,8 +558,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if hd == nil || hd.PlanOutput == nil {
 					c.logWarning("PLAN: judge ADVANCE but no AGENTIUM_HANDOFF signal — forcing ITERATE")
 					judgeResult = JudgeResult{
-						Verdict:     VerdictIterate,
-						Feedback:    "No AGENTIUM_HANDOFF signal detected. You must emit the structured handoff signal with your plan before the PLAN phase can advance.",
+						Verdict:  VerdictIterate,
+						Feedback: "No AGENTIUM_HANDOFF signal detected. You must emit the structured handoff signal with your plan before the PLAN phase can advance.",
 						// SignalFound: true so noSignalCount resets — we want the hard-gate
 						// to persist across iterations without triggering the no-signal fail-safe.
 						SignalFound: true,
@@ -873,9 +873,6 @@ func formatPlanOutput(plan *handoff.PlanOutput) string {
 
 	return strings.TrimSpace(sb.String())
 }
-
-// issuePlanSectionPattern matches markdown headings for plan-related sections.
-var issuePlanSectionPattern = regexp.MustCompile(`(?im)^##?\s+(Summary|Files to (?:Create|Modify)|Files to Create/Modify|Implementation (?:Steps|Details|Plan)|Testing|Test Plan)\s*$`)
 
 // issuePlanFilePattern matches file paths in list items (e.g., "- `path/to/file.go`" or "- path/to/file.go").
 var issuePlanFilePattern = regexp.MustCompile(`(?m)^[\s]*[-*]\s+` + "`?" + `([\w./\-]+\.\w+)` + "`?")
