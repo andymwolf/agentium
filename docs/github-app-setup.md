@@ -35,6 +35,8 @@ Under **"Permissions"**, configure the following:
 
 | Permission | Access Level | Purpose |
 |-----------|-------------|---------|
+| **Actions** | Read | View CI workflow run logs and results |
+| **Checks** | Read | View check run details and annotations |
 | **Contents** | Read & write | Clone repos, push branches |
 | **Issues** | Read | Read issue descriptions and comments |
 | **Pull requests** | Read & write | Create and update PRs |
