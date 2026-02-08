@@ -560,6 +560,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					judgeResult = JudgeResult{
 						Verdict:     VerdictIterate,
 						Feedback:    "No AGENTIUM_HANDOFF signal detected. You must emit the structured handoff signal with your plan before the PLAN phase can advance.",
+						// SignalFound: true so noSignalCount resets — we want the hard-gate
+						// to persist across iterations without triggering the no-signal fail-safe.
 						SignalFound: true,
 					}
 					state.LastJudgeVerdict = string(judgeResult.Verdict)
@@ -899,13 +901,13 @@ func extractPlanFromIssueBody(body string) *handoff.PlanOutput {
 		switch {
 		case strings.Contains(normalizedHeading, "summary"):
 			plan.Summary = strings.TrimSpace(content)
+		case strings.Contains(normalizedHeading, "files to create/modify"):
+			// Combined section: treat all as files to modify
+			plan.FilesToModify = extractFilePaths(content)
 		case strings.Contains(normalizedHeading, "files to modify"):
 			plan.FilesToModify = extractFilePaths(content)
 		case strings.Contains(normalizedHeading, "files to create"):
 			plan.FilesToCreate = extractFilePaths(content)
-		case strings.Contains(normalizedHeading, "files to create/modify"):
-			// Combined section: treat all as files to modify
-			plan.FilesToModify = extractFilePaths(content)
 		case strings.Contains(normalizedHeading, "implementation"):
 			plan.ImplementationSteps = extractSteps(content)
 		case strings.Contains(normalizedHeading, "test"):

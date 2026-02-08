@@ -110,7 +110,7 @@ type TaskState struct {
 	ControllerOverrode    bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
 	JudgeOverrodeReviewer bool         // True if judge ADVANCE overrode reviewer ITERATE/BLOCKED (triggers NOMERGE)
 	PRMerged              bool         // True if auto-merge successfully merged the PR
-	ParentBranch       string       // Parent issue's branch to base this task on (for dependency chains)
+	ParentBranch          string       // Parent issue's branch to base this task on (for dependency chains)
 }
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.

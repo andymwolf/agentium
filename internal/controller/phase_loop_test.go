@@ -733,3 +733,59 @@ func TestParseStepNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitMarkdownSections(t *testing.T) {
+	body := `Some preamble text
+
+## Summary
+This is the summary.
+
+## Files to Modify
+- file1.go
+- file2.go
+
+# Top-Level Heading
+Content under top-level heading.
+
+## Implementation Steps
+1. Do something
+2. Do another thing
+`
+
+	sections := splitMarkdownSections(body)
+
+	if len(sections) != 4 {
+		t.Errorf("splitMarkdownSections() returned %d sections, want 4: %v", len(sections), sections)
+	}
+
+	if summary, ok := sections["Summary"]; !ok {
+		t.Error("missing 'Summary' section")
+	} else if !strings.Contains(summary, "This is the summary.") {
+		t.Errorf("Summary content = %q", summary)
+	}
+
+	if files, ok := sections["Files to Modify"]; !ok {
+		t.Error("missing 'Files to Modify' section")
+	} else if !strings.Contains(files, "file1.go") {
+		t.Errorf("Files to Modify content = %q", files)
+	}
+
+	if topLevel, ok := sections["Top-Level Heading"]; !ok {
+		t.Error("missing 'Top-Level Heading' section")
+	} else if !strings.Contains(topLevel, "Content under top-level heading.") {
+		t.Errorf("Top-Level Heading content = %q", topLevel)
+	}
+
+	if steps, ok := sections["Implementation Steps"]; !ok {
+		t.Error("missing 'Implementation Steps' section")
+	} else if !strings.Contains(steps, "Do something") {
+		t.Errorf("Implementation Steps content = %q", steps)
+	}
+
+	// Preamble text (before any heading) should not appear in any section
+	for heading, content := range sections {
+		if strings.Contains(content, "Some preamble text") {
+			t.Errorf("preamble text leaked into section %q", heading)
+		}
+	}
+}
