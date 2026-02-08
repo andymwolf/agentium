@@ -137,6 +137,7 @@ Branch prefixes are determined by the first label on the issue:
 
 - Run `go build ./...` before committing
 - Run `go test ./...` before pushing
+- **Run `golangci-lint run ./...` before pushing** — fix all lint errors before pushing to origin. Do not push code that fails the linter.
 - Add tests for new functionality
 - Update documentation if adding new features
 
