@@ -29,9 +29,54 @@ func TestBuildReviewPrompt(t *testing.T) {
 		"git diff main..HEAD",
 		"Security issues",
 	}
+	notContains := []string{
+		"DEPENDENCY CONTEXT",
+	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {
 			t.Errorf("buildReviewPrompt() missing %q", substr)
+		}
+	}
+	for _, substr := range notContains {
+		if containsString(prompt, substr) {
+			t.Errorf("buildReviewPrompt() should not contain %q when no parent branch", substr)
+		}
+	}
+}
+
+func TestBuildReviewPrompt_ParentBranch(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "99",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "implemented feature",
+		Iteration:      1,
+		MaxIterations:  3,
+		ParentBranch:   "feature/issue-42-auth",
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	contains := []string{
+		"git diff feature/issue-42-auth..HEAD",
+		"DEPENDENCY CONTEXT",
+		"depends on work from branch `feature/issue-42-auth`",
+		"Do NOT flag inherited parent branch changes as scope creep",
+	}
+	notContains := []string{
+		"git diff main..HEAD",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("buildReviewPrompt() with parent branch missing %q", substr)
+		}
+	}
+	for _, substr := range notContains {
+		if containsString(prompt, substr) {
+			t.Errorf("buildReviewPrompt() with parent branch should not contain %q", substr)
 		}
 	}
 }

@@ -11,7 +11,7 @@ You are in the **DOCS** phase. Your job is to make MINIMAL documentation updates
 
 ### Steps
 
-1. Run `git diff main...HEAD` to see all changes
+1. Run `git diff` against the appropriate base branch to see all changes
 2. Check if existing documentation needs small updates (README, inline comments)
 3. Make minimal, targeted updates
 4. If no documentation updates are strictly necessary, that's fine — emit COMPLETE

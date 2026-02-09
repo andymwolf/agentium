@@ -555,6 +555,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				PreviousFeedback:        previousFeedback,
 				WorkerHandoffSummary:    workerHandoffSummary,
 				WorkerFeedbackResponses: workerFeedbackResponses,
+				ParentBranch:            state.ParentBranch,
 			})
 			if reviewErr != nil {
 				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
