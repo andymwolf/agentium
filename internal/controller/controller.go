@@ -1771,7 +1771,7 @@ func (c *Controller) determineActivePhase() TaskPhase {
 // - Reviewer analysis (detailed context)
 //
 // Returns empty string if no feedback is available for the previous iteration.
-func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int) string {
+func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int, parentBranch string) string {
 	if c.memoryStore == nil {
 		return ""
 	}
@@ -1790,7 +1790,11 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 	sb.WriteString("- **Reviewer feedback**: Detailed analysis - consider all points as context\n")
 	sb.WriteString("- **Judge directives**: Required action items - you MUST address these\n\n")
 	sb.WriteString("**Approach:**\n")
-	sb.WriteString("- Your implementation already exists on this branch. Run `git log --oneline main..HEAD` and `git diff main..HEAD` to review your existing work before making changes.\n")
+	diffBase := "main"
+	if parentBranch != "" {
+		diffBase = parentBranch
+	}
+	sb.WriteString(fmt.Sprintf("- Your implementation already exists on this branch. Run `git log --oneline %s..HEAD` and `git diff %s..HEAD` to review your existing work before making changes.\n", diffBase, diffBase))
 	sb.WriteString("- Make **targeted, surgical fixes** to address the feedback. Do not rewrite or start over unless the judge directive explicitly says to take a different approach.\n")
 	sb.WriteString("- If a directive asks for a specific fix, make that fix and nothing else. If it asks to reconsider the approach, then a broader change is warranted.\n\n")
 
@@ -1915,7 +1919,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		state := c.taskStates[taskID]
 		if state != nil && state.PhaseIteration > 1 {
-			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration)
+			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch)
 			if feedbackSection != "" {
 				// Prepend to PhaseInput for maximum visibility
 				if session.IterationContext.PhaseInput != "" {

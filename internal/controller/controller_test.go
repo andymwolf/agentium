@@ -1451,7 +1451,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 				c.memoryStore = store
 			}
 
-			got := c.buildIterateFeedbackSection(tt.taskID, tt.phaseIteration)
+			got := c.buildIterateFeedbackSection(tt.taskID, tt.phaseIteration, "")
 
 			if tt.wantEmpty {
 				if got != "" {

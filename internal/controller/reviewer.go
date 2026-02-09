@@ -24,6 +24,7 @@ type reviewRunParams struct {
 	PreviousFeedback        string // Feedback from iteration N-1 (for comparison)
 	WorkerHandoffSummary    string // What worker claims to have done this iteration
 	WorkerFeedbackResponses string // Worker's FEEDBACK_RESPONSE signals from current iteration
+	ParentBranch            string // Parent branch for dependency chains (diff base instead of main)
 }
 
 // runReviewer runs a reviewer agent against the completed phase output.
@@ -189,9 +190,21 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString("## Your Task\n\n")
 	sb.WriteString("Review the code changes produced in this phase.\n\n")
 	sb.WriteString("**IMPORTANT:** Do not rely solely on the phase output log above. The log shows agent activity, not a clean view of the code. You MUST:\n")
-	sb.WriteString("1. Run `git diff main..HEAD` to see all code changes on this branch\n")
+
+	// Use parent branch as diff base when this issue depends on another issue's branch
+	diffBase := "main"
+	if params.ParentBranch != "" {
+		diffBase = params.ParentBranch
+	}
+	sb.WriteString(fmt.Sprintf("1. Run `git diff %s..HEAD` to see the code changes on this branch\n", diffBase))
 	sb.WriteString("2. Open and read key modified files to check surrounding context\n")
 	sb.WriteString("3. Verify that the changes match what the worker claims to have done\n\n")
+
+	if params.ParentBranch != "" {
+		sb.WriteString(fmt.Sprintf("**DEPENDENCY CONTEXT:** This issue depends on work from branch `%s`. ", params.ParentBranch))
+		sb.WriteString(fmt.Sprintf("The diff base is `%s` (not `main`) so you only see changes made for THIS issue. ", params.ParentBranch))
+		sb.WriteString("Do NOT flag inherited parent branch changes as scope creep.\n\n")
+	}
 	sb.WriteString("Provide constructive, actionable review feedback.\n")
 	sb.WriteString("Be specific about what to improve and indicate severity (critical/security, functional bug, minor style).\n")
 	sb.WriteString("Security issues (data leakage, missing input validation, unguarded nil access) should always be flagged as critical.\n\n")
