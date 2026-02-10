@@ -46,7 +46,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prov, err := New(tt.provider, false, "test-project")
+			prov, err := New(tt.provider, false, "test-project", "")
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("New(%q) expected error, got nil", tt.provider)

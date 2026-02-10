@@ -11,10 +11,7 @@ This guide covers setting up Agentium with Google Cloud Platform as the cloud pr
 - A GCP project with billing enabled
 - `gcloud` CLI installed and authenticated
 - Terraform 1.0+ installed
-- IAM permissions to:
-  - Create Compute Engine instances
-  - Create and manage secrets in Secret Manager
-  - Create service accounts (optional, for least-privilege)
+- IAM permissions on the GCP project (see [Required IAM Roles](#required-iam-roles) below)
 
 ## Setup Steps
 
@@ -37,7 +34,8 @@ gcloud auth application-default login
 gcloud services enable \
   compute.googleapis.com \
   secretmanager.googleapis.com \
-  iam.googleapis.com
+  iam.googleapis.com \
+  logging.googleapis.com
 ```
 
 ### 3. Store GitHub App Private Key
@@ -141,25 +139,88 @@ cloud:
 - **Con:** Can be preempted (terminated) by GCP at any time
 - **Mitigation:** Agentium sessions are designed to be ephemeral; if preempted, re-run the session
 
-## Service Account (Optional)
+## Required IAM Roles
 
-For production use, create a dedicated service account with minimal permissions:
+The identity running `agentium run` (your user account or a service account) needs the following IAM roles on the GCP project. Terraform creates and manages per-session resources on your behalf, so these permissions are required for the caller:
+
+| IAM Role | Purpose |
+|----------|---------|
+| `roles/iam.serviceAccountAdmin` | Create/delete per-session service accounts |
+| `roles/iam.serviceAccountUser` | Attach service accounts to compute instances |
+| `roles/compute.instanceAdmin.v1` | Create/delete compute instances |
+| `roles/compute.securityAdmin` | Create/delete firewall rules |
+| `roles/resourcemanager.projectIamAdmin` | Grant IAM roles to per-session service accounts |
+| `roles/secretmanager.admin` | Create/manage secrets (for initial setup) |
+
+**Grant roles to a user account:**
 
 ```bash
-# Create service account
-gcloud iam service-accounts create agentium-agent \
-  --display-name="Agentium Agent"
+PROJECT_ID="your-gcp-project-id"
+USER="user:your-email@example.com"
 
-# Grant Compute Engine access
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:agentium-agent@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/compute.instanceAdmin.v1"
-
-# Grant Secret Manager access
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:agentium-agent@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+for ROLE in \
+  roles/iam.serviceAccountAdmin \
+  roles/iam.serviceAccountUser \
+  roles/compute.instanceAdmin.v1 \
+  roles/compute.securityAdmin \
+  roles/resourcemanager.projectIamAdmin; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$USER" --role="$ROLE"
+done
 ```
+
+## Service Account Authentication
+
+For production use or when your user account doesn't have direct permissions, create a dedicated service account with the required roles and authenticate with its key file:
+
+### 1. Create the service account
+
+```bash
+PROJECT_ID="your-gcp-project-id"
+
+gcloud iam service-accounts create agentium-provisioner \
+  --display-name="Agentium Provisioner" \
+  --project="$PROJECT_ID"
+```
+
+### 2. Grant the required roles
+
+```bash
+SA="serviceAccount:agentium-provisioner@$PROJECT_ID.iam.gserviceaccount.com"
+
+for ROLE in \
+  roles/iam.serviceAccountAdmin \
+  roles/iam.serviceAccountUser \
+  roles/compute.instanceAdmin.v1 \
+  roles/compute.securityAdmin \
+  roles/resourcemanager.projectIamAdmin; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$SA" --role="$ROLE"
+done
+```
+
+### 3. Create and download a key file
+
+```bash
+gcloud iam service-accounts keys create ~/.config/agentium/sa-key.json \
+  --iam-account="agentium-provisioner@$PROJECT_ID.iam.gserviceaccount.com"
+
+# Restrict file permissions
+chmod 600 ~/.config/agentium/sa-key.json
+```
+
+### 4. Configure Agentium to use the key
+
+```yaml
+# .agentium.yaml
+cloud:
+  provider: "gcp"
+  project: "your-gcp-project-id"
+  region: "us-central1"
+  service_account_key: "~/.config/agentium/sa-key.json"
+```
+
+When `service_account_key` is set, all Terraform and gcloud commands authenticate using that key instead of ambient gcloud credentials.
 
 ## Networking
 
@@ -187,15 +248,16 @@ Approximate costs per session (US regions):
 
 ## Troubleshooting
 
-### "Permission denied" when creating VMs
+### "Permission denied" when creating VMs or service accounts
 
-Ensure your account has the `Compute Instance Admin` role:
+Agentium needs several IAM roles to provision infrastructure. See [Required IAM Roles](#required-iam-roles) for the full list. Common permission errors:
 
-```bash
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="user:your-email@example.com" \
-  --role="roles/compute.instanceAdmin.v1"
-```
+- `iam.serviceAccounts.create` denied → Grant `roles/iam.serviceAccountAdmin`
+- `compute.firewalls.create` denied → Grant `roles/compute.securityAdmin`
+- `compute.instances.create` denied → Grant `roles/compute.instanceAdmin.v1`
+- `resourcemanager.projects.setIamPolicy` denied → Grant `roles/resourcemanager.projectIamAdmin`
+
+If your user account doesn't have these permissions (e.g., after transferring project ownership), use a service account key instead. See [Service Account Authentication](#service-account-authentication).
 
 ### "Secret not found"
 

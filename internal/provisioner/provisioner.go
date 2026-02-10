@@ -172,11 +172,14 @@ type LogEntry struct {
 	ToolName  string // From labels.tool_name (e.g., "Bash", "Read")
 }
 
-// New creates a new provisioner for the specified cloud provider
-func New(provider string, verbose bool, project string) (Provisioner, error) {
+// New creates a new provisioner for the specified cloud provider.
+// The serviceAccountKey parameter is optional; when set to a path to a GCP
+// service account JSON key file, all terraform and gcloud commands will
+// authenticate using that key instead of ambient credentials.
+func New(provider string, verbose bool, project, serviceAccountKey string) (Provisioner, error) {
 	switch provider {
 	case "gcp":
-		return NewGCPProvisioner(verbose, project)
+		return NewGCPProvisioner(verbose, project, serviceAccountKey)
 	case "aws":
 		return nil, fmt.Errorf("AWS provisioner not yet implemented")
 	case "azure":

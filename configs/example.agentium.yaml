@@ -22,6 +22,7 @@ cloud:
   machine_type: "e2-medium"         # VM instance type
   use_spot: true                    # Use spot/preemptible instances (cheaper)
   disk_size_gb: 50
+  # service_account_key: "~/.config/agentium/sa-key.json"  # GCP SA key file (optional)
 
 # Default session settings
 defaults:
