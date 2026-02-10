@@ -1281,13 +1281,15 @@ func (c *Controller) renderWithParameters(prompt string) string {
 		"repository": c.config.Repository,
 	}
 
-	// Add issue_url if available
+	// Add issue_url: prefer explicit PromptContext value, fall back to derived URL
 	if c.config.PromptContext != nil && c.config.PromptContext.IssueURL != "" {
 		builtins["issue_url"] = c.config.PromptContext.IssueURL
+	} else if c.activeTask != "" && c.activeTaskType == "issue" && c.config.Repository != "" {
+		builtins["issue_url"] = fmt.Sprintf("https://github.com/%s/issues/%s", c.config.Repository, c.activeTask)
 	}
 
-	// Add active task number if available
-	if c.activeTask != "" {
+	// Add issue_number only for issue tasks (not PR tasks)
+	if c.activeTask != "" && c.activeTaskType == "issue" {
 		builtins["issue_number"] = c.activeTask
 	}
 

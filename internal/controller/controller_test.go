@@ -1473,3 +1473,91 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderWithParameters(t *testing.T) {
+	tests := []struct {
+		name           string
+		repository     string
+		activeTask     string
+		activeTaskType string
+		promptContext  *PromptContext
+		prompt         string
+		want           string
+	}{
+		{
+			name:           "issue_url derived from repo and issue number",
+			repository:     "org/repo",
+			activeTask:     "42",
+			activeTaskType: "issue",
+			prompt:         "Fix {{issue_url}}",
+			want:           "Fix https://github.com/org/repo/issues/42",
+		},
+		{
+			name:           "explicit issue_url takes precedence over derivation",
+			repository:     "org/repo",
+			activeTask:     "42",
+			activeTaskType: "issue",
+			promptContext:  &PromptContext{IssueURL: "https://custom.example.com/issue/42"},
+			prompt:         "Fix {{issue_url}}",
+			want:           "Fix https://custom.example.com/issue/42",
+		},
+		{
+			name:           "issue_url not derived for PR tasks",
+			repository:     "org/repo",
+			activeTask:     "99",
+			activeTaskType: "pr",
+			prompt:         "Review {{issue_url}}",
+			want:           "Review {{issue_url}}",
+		},
+		{
+			name:           "issue_number set for issue tasks",
+			repository:     "org/repo",
+			activeTask:     "42",
+			activeTaskType: "issue",
+			prompt:         "Working on #{{issue_number}}",
+			want:           "Working on #42",
+		},
+		{
+			name:           "issue_number not set for PR tasks",
+			repository:     "org/repo",
+			activeTask:     "99",
+			activeTaskType: "pr",
+			prompt:         "Working on #{{issue_number}}",
+			want:           "Working on #{{issue_number}}",
+		},
+		{
+			name:           "user parameters override derived issue_url",
+			repository:     "org/repo",
+			activeTask:     "42",
+			activeTaskType: "issue",
+			promptContext:  &PromptContext{Parameters: map[string]string{"issue_url": "user-override"}},
+			prompt:         "Fix {{issue_url}}",
+			want:           "Fix user-override",
+		},
+		{
+			name:           "repository always available",
+			repository:     "org/repo",
+			activeTask:     "",
+			activeTaskType: "",
+			prompt:         "Repo: {{repository}}",
+			want:           "Repo: org/repo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				config: SessionConfig{
+					Repository:    tt.repository,
+					PromptContext: tt.promptContext,
+				},
+				activeTask:     tt.activeTask,
+				activeTaskType: tt.activeTaskType,
+			}
+			got := c.renderWithParameters(tt.prompt)
+			if got != tt.want {
+				t.Errorf("renderWithParameters() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
