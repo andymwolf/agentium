@@ -151,6 +151,7 @@ The identity running `agentium run` (your user account or a service account) nee
 | `roles/compute.securityAdmin` | Create/delete firewall rules |
 | `roles/resourcemanager.projectIamAdmin` | Grant IAM roles to per-session service accounts |
 | `roles/secretmanager.admin` | Create/manage secrets (for initial setup) |
+| `roles/logging.viewer` | Read session logs (`agentium logs`) |
 
 **Grant roles to a user account:**
 
@@ -163,7 +164,8 @@ for ROLE in \
   roles/iam.serviceAccountUser \
   roles/compute.instanceAdmin.v1 \
   roles/compute.securityAdmin \
-  roles/resourcemanager.projectIamAdmin; do
+  roles/resourcemanager.projectIamAdmin \
+  roles/logging.viewer; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="$USER" --role="$ROLE"
 done
@@ -193,7 +195,8 @@ for ROLE in \
   roles/iam.serviceAccountUser \
   roles/compute.instanceAdmin.v1 \
   roles/compute.securityAdmin \
-  roles/resourcemanager.projectIamAdmin; do
+  roles/resourcemanager.projectIamAdmin \
+  roles/logging.viewer; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="$SA" --role="$ROLE"
 done
@@ -256,6 +259,7 @@ Agentium needs several IAM roles to provision infrastructure. See [Required IAM 
 - `compute.firewalls.create` denied → Grant `roles/compute.securityAdmin`
 - `compute.instances.create` denied → Grant `roles/compute.instanceAdmin.v1`
 - `resourcemanager.projects.setIamPolicy` denied → Grant `roles/resourcemanager.projectIamAdmin`
+- `PERMISSION_DENIED` on `agentium logs` → Grant `roles/logging.viewer`
 
 If your user account doesn't have these permissions (e.g., after transferring project ownership), use a service account key instead. See [Service Account Authentication](#service-account-authentication).
 
