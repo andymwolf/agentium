@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/andymwolf/agentium/compare/v0.4.1...v0.5.0) (2026-02-10)
+
+
+### Features
+
+* Add BigQuery reporting module for token consumption ([#106](https://github.com/andymwolf/agentium/issues/106)) ([#409](https://github.com/andymwolf/agentium/issues/409)) ([0ed61cb](https://github.com/andymwolf/agentium/commit/0ed61cb4ce0ebe39fbd942cd2f703fb65bc0f237))
+* Add service_account_key support for GCP authentication ([#423](https://github.com/andymwolf/agentium/issues/423)) ([3e4eee2](https://github.com/andymwolf/agentium/commit/3e4eee2485f6e2d65d4817a198820e0951ce0666))
+* Auto-enable required GCP APIs in Terraform module ([09bf9c2](https://github.com/andymwolf/agentium/commit/09bf9c2315ca6294b4e025b3cb2752bf0b0b74ef))
+* Auto-enable required GCP APIs in Terraform module ([dde657c](https://github.com/andymwolf/agentium/commit/dde657c6f216aa10a52bb3c44b489798ff9a0ae2)), closes [#424](https://github.com/andymwolf/agentium/issues/424)
+* Skip reviewer/judge in VERIFY phase ([#412](https://github.com/andymwolf/agentium/issues/412)) ([5e80928](https://github.com/andymwolf/agentium/commit/5e809288bbfd0f421cadc82d1f772bfb5c6e8dae))
+
+
+### Bug Fixes
+
+* Add placeholder BigQuery table so views can be created on first apply ([#411](https://github.com/andymwolf/agentium/issues/411)) ([13e315e](https://github.com/andymwolf/agentium/commit/13e315eda64694bdd94a61b5f04b918d49563038)), closes [#106](https://github.com/andymwolf/agentium/issues/106)
+* Make reviewer dependency-aware to prevent false scope creep findings ([#416](https://github.com/andymwolf/agentium/issues/416)) ([ae8243d](https://github.com/andymwolf/agentium/commit/ae8243d41acadd3e9ec309646d16cd6363f624f7)), closes [#415](https://github.com/andymwolf/agentium/issues/415)
+
 ## [0.4.1](https://github.com/andymwolf/agentium/compare/v0.4.0...v0.4.1) (2026-02-08)
 
 
