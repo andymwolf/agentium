@@ -246,6 +246,22 @@ Controls the controller-as-judge phase loop behavior. When enabled, the controll
 | `implement_max_iterations` | int | No | `5` | Max iterations for the IMPLEMENT phase |
 | `docs_max_iterations` | int | No | `3` | Max iterations for the DOCS phase |
 | `judge_context_budget` | int | No | `8000` | Max characters of judge output to store as context |
+| `reviewer_skip` | bool | No | `false` | Always skip the reviewer (auto-advance) |
+| `judge_skip` | bool | No | `false` | Always skip the judge (auto-advance) |
+| `reviewer_skip_on` | string | No | - | Conditionally skip reviewer (see conditions below) |
+| `judge_skip_on` | string | No | - | Conditionally skip judge (see conditions below) |
+
+**Skip conditions:**
+
+| Condition | Description |
+|-----------|-------------|
+| `empty_output` | Skip if the worker produced no meaningful output |
+| `simple_output` | Skip if the worker output is short/trivial (< 10 non-empty lines) |
+| `no_code_changes` | Skip if no file changes were made during IMPLEMENT phase |
+
+**Skip behavior:**
+- `reviewer_skip: true` and `judge_skip: true` always skip (takes precedence over `skip_on`)
+- Unrecognized `skip_on` conditions are ignored (safe default: don't skip)
 
 **Phase loop sequence for issues:**
 
