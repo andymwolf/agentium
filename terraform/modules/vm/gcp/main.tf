@@ -97,11 +97,46 @@ locals {
   zone = var.zone != "" ? var.zone : "${var.region}-a"
 }
 
+# Enable required GCP APIs
+# These must be enabled before any resources that depend on them.
+# disable_on_destroy = false prevents disabling shared APIs on session teardown.
+resource "google_project_service" "iam" {
+  project            = var.project_id
+  service            = "iam.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "cloudresourcemanager" {
+  project            = var.project_id
+  service            = "cloudresourcemanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "compute" {
+  project            = var.project_id
+  service            = "compute.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "secretmanager" {
+  project            = var.project_id
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "logging" {
+  project            = var.project_id
+  service            = "logging.googleapis.com"
+  disable_on_destroy = false
+}
+
 # Service account for the VM
 resource "google_service_account" "agentium" {
   account_id   = "agentium-${substr(var.session_id, 0, 20)}"
   display_name = "Agentium Session ${var.session_id}"
   project      = var.project_id
+
+  depends_on = [google_project_service.iam]
 }
 
 # Grant secret accessor role
@@ -109,6 +144,8 @@ resource "google_project_iam_member" "secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.agentium.email}"
+
+  depends_on = [google_project_service.cloudresourcemanager, google_project_service.secretmanager]
 }
 
 # Grant logging writer role
@@ -116,6 +153,8 @@ resource "google_project_iam_member" "logging_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.agentium.email}"
+
+  depends_on = [google_project_service.cloudresourcemanager, google_project_service.logging]
 }
 
 # Grant compute instance admin (for self-deletion only)
@@ -131,6 +170,8 @@ resource "google_project_iam_member" "compute_admin" {
     description = "Restrict instance admin to this session's VM only"
     expression  = "resource.name == 'projects/${var.project_id}/zones/${local.zone}/instances/${var.session_id}'"
   }
+
+  depends_on = [google_project_service.cloudresourcemanager, google_project_service.compute]
 }
 
 # Grant serviceAccountUser on itself so the VM can update its own instance metadata.
@@ -321,6 +362,8 @@ resource "google_compute_instance" "agentium" {
       metadata["agentium-status"]
     ]
   }
+
+  depends_on = [google_project_service.compute]
 }
 
 # Firewall rule to allow outbound traffic
@@ -337,6 +380,8 @@ resource "google_compute_firewall" "agentium_egress" {
   }
 
   target_tags = ["agentium"]
+
+  depends_on = [google_project_service.compute]
 }
 
 output "instance_id" {
