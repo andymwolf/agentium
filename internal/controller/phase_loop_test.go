@@ -1056,19 +1056,22 @@ func TestEvaluateSkipCondition_EmptyCondition(t *testing.T) {
 	}
 }
 
-func TestShouldSkipReviewerOnCondition_NilConfig(t *testing.T) {
+func TestShouldSkipReviewer_NilConfig(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{PhaseLoop: nil},
 		logger: newTestLogger(),
 	}
 
-	got := c.shouldSkipReviewerOnCondition("some output", "issue:123")
+	got, reason := c.shouldSkipReviewer("some output", "issue:123")
 	if got != false {
-		t.Errorf("shouldSkipReviewerOnCondition with nil PhaseLoop = %v, want false", got)
+		t.Errorf("shouldSkipReviewer with nil PhaseLoop = %v, want false", got)
+	}
+	if reason != "" {
+		t.Errorf("shouldSkipReviewer reason = %q, want empty", reason)
 	}
 }
 
-func TestShouldSkipReviewerOnCondition_NoCondition(t *testing.T) {
+func TestShouldSkipReviewer_NoCondition(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
@@ -1078,13 +1081,16 @@ func TestShouldSkipReviewerOnCondition_NoCondition(t *testing.T) {
 		logger: newTestLogger(),
 	}
 
-	got := c.shouldSkipReviewerOnCondition("some output", "issue:123")
+	got, reason := c.shouldSkipReviewer("some output", "issue:123")
 	if got != false {
-		t.Errorf("shouldSkipReviewerOnCondition with empty ReviewerSkipOn = %v, want false", got)
+		t.Errorf("shouldSkipReviewer with empty ReviewerSkipOn = %v, want false", got)
+	}
+	if reason != "" {
+		t.Errorf("shouldSkipReviewer reason = %q, want empty", reason)
 	}
 }
 
-func TestShouldSkipReviewerOnCondition_WithCondition(t *testing.T) {
+func TestShouldSkipReviewer_WithCondition(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
@@ -1095,31 +1101,83 @@ func TestShouldSkipReviewerOnCondition_WithCondition(t *testing.T) {
 	}
 
 	// Empty output should trigger skip
-	got := c.shouldSkipReviewerOnCondition("", "issue:123")
+	got, reason := c.shouldSkipReviewer("", "issue:123")
 	if got != true {
-		t.Errorf("shouldSkipReviewerOnCondition with empty output = %v, want true", got)
+		t.Errorf("shouldSkipReviewer with empty output = %v, want true", got)
+	}
+	if reason != SkipConditionEmptyOutput {
+		t.Errorf("shouldSkipReviewer reason = %q, want %q", reason, SkipConditionEmptyOutput)
 	}
 
 	// Non-empty output should not trigger skip
-	got = c.shouldSkipReviewerOnCondition("some content", "issue:123")
+	got, reason = c.shouldSkipReviewer("some content", "issue:123")
 	if got != false {
-		t.Errorf("shouldSkipReviewerOnCondition with content = %v, want false", got)
+		t.Errorf("shouldSkipReviewer with content = %v, want false", got)
+	}
+	if reason != "" {
+		t.Errorf("shouldSkipReviewer reason = %q, want empty", reason)
 	}
 }
 
-func TestShouldSkipJudgeOnCondition_NilConfig(t *testing.T) {
+func TestShouldSkipReviewer_BooleanSkip(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				ReviewerSkip:   true,
+				ReviewerSkipOn: SkipConditionEmptyOutput, // Both set, skip=true takes precedence
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Boolean skip=true should always skip, regardless of output content
+	got, reason := c.shouldSkipReviewer("non-empty content", "issue:123")
+	if got != true {
+		t.Errorf("shouldSkipReviewer with ReviewerSkip=true = %v, want true", got)
+	}
+	if reason != "reviewer_skip=true" {
+		t.Errorf("shouldSkipReviewer reason = %q, want %q", reason, "reviewer_skip=true")
+	}
+}
+
+func TestShouldSkipReviewer_BooleanPrecedence(t *testing.T) {
+	// Test that skip=true takes precedence over skip_on
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				ReviewerSkip:   true,
+				ReviewerSkipOn: SkipConditionEmptyOutput,
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Even with non-empty output (which wouldn't trigger skip_on), skip=true should skip
+	got, reason := c.shouldSkipReviewer("lots of content here", "issue:123")
+	if got != true {
+		t.Errorf("shouldSkipReviewer: skip=true should take precedence, got %v", got)
+	}
+	if reason != "reviewer_skip=true" {
+		t.Errorf("shouldSkipReviewer reason should indicate boolean skip, got %q", reason)
+	}
+}
+
+func TestShouldSkipJudge_NilConfig(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{PhaseLoop: nil},
 		logger: newTestLogger(),
 	}
 
-	got := c.shouldSkipJudgeOnCondition("some output", "issue:123")
+	got, reason := c.shouldSkipJudge("some output", "issue:123")
 	if got != false {
-		t.Errorf("shouldSkipJudgeOnCondition with nil PhaseLoop = %v, want false", got)
+		t.Errorf("shouldSkipJudge with nil PhaseLoop = %v, want false", got)
+	}
+	if reason != "" {
+		t.Errorf("shouldSkipJudge reason = %q, want empty", reason)
 	}
 }
 
-func TestShouldSkipJudgeOnCondition_WithCondition(t *testing.T) {
+func TestShouldSkipJudge_WithCondition(t *testing.T) {
 	c := &Controller{
 		config: SessionConfig{
 			PhaseLoop: &PhaseLoopConfig{
@@ -1130,9 +1188,12 @@ func TestShouldSkipJudgeOnCondition_WithCondition(t *testing.T) {
 	}
 
 	// Short output should trigger skip
-	got := c.shouldSkipJudgeOnCondition("Line 1\nLine 2", "issue:123")
+	got, reason := c.shouldSkipJudge("Line 1\nLine 2", "issue:123")
 	if got != true {
-		t.Errorf("shouldSkipJudgeOnCondition with short output = %v, want true", got)
+		t.Errorf("shouldSkipJudge with short output = %v, want true", got)
+	}
+	if reason != SkipConditionSimpleOutput {
+		t.Errorf("shouldSkipJudge reason = %q, want %q", reason, SkipConditionSimpleOutput)
 	}
 
 	// Long output should not trigger skip
@@ -1140,9 +1201,37 @@ func TestShouldSkipJudgeOnCondition_WithCondition(t *testing.T) {
 	for i := 0; i < simpleOutputLineThreshold+5; i++ {
 		longLines = append(longLines, "Line content")
 	}
-	got = c.shouldSkipJudgeOnCondition(strings.Join(longLines, "\n"), "issue:123")
+	got, reason = c.shouldSkipJudge(strings.Join(longLines, "\n"), "issue:123")
 	if got != false {
-		t.Errorf("shouldSkipJudgeOnCondition with long output = %v, want false", got)
+		t.Errorf("shouldSkipJudge with long output = %v, want false", got)
+	}
+	if reason != "" {
+		t.Errorf("shouldSkipJudge reason = %q, want empty", reason)
+	}
+}
+
+func TestShouldSkipJudge_BooleanSkip(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				JudgeSkip:   true,
+				JudgeSkipOn: SkipConditionSimpleOutput, // Both set, skip=true takes precedence
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Boolean skip=true should always skip, regardless of output length
+	var longLines []string
+	for i := 0; i < simpleOutputLineThreshold+5; i++ {
+		longLines = append(longLines, "Line content")
+	}
+	got, reason := c.shouldSkipJudge(strings.Join(longLines, "\n"), "issue:123")
+	if got != true {
+		t.Errorf("shouldSkipJudge with JudgeSkip=true = %v, want true", got)
+	}
+	if reason != "judge_skip=true" {
+		t.Errorf("shouldSkipJudge reason = %q, want %q", reason, "judge_skip=true")
 	}
 }
 

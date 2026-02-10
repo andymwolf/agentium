@@ -34,6 +34,8 @@ type PhaseLoopConfig struct {
 	VerifyMaxIterations    int    `mapstructure:"verify_max_iterations"`
 	JudgeContextBudget     int    `mapstructure:"judge_context_budget"`
 	JudgeNoSignalLimit     int    `mapstructure:"judge_no_signal_limit"`
+	ReviewerSkip           bool   `mapstructure:"reviewer_skip"`
+	JudgeSkip              bool   `mapstructure:"judge_skip"`
 	ReviewerSkipOn         string `mapstructure:"reviewer_skip_on"`
 	JudgeSkipOn            string `mapstructure:"judge_skip_on"`
 }

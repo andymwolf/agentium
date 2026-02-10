@@ -123,6 +123,8 @@ type PhaseLoopConfig struct {
 	VerifyMaxIterations    int    `json:"verify_max_iterations,omitempty"`
 	JudgeContextBudget     int    `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int    `json:"judge_no_signal_limit,omitempty"`
+	ReviewerSkip           bool   `json:"reviewer_skip,omitempty"`
+	JudgeSkip              bool   `json:"judge_skip,omitempty"`
 	ReviewerSkipOn         string `json:"reviewer_skip_on,omitempty"`
 	JudgeSkipOn            string `json:"judge_skip_on,omitempty"`
 }
