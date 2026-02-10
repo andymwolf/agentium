@@ -86,18 +86,18 @@ resource "google_bigquery_table" "log_entries" {
     {
       name = "labels"
       type = "RECORD"
-      mode = "REPEATED"
+      mode = "NULLABLE"
       fields = [
-        {
-          name = "key"
-          type = "STRING"
-          mode = "NULLABLE"
-        },
-        {
-          name = "value"
-          type = "STRING"
-          mode = "NULLABLE"
-        }
+        { name = "session_id", type = "STRING", mode = "NULLABLE" },
+        { name = "repository", type = "STRING", mode = "NULLABLE" },
+        { name = "log_type", type = "STRING", mode = "NULLABLE" },
+        { name = "task_id", type = "STRING", mode = "NULLABLE" },
+        { name = "phase", type = "STRING", mode = "NULLABLE" },
+        { name = "agent", type = "STRING", mode = "NULLABLE" },
+        { name = "model", type = "STRING", mode = "NULLABLE" },
+        { name = "input_tokens", type = "STRING", mode = "NULLABLE" },
+        { name = "output_tokens", type = "STRING", mode = "NULLABLE" },
+        { name = "total_tokens", type = "STRING", mode = "NULLABLE" }
       ]
     }
   ])
@@ -109,7 +109,7 @@ resource "google_bigquery_table" "log_entries" {
 # BigQuery Views
 # -----------------------------------------------------------------------------
 
-# Base view: flattens the REPEATED RECORD labels column into named columns.
+# Base view: extracts named label fields into top-level columns.
 resource "google_bigquery_table" "token_usage_flat" {
   project             = var.project_id
   dataset_id          = google_bigquery_dataset.token_usage.dataset_id
@@ -120,15 +120,15 @@ resource "google_bigquery_table" "token_usage_flat" {
     query = <<-SQL
       SELECT
         timestamp,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'task_id')       AS task_id,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'phase')         AS phase,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'agent')         AS agent,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'model')         AS model,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'session_id')    AS session_id,
-        (SELECT value FROM UNNEST(labels) WHERE key = 'repository')    AS repository,
-        SAFE_CAST((SELECT value FROM UNNEST(labels) WHERE key = 'input_tokens')  AS INT64) AS input_tokens,
-        SAFE_CAST((SELECT value FROM UNNEST(labels) WHERE key = 'output_tokens') AS INT64) AS output_tokens,
-        SAFE_CAST((SELECT value FROM UNNEST(labels) WHERE key = 'total_tokens')  AS INT64) AS total_tokens
+        labels.task_id                              AS task_id,
+        labels.phase                                AS phase,
+        labels.agent                                AS agent,
+        labels.model                                AS model,
+        labels.session_id                           AS session_id,
+        labels.repository                           AS repository,
+        SAFE_CAST(labels.input_tokens  AS INT64)    AS input_tokens,
+        SAFE_CAST(labels.output_tokens AS INT64)    AS output_tokens,
+        SAFE_CAST(labels.total_tokens  AS INT64)    AS total_tokens
       FROM
         `${var.project_id}.${var.dataset_id}.${local.bigquery_table_name}`
     SQL

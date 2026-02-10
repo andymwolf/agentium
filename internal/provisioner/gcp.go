@@ -521,7 +521,11 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 			p.setCredentialEnv(cmd)
 			output, err := cmd.Output()
 			if err != nil {
-				errCh <- fmt.Errorf("failed to read logs: %w", err)
+				if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+					errCh <- fmt.Errorf("failed to read logs: %s", strings.TrimSpace(string(exitErr.Stderr)))
+				} else {
+					errCh <- fmt.Errorf("failed to read logs: %w", err)
+				}
 				return
 			}
 

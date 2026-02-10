@@ -81,5 +81,5 @@ ORDER BY day DESC;
 ## Notes
 
 - The BigQuery table (`agentium_session`) is auto-created by Cloud Logging when the first matching log entry arrives. Views will return errors until then.
-- Cloud Logging stores labels as `REPEATED RECORD<key STRING, value STRING>`. All views use `UNNEST(labels)` to extract named columns.
+- Cloud Logging exports labels as a `NULLABLE RECORD` where each label key becomes a named column (e.g., `labels.session_id`). Views reference these fields directly via dot-notation.
 - Token counts are stored as strings in labels and converted via `SAFE_CAST` to `INT64`.
