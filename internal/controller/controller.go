@@ -116,13 +116,15 @@ type TaskState struct {
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	SkipPlanIfExists       bool `json:"skip_plan_if_exists,omitempty"`
-	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
-	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
-	VerifyMaxIterations    int  `json:"verify_max_iterations,omitempty"`
-	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
-	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
+	SkipPlanIfExists       bool   `json:"skip_plan_if_exists,omitempty"`
+	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
+	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
+	VerifyMaxIterations    int    `json:"verify_max_iterations,omitempty"`
+	JudgeContextBudget     int    `json:"judge_context_budget,omitempty"`
+	JudgeNoSignalLimit     int    `json:"judge_no_signal_limit,omitempty"`
+	ReviewerSkipOn         string `json:"reviewer_skip_on,omitempty"`
+	JudgeSkipOn            string `json:"judge_skip_on,omitempty"`
 }
 
 // FallbackConfig controls adapter execution fallback behavior.

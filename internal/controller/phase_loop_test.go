@@ -908,3 +908,329 @@ func TestTryVerifyMerge_NoHandoffData(t *testing.T) {
 		t.Errorf("tryVerifyMerge() remainingFailures = %v, want nil when no handoff data", failures)
 	}
 }
+
+// Tests for skip_on condition evaluation (issue #420)
+
+func TestEvaluateSkipCondition_EmptyOutput(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{},
+		logger: newTestLogger(),
+	}
+
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{"empty string", "", true},
+		{"whitespace only", "   \n\t  \n  ", true},
+		{"has content", "Some output", false},
+		{"newlines with content", "\n\nSome content\n\n", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.evaluateSkipCondition(SkipConditionEmptyOutput, tt.output, "issue:123")
+			if got != tt.want {
+				t.Errorf("evaluateSkipCondition(empty_output, %q) = %v, want %v", tt.output, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateSkipCondition_SimpleOutput(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{},
+		logger: newTestLogger(),
+	}
+
+	// Generate output with exactly simpleOutputLineThreshold non-empty lines
+	var shortLines []string
+	for i := 0; i < simpleOutputLineThreshold-1; i++ {
+		shortLines = append(shortLines, "Line content")
+	}
+	shortOutput := strings.Join(shortLines, "\n")
+
+	// Generate output with more than simpleOutputLineThreshold non-empty lines
+	var longLines []string
+	for i := 0; i < simpleOutputLineThreshold+5; i++ {
+		longLines = append(longLines, "Line content")
+	}
+	longOutput := strings.Join(longLines, "\n")
+
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{"empty string", "", true},
+		{"single line", "Just one line", true},
+		{"few lines", "Line 1\nLine 2\nLine 3", true},
+		{"short output", shortOutput, true},
+		{"long output", longOutput, false},
+		{"many empty lines with few content lines", "\n\n\nLine 1\n\n\nLine 2\n\n\n", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.evaluateSkipCondition(SkipConditionSimpleOutput, tt.output, "issue:123")
+			if got != tt.want {
+				t.Errorf("evaluateSkipCondition(simple_output, %q) = %v, want %v", tt.output[:min(50, len(tt.output))], got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateSkipCondition_NoCodeChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	// Store handoff data with no files changed
+	taskIDNoChanges := "issue:100"
+	_ = store.StorePhaseOutput(taskIDNoChanges, handoff.PhaseImplement, 1, &handoff.ImplementOutput{
+		BranchName:   "feature/test",
+		FilesChanged: []string{},
+		TestsPassed:  true,
+	})
+
+	// Store handoff data with files changed
+	taskIDWithChanges := "issue:200"
+	_ = store.StorePhaseOutput(taskIDWithChanges, handoff.PhaseImplement, 1, &handoff.ImplementOutput{
+		BranchName:   "feature/test2",
+		FilesChanged: []string{"file1.go", "file2.go"},
+		TestsPassed:  true,
+	})
+
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: store,
+		logger:       newTestLogger(),
+	}
+
+	tests := []struct {
+		name   string
+		taskID string
+		want   bool
+	}{
+		{"no files changed", taskIDNoChanges, true},
+		{"files changed", taskIDWithChanges, false},
+		{"no handoff data", "issue:999", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.evaluateSkipCondition(SkipConditionNoCodeChanges, "some output", tt.taskID)
+			if got != tt.want {
+				t.Errorf("evaluateSkipCondition(no_code_changes, task=%s) = %v, want %v", tt.taskID, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateSkipCondition_UnrecognizedCondition(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{},
+		logger: newTestLogger(),
+	}
+
+	// Unrecognized conditions should return false (safe default: don't skip)
+	got := c.evaluateSkipCondition("unknown_condition", "some output", "issue:123")
+	if got != false {
+		t.Errorf("evaluateSkipCondition(unknown_condition) = %v, want false", got)
+	}
+}
+
+func TestEvaluateSkipCondition_EmptyCondition(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{},
+		logger: newTestLogger(),
+	}
+
+	// Empty condition should return false (don't skip)
+	got := c.evaluateSkipCondition("", "some output", "issue:123")
+	if got != false {
+		t.Errorf("evaluateSkipCondition('') = %v, want false", got)
+	}
+}
+
+func TestShouldSkipReviewerOnCondition_NilConfig(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{PhaseLoop: nil},
+		logger: newTestLogger(),
+	}
+
+	got := c.shouldSkipReviewerOnCondition("some output", "issue:123")
+	if got != false {
+		t.Errorf("shouldSkipReviewerOnCondition with nil PhaseLoop = %v, want false", got)
+	}
+}
+
+func TestShouldSkipReviewerOnCondition_NoCondition(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				ReviewerSkipOn: "",
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	got := c.shouldSkipReviewerOnCondition("some output", "issue:123")
+	if got != false {
+		t.Errorf("shouldSkipReviewerOnCondition with empty ReviewerSkipOn = %v, want false", got)
+	}
+}
+
+func TestShouldSkipReviewerOnCondition_WithCondition(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				ReviewerSkipOn: SkipConditionEmptyOutput,
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Empty output should trigger skip
+	got := c.shouldSkipReviewerOnCondition("", "issue:123")
+	if got != true {
+		t.Errorf("shouldSkipReviewerOnCondition with empty output = %v, want true", got)
+	}
+
+	// Non-empty output should not trigger skip
+	got = c.shouldSkipReviewerOnCondition("some content", "issue:123")
+	if got != false {
+		t.Errorf("shouldSkipReviewerOnCondition with content = %v, want false", got)
+	}
+}
+
+func TestShouldSkipJudgeOnCondition_NilConfig(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{PhaseLoop: nil},
+		logger: newTestLogger(),
+	}
+
+	got := c.shouldSkipJudgeOnCondition("some output", "issue:123")
+	if got != false {
+		t.Errorf("shouldSkipJudgeOnCondition with nil PhaseLoop = %v, want false", got)
+	}
+}
+
+func TestShouldSkipJudgeOnCondition_WithCondition(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				JudgeSkipOn: SkipConditionSimpleOutput,
+			},
+		},
+		logger: newTestLogger(),
+	}
+
+	// Short output should trigger skip
+	got := c.shouldSkipJudgeOnCondition("Line 1\nLine 2", "issue:123")
+	if got != true {
+		t.Errorf("shouldSkipJudgeOnCondition with short output = %v, want true", got)
+	}
+
+	// Long output should not trigger skip
+	var longLines []string
+	for i := 0; i < simpleOutputLineThreshold+5; i++ {
+		longLines = append(longLines, "Line content")
+	}
+	got = c.shouldSkipJudgeOnCondition(strings.Join(longLines, "\n"), "issue:123")
+	if got != false {
+		t.Errorf("shouldSkipJudgeOnCondition with long output = %v, want false", got)
+	}
+}
+
+func TestIsOutputEmpty(t *testing.T) {
+	c := &Controller{}
+
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{"empty", "", true},
+		{"spaces", "   ", true},
+		{"tabs", "\t\t", true},
+		{"newlines", "\n\n\n", true},
+		{"mixed whitespace", "  \t\n  \t ", true},
+		{"single char", "a", false},
+		{"content with whitespace", "  hello  ", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.isOutputEmpty(tt.output)
+			if got != tt.want {
+				t.Errorf("isOutputEmpty(%q) = %v, want %v", tt.output, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsOutputSimple(t *testing.T) {
+	c := &Controller{}
+
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{"empty", "", true},
+		{"single line", "one line", true},
+		{"exactly threshold minus one", strings.Repeat("line\n", simpleOutputLineThreshold-1), true},
+		{"exactly threshold", strings.Repeat("line\n", simpleOutputLineThreshold), false},
+		{"many empty lines few content", "\n\n\nline1\n\n\nline2\n\n\n", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.isOutputSimple(tt.output)
+			if got != tt.want {
+				t.Errorf("isOutputSimple(%q...) = %v, want %v", tt.output[:min(20, len(tt.output))], got, tt.want)
+			}
+		})
+	}
+}
+
+func TestImplementOutputHasNoCodeChanges_NoHandoffStore(t *testing.T) {
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: nil,
+	}
+
+	got := c.implementOutputHasNoCodeChanges("issue:123")
+	if got != false {
+		t.Errorf("implementOutputHasNoCodeChanges with nil store = %v, want false", got)
+	}
+}
+
+func TestImplementOutputHasNoCodeChanges_NoHandoffData(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := handoff.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	c := &Controller{
+		config:       SessionConfig{},
+		handoffStore: store,
+	}
+
+	got := c.implementOutputHasNoCodeChanges("issue:999")
+	if got != false {
+		t.Errorf("implementOutputHasNoCodeChanges with no data = %v, want false", got)
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
