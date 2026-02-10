@@ -256,5 +256,6 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 		sb.WriteString("**NOTE:** This is the FINAL iteration. Prefer ADVANCE unless there are critical issues that would prevent the work from being usable. However, security issues (data leakage to external services, missing input sanitization) are ALWAYS critical regardless of iteration count.\n\n")
 	}
 
-	return sb.String()
+	// Apply template variable substitution
+	return c.renderWithParameters(sb.String())
 }

@@ -60,6 +60,12 @@ type Credentials struct {
 	OpenAI    *ProviderCredential `json:"openai,omitempty"`
 }
 
+// PromptContext contains context for template variable substitution in prompts.
+type PromptContext struct {
+	IssueURL   string            `json:"issue_url,omitempty"`  // URL of the issue being worked on
+	Parameters map[string]string `json:"parameters,omitempty"` // User-provided template parameters
+}
+
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
 	ID            string                `json:"id"`
@@ -70,6 +76,7 @@ type SessionConfig struct {
 	MaxIterations int                   `json:"max_iterations"`
 	MaxDuration   string                `json:"max_duration"`
 	Prompt        string                `json:"prompt"`
+	PromptContext *PromptContext        `json:"prompt_context,omitempty"` // Context for template variable substitution
 	GitHub        GitHubConfig          `json:"github"`
 	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
 	CodexAuth     CodexAuthConfig       `json:"codex_auth,omitempty"`
