@@ -230,7 +230,8 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 		sb.WriteString("- Are there any new issues introduced?\n")
 	}
 
-	return sb.String()
+	// Apply template variable substitution
+	return c.renderWithParameters(sb.String())
 }
 
 // feedbackResponsePattern matches AGENTIUM_MEMORY: FEEDBACK_RESPONSE lines.

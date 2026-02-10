@@ -28,6 +28,7 @@ import (
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
 	"github.com/andywolf/agentium/internal/scope"
+	"github.com/andywolf/agentium/internal/template"
 	"github.com/andywolf/agentium/internal/version"
 	"github.com/andywolf/agentium/internal/workspace"
 	"github.com/andywolf/agentium/prompts/skills"
@@ -132,18 +133,25 @@ type FallbackConfig struct {
 // DefaultFallbackAdapter is the default adapter used for fallback when none is specified.
 const DefaultFallbackAdapter = "claude-code"
 
+// PromptContext contains context for template variable substitution in prompts.
+type PromptContext struct {
+	IssueURL   string            `json:"issue_url,omitempty"`  // URL of the issue being worked on
+	Parameters map[string]string `json:"parameters,omitempty"` // User-provided template parameters
+}
+
 // SessionConfig is the configuration passed to the controller
 type SessionConfig struct {
-	ID                   string   `json:"id"`
-	CloudProvider        string   `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
-	Repository           string   `json:"repository"`
-	Tasks                []string `json:"tasks"`
-	Agent                string   `json:"agent"`
-	MaxIterations        int      `json:"max_iterations"`
-	MaxDuration          string   `json:"max_duration"`
-	Prompt               string   `json:"prompt"`
-	Interactive          bool     `json:"interactive,omitempty"`            // Local interactive mode (no cloud clients)
-	CloneInsideContainer bool     `json:"clone_inside_container,omitempty"` // Clone repository inside Docker container
+	ID                   string         `json:"id"`
+	CloudProvider        string         `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure, local)
+	Repository           string         `json:"repository"`
+	Tasks                []string       `json:"tasks"`
+	Agent                string         `json:"agent"`
+	MaxIterations        int            `json:"max_iterations"`
+	MaxDuration          string         `json:"max_duration"`
+	Prompt               string         `json:"prompt"`
+	PromptContext        *PromptContext `json:"prompt_context,omitempty"`         // Context for template variable substitution
+	Interactive          bool           `json:"interactive,omitempty"`            // Local interactive mode (no cloud clients)
+	CloneInsideContainer bool           `json:"clone_inside_container,omitempty"` // Clone repository inside Docker container
 	GitHub               struct {
 		AppID            int64  `json:"app_id"`
 		InstallationID   int64  `json:"installation_id"`
@@ -1264,6 +1272,35 @@ func (c *Controller) detectExistingWork(ctx context.Context, issueNumber string)
 	return nil
 }
 
+// renderWithParameters applies template variable substitution to a prompt string.
+// It merges built-in variables (repository, issue_url, etc.) with user-provided parameters,
+// where user parameters take precedence on name collision.
+func (c *Controller) renderWithParameters(prompt string) string {
+	// Build built-in variables from session config
+	builtins := map[string]string{
+		"repository": c.config.Repository,
+	}
+
+	// Add issue_url if available
+	if c.config.PromptContext != nil && c.config.PromptContext.IssueURL != "" {
+		builtins["issue_url"] = c.config.PromptContext.IssueURL
+	}
+
+	// Add active task number if available
+	if c.activeTask != "" {
+		builtins["issue_number"] = c.activeTask
+	}
+
+	// Merge with user parameters (user params override builtins)
+	var userParams map[string]string
+	if c.config.PromptContext != nil {
+		userParams = c.config.PromptContext.Parameters
+	}
+
+	merged := template.MergeVariables(builtins, userParams)
+	return template.RenderPrompt(prompt, merged)
+}
+
 // buildPromptForTask builds a focused prompt for a single issue, incorporating existing work context.
 // The phase parameter controls whether implementation instructions are included:
 // - For IMPLEMENT phase (or empty phase): include full implementation instructions
@@ -1386,7 +1423,8 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		sb.WriteString(fmt.Sprintf("The repository is cloned at %s.\n", c.workDir))
 	}
 
-	return sb.String()
+	// Apply template variable substitution
+	return c.renderWithParameters(sb.String())
 }
 
 // updateTaskPhase transitions task phase based on agent status signals
