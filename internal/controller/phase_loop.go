@@ -38,6 +38,20 @@ const (
 // defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
 const defaultJudgeContextBudget = 8000
 
+// Skip condition constants for reviewer/judge conditional skipping.
+const (
+	// SkipConditionEmptyOutput skips if the worker produced no meaningful output.
+	SkipConditionEmptyOutput = "empty_output"
+	// SkipConditionSimpleOutput skips if the worker output is short/trivial (< N lines).
+	SkipConditionSimpleOutput = "simple_output"
+	// SkipConditionNoCodeChanges skips if git diff shows no file changes.
+	SkipConditionNoCodeChanges = "no_code_changes"
+)
+
+// simpleOutputLineThreshold is the maximum number of non-empty lines for output
+// to be considered "simple" (trivial).
+const simpleOutputLineThreshold = 10
+
 // phaseMaxIterations returns the configured max iterations for a phase,
 // considering the workflow path and falling back to defaults when not specified.
 func (c *Controller) phaseMaxIterations(phase TaskPhase, workflowPath WorkflowPath) int {
@@ -101,6 +115,115 @@ func simpleMaxIter(phase TaskPhase) int {
 	default:
 		return 1
 	}
+}
+
+// evaluateSkipCondition evaluates whether a skip_on condition is met.
+// Returns true if the condition is met and the phase should be skipped.
+// Unrecognized conditions return false (safe default: don't skip).
+func (c *Controller) evaluateSkipCondition(condition, phaseOutput, taskID string) bool {
+	if condition == "" {
+		return false
+	}
+
+	switch condition {
+	case SkipConditionEmptyOutput:
+		return c.isOutputEmpty(phaseOutput)
+	case SkipConditionSimpleOutput:
+		return c.isOutputSimple(phaseOutput)
+	case SkipConditionNoCodeChanges:
+		return c.implementOutputHasNoCodeChanges(taskID)
+	default:
+		// Unrecognized condition: don't skip (safe default)
+		c.logWarning("Unrecognized skip_on condition: %q (ignoring)", condition)
+		return false
+	}
+}
+
+// isOutputEmpty returns true if the phase output is empty or contains only whitespace.
+func (c *Controller) isOutputEmpty(output string) bool {
+	return strings.TrimSpace(output) == ""
+}
+
+// isOutputSimple returns true if the phase output is short/trivial (fewer than simpleOutputLineThreshold non-empty lines).
+func (c *Controller) isOutputSimple(output string) bool {
+	if output == "" {
+		return true
+	}
+
+	lines := strings.Split(output, "\n")
+	nonEmptyCount := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			nonEmptyCount++
+			if nonEmptyCount >= simpleOutputLineThreshold {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// implementOutputHasNoCodeChanges returns true if the handoff store indicates
+// no file changes were made during the IMPLEMENT phase.
+func (c *Controller) implementOutputHasNoCodeChanges(taskID string) bool {
+	if !c.isHandoffEnabled() || c.handoffStore == nil {
+		return false
+	}
+
+	hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhaseImplement)
+	if hd == nil || hd.ImplementOutput == nil {
+		return false
+	}
+
+	return len(hd.ImplementOutput.FilesChanged) == 0
+}
+
+// shouldSkipReviewer returns true if the reviewer should be skipped.
+// Boolean skip field takes precedence over skip_on condition.
+func (c *Controller) shouldSkipReviewer(phaseOutput, taskID string) (skip bool, reason string) {
+	if c.config.PhaseLoop == nil {
+		return false, ""
+	}
+
+	// Boolean skip takes precedence
+	if c.config.PhaseLoop.ReviewerSkip {
+		return true, "reviewer_skip=true"
+	}
+
+	// Then evaluate skip_on condition if configured
+	skipOnCondition := c.config.PhaseLoop.ReviewerSkipOn
+	if skipOnCondition == "" {
+		return false, ""
+	}
+
+	if c.evaluateSkipCondition(skipOnCondition, phaseOutput, taskID) {
+		return true, skipOnCondition
+	}
+	return false, ""
+}
+
+// shouldSkipJudge returns true if the judge should be skipped.
+// Boolean skip field takes precedence over skip_on condition.
+func (c *Controller) shouldSkipJudge(phaseOutput, taskID string) (skip bool, reason string) {
+	if c.config.PhaseLoop == nil {
+		return false, ""
+	}
+
+	// Boolean skip takes precedence
+	if c.config.PhaseLoop.JudgeSkip {
+		return true, "judge_skip=true"
+	}
+
+	// Then evaluate skip_on condition if configured
+	skipOnCondition := c.config.PhaseLoop.JudgeSkipOn
+	if skipOnCondition == "" {
+		return false, ""
+	}
+
+	if c.evaluateSkipCondition(skipOnCondition, phaseOutput, taskID) {
+		return true, skipOnCondition
+	}
+	return false, ""
 }
 
 // existingPlanIndicators are strings that indicate an issue already contains
@@ -546,6 +669,23 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 			}
 
+			// Check if reviewer should be skipped (skip=true takes precedence over skip_on)
+			if skipReviewer, skipReason := c.shouldSkipReviewer(phaseOutput, taskID); skipReviewer {
+				c.logInfo("Phase %s: reviewer skip condition met (%s), skipping review/judge (auto-advance)", currentPhase, skipReason)
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
+					fmt.Sprintf("Reviewer skip condition (%s) met — skipping review (auto-advance)", skipReason))
+
+				// Clear feedback and record phase result
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (skip condition met, auto-advanced)", currentPhase)},
+					}, c.iteration, taskID)
+				}
+				advanced = true
+				break
+			}
+
 			// Run reviewer + judge
 			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
 				CompletedPhase:          currentPhase,
@@ -583,6 +723,23 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			priorDirectives := ""
 			if c.memoryStore != nil && iter > 1 {
 				priorDirectives = c.memoryStore.BuildJudgeHistoryContext(taskID, iter)
+			}
+
+			// Check if judge should be skipped (skip=true takes precedence over skip_on)
+			if skipJudge, skipReason := c.shouldSkipJudge(phaseOutput, taskID); skipJudge {
+				c.logInfo("Phase %s: judge skip condition met (%s), skipping judge (auto-advance)", currentPhase, skipReason)
+				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
+					fmt.Sprintf("Judge skip condition (%s) met — skipping judge (auto-advance)", skipReason))
+
+				// Clear feedback and record phase result
+				if c.memoryStore != nil {
+					c.memoryStore.ClearByType(memory.EvalFeedback)
+					c.memoryStore.Update([]memory.Signal{
+						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (judge skip condition met, auto-advanced)", currentPhase)},
+					}, c.iteration, taskID)
+				}
+				advanced = true
+				break
 			}
 
 			judgeResult, err := c.runJudge(ctx, judgeRunParams{

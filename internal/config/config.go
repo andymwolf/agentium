@@ -26,14 +26,18 @@ type DelegationConfigYAML struct {
 // PhaseLoopConfig contains phase loop configuration in YAML config.
 // Phase loop is enabled when this config section exists (non-nil) in the YAML.
 type PhaseLoopConfig struct {
-	SkipPlanIfExists       bool `mapstructure:"skip_plan_if_exists"`
-	PlanMaxIterations      int  `mapstructure:"plan_max_iterations"`
-	ImplementMaxIterations int  `mapstructure:"implement_max_iterations"`
-	ReviewMaxIterations    int  `mapstructure:"review_max_iterations"`
-	DocsMaxIterations      int  `mapstructure:"docs_max_iterations"`
-	VerifyMaxIterations    int  `mapstructure:"verify_max_iterations"`
-	JudgeContextBudget     int  `mapstructure:"judge_context_budget"`
-	JudgeNoSignalLimit     int  `mapstructure:"judge_no_signal_limit"`
+	SkipPlanIfExists       bool   `mapstructure:"skip_plan_if_exists"`
+	PlanMaxIterations      int    `mapstructure:"plan_max_iterations"`
+	ImplementMaxIterations int    `mapstructure:"implement_max_iterations"`
+	ReviewMaxIterations    int    `mapstructure:"review_max_iterations"`
+	DocsMaxIterations      int    `mapstructure:"docs_max_iterations"`
+	VerifyMaxIterations    int    `mapstructure:"verify_max_iterations"`
+	JudgeContextBudget     int    `mapstructure:"judge_context_budget"`
+	JudgeNoSignalLimit     int    `mapstructure:"judge_no_signal_limit"`
+	ReviewerSkip           bool   `mapstructure:"reviewer_skip"`
+	JudgeSkip              bool   `mapstructure:"judge_skip"`
+	ReviewerSkipOn         string `mapstructure:"reviewer_skip_on"`
+	JudgeSkipOn            string `mapstructure:"judge_skip_on"`
 }
 
 // CodexConfig contains Codex agent authentication settings
