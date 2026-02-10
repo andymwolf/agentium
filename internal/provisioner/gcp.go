@@ -17,16 +17,43 @@ import (
 
 // GCPProvisioner implements Provisioner for Google Cloud Platform
 type GCPProvisioner struct {
-	verbose bool
-	project string
+	verbose           bool
+	project           string
+	serviceAccountKey string // path to SA JSON key file; empty = use ambient credentials
 }
 
-// NewGCPProvisioner creates a new GCP provisioner
-func NewGCPProvisioner(verbose bool, project string) (*GCPProvisioner, error) {
+// NewGCPProvisioner creates a new GCP provisioner.
+// When serviceAccountKey is non-empty, all terraform and gcloud commands
+// authenticate using that key file instead of ambient gcloud credentials.
+func NewGCPProvisioner(verbose bool, project, serviceAccountKey string) (*GCPProvisioner, error) {
+	// Expand ~ in service account key path
+	if strings.HasPrefix(serviceAccountKey, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve home directory for service_account_key: %w", err)
+		}
+		serviceAccountKey = filepath.Join(home, serviceAccountKey[2:])
+	}
+
 	return &GCPProvisioner{
-		verbose: verbose,
-		project: project,
+		verbose:           verbose,
+		project:           project,
+		serviceAccountKey: serviceAccountKey,
 	}, nil
+}
+
+// setCredentialEnv configures the command environment to use a service account
+// key file when one is configured. It sets both GOOGLE_APPLICATION_CREDENTIALS
+// (for Terraform's Google provider) and CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+// (for gcloud CLI) so that all GCP operations authenticate consistently.
+func (p *GCPProvisioner) setCredentialEnv(cmd *exec.Cmd) {
+	if p.serviceAccountKey == "" {
+		return
+	}
+	cmd.Env = append(os.Environ(),
+		"GOOGLE_APPLICATION_CREDENTIALS="+p.serviceAccountKey,
+		"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="+p.serviceAccountKey,
+	)
 }
 
 // Provision creates a new GCP VM for an agent session
@@ -150,6 +177,7 @@ func (p *GCPProvisioner) List(ctx context.Context) ([]SessionStatus, error) {
 	// List all instances with the agentium label
 	args := p.buildListArgs()
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -274,6 +302,7 @@ func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*Session
 	// Get instance status via gcloud with the zone
 	args := p.buildStatusArgs(sessionID, zone)
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -489,6 +518,7 @@ func (p *GCPProvisioner) Logs(ctx context.Context, sessionID string, opts LogsOp
 
 		for {
 			cmd := exec.CommandContext(ctx, "gcloud", args...)
+			p.setCredentialEnv(cmd)
 			output, err := cmd.Output()
 			if err != nil {
 				errCh <- fmt.Errorf("failed to read logs: %w", err)
@@ -621,6 +651,7 @@ func sessionIDPrefix(sessionID string) string {
 func (p *GCPProvisioner) deleteInstance(ctx context.Context, instanceName string) error {
 	args := p.buildDestroyArgs(instanceName)
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if p.verbose && len(output) > 0 {
 		fmt.Fprintf(os.Stderr, "%s", output)
@@ -646,6 +677,7 @@ func (p *GCPProvisioner) deleteFirewallRule(ctx context.Context, ruleName string
 	}
 
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if p.verbose && len(output) > 0 {
 		fmt.Fprintf(os.Stderr, "%s", output)
@@ -676,6 +708,7 @@ func (p *GCPProvisioner) removeIAMBinding(ctx context.Context, saEmail, role str
 	}
 
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if p.verbose && len(output) > 0 {
 		fmt.Fprintf(os.Stderr, "%s", output)
@@ -701,6 +734,7 @@ func (p *GCPProvisioner) deleteServiceAccount(ctx context.Context, saEmail strin
 	}
 
 	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if p.verbose && len(output) > 0 {
 		fmt.Fprintf(os.Stderr, "%s", output)
@@ -733,6 +767,7 @@ func (p *GCPProvisioner) copyTerraformFiles(destDir string) error {
 func (p *GCPProvisioner) runTerraform(ctx context.Context, workDir string, args ...string) error {
 	cmd := exec.CommandContext(ctx, "terraform", args...)
 	cmd.Dir = workDir
+	p.setCredentialEnv(cmd)
 
 	var stderr bytes.Buffer
 	if p.verbose {
@@ -754,6 +789,7 @@ func (p *GCPProvisioner) runTerraform(ctx context.Context, workDir string, args 
 func (p *GCPProvisioner) getTerraformOutput(ctx context.Context, workDir string) (map[string]string, error) {
 	cmd := exec.CommandContext(ctx, "terraform", "output", "-json")
 	cmd.Dir = workDir
+	p.setCredentialEnv(cmd)
 
 	output, err := cmd.Output()
 	if err != nil {

@@ -84,12 +84,13 @@ type GitHubConfig struct {
 
 // CloudConfig contains cloud provider settings
 type CloudConfig struct {
-	Provider    string `mapstructure:"provider"`
-	Region      string `mapstructure:"region"`
-	Project     string `mapstructure:"project"`      // GCP project ID
-	MachineType string `mapstructure:"machine_type"` // VM instance type
-	UseSpot     bool   `mapstructure:"use_spot"`     // Use spot/preemptible instances
-	DiskSizeGB  int    `mapstructure:"disk_size_gb"`
+	Provider          string `mapstructure:"provider"`
+	Region            string `mapstructure:"region"`
+	Project           string `mapstructure:"project"`      // GCP project ID
+	MachineType       string `mapstructure:"machine_type"` // VM instance type
+	UseSpot           bool   `mapstructure:"use_spot"`     // Use spot/preemptible instances
+	DiskSizeGB        int    `mapstructure:"disk_size_gb"`
+	ServiceAccountKey string `mapstructure:"service_account_key"` // Path to GCP service account JSON key file
 }
 
 // DefaultsConfig contains default session settings

@@ -42,6 +42,7 @@ cloud:
   machine_type: "e2-medium"         # VM instance type
   use_spot: true                    # Use spot/preemptible instances
   disk_size_gb: 50                  # Root disk size in GB
+  service_account_key: ""           # Path to GCP service account JSON key file (optional)
 
 # Default session settings
 defaults:
@@ -136,6 +137,7 @@ monorepo:
 | `machine_type` | string | No | `e2-medium` | VM instance type (see below) |
 | `use_spot` | bool | No | `false` | Use spot/preemptible instances for cost savings (recommended: set to `true` explicitly) |
 | `disk_size_gb` | int | No | `50` | Root disk size in GB |
+| `service_account_key` | string | No | - | Path to GCP service account JSON key file. When set, all Terraform and gcloud commands authenticate with this key instead of ambient credentials. See [GCP Service Account Authentication](cloud-setup/gcp.md#service-account-authentication). |
 
 **Machine type defaults by provider:**
 
