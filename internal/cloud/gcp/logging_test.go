@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -424,5 +425,129 @@ func TestCloudLoggerConfig_Defaults(t *testing.T) {
 	}
 	if cfg.SessionID != "" {
 		t.Errorf("default SessionID should be empty, got %q", cfg.SessionID)
+	}
+}
+
+func TestPingWithRetry_SucceedsFirstAttempt(t *testing.T) {
+	calls := 0
+	pinger := func(_ context.Context) error {
+		calls++
+		return nil
+	}
+
+	err := pingWithRetry(context.Background(), pinger, 6)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestPingWithRetry_SucceedsAfterFailures(t *testing.T) {
+	calls := 0
+	pinger := func(_ context.Context) error {
+		calls++
+		if calls < 3 {
+			return fmt.Errorf("permission denied")
+		}
+		return nil
+	}
+
+	err := pingWithRetry(context.Background(), pinger, 6)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls, got %d", calls)
+	}
+}
+
+func TestPingWithRetry_FailsAfterAllRetries(t *testing.T) {
+	calls := 0
+	pinger := func(_ context.Context) error {
+		calls++
+		return fmt.Errorf("permission denied")
+	}
+
+	err := pingWithRetry(context.Background(), pinger, 3)
+	if err == nil {
+		t.Fatal("expected error after retries exhausted")
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls, got %d", calls)
+	}
+	if !strings.Contains(err.Error(), "ping failed after 3 retries") {
+		t.Errorf("error = %q, want to contain 'ping failed after 3 retries'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("error = %q, want to contain 'permission denied'", err.Error())
+	}
+}
+
+func TestPingWithRetry_RespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	pinger := func(_ context.Context) error {
+		calls++
+		cancel() // cancel after first attempt
+		return fmt.Errorf("permission denied")
+	}
+
+	err := pingWithRetry(ctx, pinger, 6)
+	if err == nil {
+		t.Fatal("expected error on context cancellation")
+	}
+	if err != context.Canceled {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call before cancel, got %d", calls)
+	}
+}
+
+func TestCloudLogger_Close_FlushFailsButCloseStillCalled(t *testing.T) {
+	mock := newMockLogWriter()
+	mock.flushErr = fmt.Errorf("flush failed")
+	logger := NewCloudLoggerWithWriter(mock, "sess-1", nil)
+
+	err := logger.Close()
+	if err == nil {
+		t.Error("expected error from Close() when flush fails")
+	}
+	if !strings.Contains(err.Error(), "flush failed") {
+		t.Errorf("error = %q, want to contain 'flush failed'", err.Error())
+	}
+
+	mock.mu.Lock()
+	closed := mock.closed
+	mock.mu.Unlock()
+
+	if !closed {
+		t.Error("expected writer.Close() to be called even when flush fails")
+	}
+}
+
+func TestCloudLogger_Close_BothFlushAndCloseFail(t *testing.T) {
+	mock := newMockLogWriter()
+	mock.flushErr = fmt.Errorf("flush failed")
+	mock.closeErr = fmt.Errorf("close failed")
+	logger := NewCloudLoggerWithWriter(mock, "sess-1", nil)
+
+	err := logger.Close()
+	if err == nil {
+		t.Error("expected error from Close()")
+	}
+	// Flush error should take precedence
+	if !strings.Contains(err.Error(), "flush failed") {
+		t.Errorf("error = %q, want flush error to take precedence", err.Error())
+	}
+
+	mock.mu.Lock()
+	closed := mock.closed
+	mock.mu.Unlock()
+
+	if !closed {
+		t.Error("expected writer.Close() to be called even when flush fails")
 	}
 }
