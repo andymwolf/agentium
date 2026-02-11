@@ -1323,3 +1323,303 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func TestValidatePhases(t *testing.T) {
+	tests := []struct {
+		name    string
+		phases  []PhaseStepConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "known phases without overrides OK",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN"},
+				{Name: "IMPLEMENT"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "known phase with overrides OK",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN", Worker: &StepPromptConfig{Prompt: "custom plan prompt"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "unknown phase with worker prompt OK",
+			phases: []PhaseStepConfig{
+				{Name: "LINT", Worker: &StepPromptConfig{Prompt: "run linting"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "unknown phase without worker prompt errors",
+			phases: []PhaseStepConfig{
+				{Name: "LINT"},
+			},
+			wantErr: true,
+			errMsg:  "unknown phase \"LINT\" requires worker.prompt",
+		},
+		{
+			name: "unknown phase with empty worker prompt errors",
+			phases: []PhaseStepConfig{
+				{Name: "LINT", Worker: &StepPromptConfig{Prompt: ""}},
+			},
+			wantErr: true,
+			errMsg:  "unknown phase \"LINT\" requires worker.prompt",
+		},
+		{
+			name: "empty phase name errors",
+			phases: []PhaseStepConfig{
+				{Name: ""},
+			},
+			wantErr: true,
+			errMsg:  "phase name must not be empty",
+		},
+		{
+			name: "duplicate phase name errors",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN"},
+				{Name: "PLAN"},
+			},
+			wantErr: true,
+			errMsg:  "duplicate phase name: PLAN",
+		},
+		{
+			name:    "empty phases list OK",
+			phases:  []PhaseStepConfig{},
+			wantErr: false,
+		},
+		{
+			name: "mixed known and unknown phases OK",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN"},
+				{Name: "LINT", Worker: &StepPromptConfig{Prompt: "run lint"}},
+				{Name: "IMPLEMENT"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatePhases(tt.phases)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("validatePhases() expected error, got nil")
+					return
+				}
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("validatePhases() error = %q, want containing %q", err.Error(), tt.errMsg)
+				}
+			} else if err != nil {
+				t.Errorf("validatePhases() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestPhaseOrder_CustomPhases(t *testing.T) {
+	tests := []struct {
+		name      string
+		phases    []PhaseStepConfig
+		autoMerge bool
+		want      []TaskPhase
+	}{
+		{
+			name: "custom order",
+			phases: []PhaseStepConfig{
+				{Name: "IMPLEMENT"},
+				{Name: "DOCS"},
+			},
+			want: []TaskPhase{PhaseImplement, PhaseDocs},
+		},
+		{
+			name: "custom with unknown phases",
+			phases: []PhaseStepConfig{
+				{Name: "LINT", Worker: &StepPromptConfig{Prompt: "lint"}},
+				{Name: "IMPLEMENT"},
+				{Name: "DEPLOY", Worker: &StepPromptConfig{Prompt: "deploy"}},
+			},
+			want: []TaskPhase{"LINT", PhaseImplement, "DEPLOY"},
+		},
+		{
+			name: "auto-merge appends VERIFY if not present",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN"},
+				{Name: "IMPLEMENT"},
+			},
+			autoMerge: true,
+			want:      []TaskPhase{PhasePlan, PhaseImplement, PhaseVerify},
+		},
+		{
+			name: "auto-merge does not duplicate VERIFY",
+			phases: []PhaseStepConfig{
+				{Name: "PLAN"},
+				{Name: "VERIFY"},
+			},
+			autoMerge: true,
+			want:      []TaskPhase{PhasePlan, PhaseVerify},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				config: SessionConfig{
+					Phases:    tt.phases,
+					AutoMerge: tt.autoMerge,
+				},
+			}
+			got := c.phaseOrder()
+			if len(got) != len(tt.want) {
+				t.Fatalf("phaseOrder() length = %d, want %d (got %v)", len(got), len(tt.want), got)
+			}
+			for i, p := range tt.want {
+				if got[i] != p {
+					t.Errorf("phaseOrder()[%d] = %q, want %q", i, got[i], p)
+				}
+			}
+		})
+	}
+}
+
+func TestPhaseOrder_EmptyPhasesFallback(t *testing.T) {
+	c := &Controller{config: SessionConfig{}}
+	got := c.phaseOrder()
+	expected := issuePhaseOrder
+	if len(got) != len(expected) {
+		t.Fatalf("phaseOrder() with empty phases = %v, want %v", got, expected)
+	}
+	for i := range expected {
+		if got[i] != expected[i] {
+			t.Errorf("phaseOrder()[%d] = %q, want %q", i, got[i], expected[i])
+		}
+	}
+}
+
+func TestPhaseMaxIterations_CustomPhaseOverride(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			PhaseLoop: &PhaseLoopConfig{
+				PlanMaxIterations:      3,
+				ImplementMaxIterations: 5,
+			},
+			Phases: []PhaseStepConfig{
+				{Name: "PLAN", MaxIterations: 7},
+				{Name: "IMPLEMENT"}, // No override, falls back to PhaseLoopConfig
+			},
+		},
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{},
+	}
+	// Build phaseConfigs like New() does
+	for i := range c.config.Phases {
+		c.phaseConfigs[TaskPhase(c.config.Phases[i].Name)] = &c.config.Phases[i]
+	}
+
+	// API override (7) takes precedence over PhaseLoopConfig (3)
+	if got := c.phaseMaxIterations(PhasePlan, WorkflowPathUnset); got != 7 {
+		t.Errorf("phaseMaxIterations(PLAN) = %d, want 7", got)
+	}
+
+	// No API override: falls back to PhaseLoopConfig (5)
+	if got := c.phaseMaxIterations(PhaseImplement, WorkflowPathUnset); got != 5 {
+		t.Errorf("phaseMaxIterations(IMPLEMENT) = %d, want 5", got)
+	}
+
+	// SIMPLE path still takes highest priority
+	if got := c.phaseMaxIterations(PhasePlan, WorkflowPathSimple); got != simplePlanMaxIter {
+		t.Errorf("phaseMaxIterations(PLAN, SIMPLE) = %d, want %d", got, simplePlanMaxIter)
+	}
+}
+
+func TestPhaseWorkerPrompt(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhasePlan: {
+				Name:   "PLAN",
+				Worker: &StepPromptConfig{Prompt: "custom plan worker prompt"},
+			},
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				// No worker override
+			},
+		},
+	}
+
+	if got := c.phaseWorkerPrompt(PhasePlan); got != "custom plan worker prompt" {
+		t.Errorf("phaseWorkerPrompt(PLAN) = %q, want %q", got, "custom plan worker prompt")
+	}
+	if got := c.phaseWorkerPrompt(PhaseImplement); got != "" {
+		t.Errorf("phaseWorkerPrompt(IMPLEMENT) = %q, want empty", got)
+	}
+	if got := c.phaseWorkerPrompt(PhaseDocs); got != "" {
+		t.Errorf("phaseWorkerPrompt(DOCS) = %q, want empty (phase not in map)", got)
+	}
+}
+
+func TestPhaseReviewerPrompt(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhasePlan: {
+				Name:     "PLAN",
+				Reviewer: &StepPromptConfig{Prompt: "custom reviewer prompt"},
+			},
+		},
+	}
+
+	if got := c.phaseReviewerPrompt(PhasePlan); got != "custom reviewer prompt" {
+		t.Errorf("phaseReviewerPrompt(PLAN) = %q, want %q", got, "custom reviewer prompt")
+	}
+	if got := c.phaseReviewerPrompt(PhaseImplement); got != "" {
+		t.Errorf("phaseReviewerPrompt(IMPLEMENT) = %q, want empty", got)
+	}
+}
+
+func TestPhaseJudgeCriteria(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhasePlan: {
+				Name:  "PLAN",
+				Judge: &JudgePromptConfig{Criteria: "custom judge criteria"},
+			},
+		},
+	}
+
+	if got := c.phaseJudgeCriteria(PhasePlan); got != "custom judge criteria" {
+		t.Errorf("phaseJudgeCriteria(PLAN) = %q, want %q", got, "custom judge criteria")
+	}
+	if got := c.phaseJudgeCriteria(PhaseImplement); got != "" {
+		t.Errorf("phaseJudgeCriteria(IMPLEMENT) = %q, want empty", got)
+	}
+}
+
+func TestContainsPhase(t *testing.T) {
+	phases := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs}
+	if !containsPhase(phases, PhasePlan) {
+		t.Error("containsPhase should find PLAN")
+	}
+	if containsPhase(phases, PhaseVerify) {
+		t.Error("containsPhase should not find VERIFY")
+	}
+	if containsPhase(nil, PhasePlan) {
+		t.Error("containsPhase should return false for nil slice")
+	}
+}
+
+func TestPhaseHelpers_NilPhaseConfigs(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: nil,
+	}
+
+	if got := c.phaseWorkerPrompt(PhasePlan); got != "" {
+		t.Errorf("phaseWorkerPrompt with nil map = %q, want empty", got)
+	}
+	if got := c.phaseReviewerPrompt(PhasePlan); got != "" {
+		t.Errorf("phaseReviewerPrompt with nil map = %q, want empty", got)
+	}
+	if got := c.phaseJudgeCriteria(PhasePlan); got != "" {
+		t.Errorf("phaseJudgeCriteria with nil map = %q, want empty", got)
+	}
+}

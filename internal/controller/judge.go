@@ -97,7 +97,14 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgePhase := fmt.Sprintf("%s_JUDGE", params.CompletedPhase)
 	skillPhase := judgePhase
 
-	if c.skillSelector != nil {
+	// API-provided judge criteria takes precedence over built-in skills
+	if judgeCriteria := c.phaseJudgeCriteria(params.CompletedPhase); judgeCriteria != "" {
+		session.IterationContext = &agent.IterationContext{
+			Phase:        skillPhase,
+			SkillsPrompt: judgeCriteria,
+		}
+		c.logInfo("Using API-provided judge criteria for phase %s", params.CompletedPhase)
+	} else if c.skillSelector != nil {
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),

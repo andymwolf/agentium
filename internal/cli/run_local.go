@@ -163,6 +163,27 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,
 	}
 
+	// Map custom phases config
+	if len(cfg.Phases) > 0 {
+		sessionConfig.Phases = make([]controller.PhaseStepConfig, len(cfg.Phases))
+		for i, p := range cfg.Phases {
+			stepCfg := controller.PhaseStepConfig{
+				Name:          p.Name,
+				MaxIterations: p.MaxIterations,
+			}
+			if p.Worker != nil {
+				stepCfg.Worker = &controller.StepPromptConfig{Prompt: p.Worker.Prompt}
+			}
+			if p.Reviewer != nil {
+				stepCfg.Reviewer = &controller.StepPromptConfig{Prompt: p.Reviewer.Prompt}
+			}
+			if p.Judge != nil {
+				stepCfg.Judge = &controller.JudgePromptConfig{Criteria: p.Judge.Criteria}
+			}
+			sessionConfig.Phases[i] = stepCfg
+		}
+	}
+
 	// Enable monorepo support if configured
 	if cfg.Monorepo.Enabled {
 		sessionConfig.Monorepo = &controller.MonorepoSessionConfig{

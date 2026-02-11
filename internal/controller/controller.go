@@ -164,9 +164,31 @@ type SessionConfig struct {
 	Delegation *DelegationConfig      `json:"delegation,omitempty"`
 	PhaseLoop  *PhaseLoopConfig       `json:"phase_loop,omitempty"`
 	Fallback   *FallbackConfig        `json:"fallback,omitempty"`
+	Phases     []PhaseStepConfig      `json:"phases,omitempty"`
 	Verbose    bool                   `json:"verbose,omitempty"`
 	AutoMerge  bool                   `json:"auto_merge,omitempty"`
 	Monorepo   *MonorepoSessionConfig `json:"monorepo,omitempty"`
+}
+
+// PhaseStepConfig defines the configuration for a single phase step.
+// When Phases is provided in SessionConfig, the phase order is derived from it
+// and API-provided prompts replace the built-in skills.
+type PhaseStepConfig struct {
+	Name          string             `json:"name"`
+	MaxIterations int                `json:"max_iterations,omitempty"`
+	Worker        *StepPromptConfig  `json:"worker,omitempty"`
+	Reviewer      *StepPromptConfig  `json:"reviewer,omitempty"`
+	Judge         *JudgePromptConfig `json:"judge,omitempty"`
+}
+
+// StepPromptConfig contains an override prompt for a worker or reviewer step.
+type StepPromptConfig struct {
+	Prompt string `json:"prompt"`
+}
+
+// JudgePromptConfig contains override criteria for a judge step.
+type JudgePromptConfig struct {
+	Criteria string `json:"criteria"`
 }
 
 // MonorepoSessionConfig contains monorepo-specific settings for the session.
@@ -264,6 +286,9 @@ type Controller struct {
 	metadataUpdater        gcp.MetadataUpdater     // Instance metadata updater (nil if unavailable)
 	eventSink              *event.FileSink         // Local JSONL event sink (nil = disabled)
 	tracer                 observability.Tracer    // Langfuse observability tracer (never nil; NoOpTracer if disabled)
+
+	// Custom phase step configs (indexed by phase name for O(1) lookup)
+	phaseConfigs map[TaskPhase]*PhaseStepConfig
 
 	// Docker container resource limits
 	containerMemLimit uint64 // Docker --memory limit in bytes (0 = no limit)
@@ -374,10 +399,24 @@ func New(config SessionConfig) (*Controller, error) {
 	// Initialize Langfuse tracer if configured via environment variables
 	c.initTracer(logger)
 
+	// Build phaseConfigs map from Phases slice for O(1) lookup
+	if len(config.Phases) > 0 {
+		if err := validatePhases(config.Phases); err != nil {
+			return nil, fmt.Errorf("invalid phases config: %w", err)
+		}
+		c.phaseConfigs = make(map[TaskPhase]*PhaseStepConfig, len(config.Phases))
+		for i := range config.Phases {
+			c.phaseConfigs[TaskPhase(config.Phases[i].Name)] = &config.Phases[i]
+		}
+	}
+
 	// Initialize task states and build task queue
 	initialIssuePhase := PhaseImplement
 	if c.isPhaseLoopEnabled() {
 		initialIssuePhase = PhasePlan
+	}
+	if len(config.Phases) > 0 {
+		initialIssuePhase = TaskPhase(config.Phases[0].Name)
 	}
 	for _, task := range config.Tasks {
 		c.taskStates[taskKey("issue", task)] = &TaskState{

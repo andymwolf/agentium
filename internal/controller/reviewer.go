@@ -55,7 +55,14 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	reviewPhase := fmt.Sprintf("%s_REVIEW", params.CompletedPhase)
 	skillPhase := reviewPhase
 
-	if c.skillSelector != nil {
+	// API-provided reviewer prompt takes precedence over built-in skills
+	if reviewerPrompt := c.phaseReviewerPrompt(params.CompletedPhase); reviewerPrompt != "" {
+		session.IterationContext = &agent.IterationContext{
+			Phase:        skillPhase,
+			SkillsPrompt: reviewerPrompt,
+		}
+		c.logInfo("Using API-provided reviewer prompt for phase %s", params.CompletedPhase)
+	} else if c.skillSelector != nil {
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),

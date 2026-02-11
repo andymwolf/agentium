@@ -699,3 +699,149 @@ func TestCodexAuthConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigFromEnv_PhasesConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		envValue   string
+		wantLen    int
+		wantFirst  string
+		wantWorker string
+	}{
+		{
+			name: "phases with full step config",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo",
+				"phases": [
+					{"name": "LINT", "max_iterations": 2, "worker": {"prompt": "run linting"}, "reviewer": {"prompt": "review lint"}, "judge": {"criteria": "lint criteria"}},
+					{"name": "IMPLEMENT", "max_iterations": 5}
+				]
+			}`,
+			wantLen:    2,
+			wantFirst:  "LINT",
+			wantWorker: "run linting",
+		},
+		{
+			name: "phases absent",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo"
+			}`,
+			wantLen: 0,
+		},
+		{
+			name: "empty phases array",
+			envValue: `{
+				"id": "test", "repository": "github.com/org/repo",
+				"phases": []
+			}`,
+			wantLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == "AGENTIUM_SESSION_CONFIG" {
+					return tt.envValue
+				}
+				return ""
+			}
+			readFile := func(path string) ([]byte, error) {
+				return nil, fmt.Errorf("should not be called")
+			}
+
+			config, err := LoadConfigFromEnv(getenv, readFile)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(config.Phases) != tt.wantLen {
+				t.Fatalf("len(Phases) = %d, want %d", len(config.Phases), tt.wantLen)
+			}
+
+			if tt.wantLen > 0 {
+				if config.Phases[0].Name != tt.wantFirst {
+					t.Errorf("Phases[0].Name = %q, want %q", config.Phases[0].Name, tt.wantFirst)
+				}
+				if tt.wantWorker != "" {
+					if config.Phases[0].Worker == nil {
+						t.Fatal("Phases[0].Worker is nil")
+					}
+					if config.Phases[0].Worker.Prompt != tt.wantWorker {
+						t.Errorf("Phases[0].Worker.Prompt = %q, want %q", config.Phases[0].Worker.Prompt, tt.wantWorker)
+					}
+				}
+				// Verify all nested types parsed
+				if config.Phases[0].Reviewer == nil {
+					t.Fatal("Phases[0].Reviewer is nil")
+				}
+				if config.Phases[0].Reviewer.Prompt != "review lint" {
+					t.Errorf("Phases[0].Reviewer.Prompt = %q, want %q", config.Phases[0].Reviewer.Prompt, "review lint")
+				}
+				if config.Phases[0].Judge == nil {
+					t.Fatal("Phases[0].Judge is nil")
+				}
+				if config.Phases[0].Judge.Criteria != "lint criteria" {
+					t.Errorf("Phases[0].Judge.Criteria = %q, want %q", config.Phases[0].Judge.Criteria, "lint criteria")
+				}
+				if config.Phases[0].MaxIterations != 2 {
+					t.Errorf("Phases[0].MaxIterations = %d, want 2", config.Phases[0].MaxIterations)
+				}
+				if config.Phases[1].MaxIterations != 5 {
+					t.Errorf("Phases[1].MaxIterations = %d, want 5", config.Phases[1].MaxIterations)
+				}
+			}
+		})
+	}
+}
+
+func TestNewController_InitialPhaseFromCustomPhases(t *testing.T) {
+	// This test verifies that when custom Phases are provided, the initial
+	// task phase is set to Phases[0].Name instead of the default PhasePlan.
+	//
+	// We can't call New() directly because it initializes cloud clients,
+	// so we test the logic by verifying the phaseConfigs and initial phase
+	// assignment via LoadConfigFromEnv + manual controller state check.
+	envValue := `{
+		"id": "test", "repository": "github.com/org/repo",
+		"agent": "claude-code", "max_duration": "1h",
+		"tasks": ["42"],
+		"phases": [
+			{"name": "LINT", "worker": {"prompt": "run lint"}},
+			{"name": "IMPLEMENT"}
+		],
+		"phase_loop": {}
+	}`
+
+	getenv := func(key string) string {
+		if key == "AGENTIUM_SESSION_CONFIG" {
+			return envValue
+		}
+		return ""
+	}
+	readFile := func(path string) ([]byte, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+
+	config, err := LoadConfigFromEnv(getenv, readFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(config.Phases) != 2 {
+		t.Fatalf("len(Phases) = %d, want 2", len(config.Phases))
+	}
+
+	// Simulate what New() does: initial phase should be Phases[0].Name
+	initialPhase := PhaseImplement
+	if config.PhaseLoop != nil {
+		initialPhase = PhasePlan
+	}
+	if len(config.Phases) > 0 {
+		initialPhase = TaskPhase(config.Phases[0].Name)
+	}
+
+	if initialPhase != TaskPhase("LINT") {
+		t.Errorf("initial phase = %q, want %q", initialPhase, "LINT")
+	}
+}

@@ -56,13 +56,19 @@ const simpleOutputLineThreshold = 10
 
 // phaseMaxIterations returns the configured max iterations for a phase,
 // considering the workflow path and falling back to defaults when not specified.
+// Priority: SIMPLE path → custom phase config → PhaseLoopConfig → defaults.
 func (c *Controller) phaseMaxIterations(phase TaskPhase, workflowPath WorkflowPath) int {
-	cfg := c.config.PhaseLoop
-
-	// For SIMPLE path, use reduced iterations
+	// For SIMPLE path, use reduced iterations (highest priority)
 	if workflowPath == WorkflowPathSimple {
 		return simpleMaxIter(phase)
 	}
+
+	// Check custom phase step config (API-provided per-phase max_iterations)
+	if stepCfg, ok := c.phaseConfigs[phase]; ok && stepCfg.MaxIterations > 0 {
+		return stepCfg.MaxIterations
+	}
+
+	cfg := c.config.PhaseLoop
 
 	// For COMPLEX or UNSET, use configured or default iterations
 	if cfg == nil {
@@ -353,13 +359,35 @@ func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *T
 	return false, nil
 }
 
-// phaseOrder returns the active phase sequence based on auto-merge config.
-// When auto-merge is enabled, VERIFY is appended after DOCS.
+// phaseOrder returns the active phase sequence based on config.
+// When custom Phases are provided, derives order from them.
+// When auto-merge is enabled, VERIFY is appended after DOCS if not already present.
 func (c *Controller) phaseOrder() []TaskPhase {
+	if len(c.config.Phases) > 0 {
+		order := make([]TaskPhase, len(c.config.Phases))
+		for i, p := range c.config.Phases {
+			order[i] = TaskPhase(p.Name)
+		}
+		// Append VERIFY if auto-merge is enabled and not already in the list
+		if c.config.AutoMerge && !containsPhase(order, PhaseVerify) {
+			order = append(order, PhaseVerify)
+		}
+		return order
+	}
 	if c.config.AutoMerge {
 		return []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhaseVerify}
 	}
 	return issuePhaseOrder
+}
+
+// containsPhase returns true if the phase slice contains the given phase.
+func containsPhase(phases []TaskPhase, target TaskPhase) bool {
+	for _, p := range phases {
+		if p == target {
+			return true
+		}
+	}
+	return false
 }
 
 // advancePhase returns the next phase in the issue phase order.
@@ -1283,4 +1311,60 @@ func parseStepNumber(s string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+// knownPhases is the set of built-in phases that have default skill prompts.
+var knownPhases = map[TaskPhase]bool{
+	PhasePlan:      true,
+	PhaseImplement: true,
+	PhaseDocs:      true,
+	PhaseVerify:    true,
+}
+
+// validatePhases validates the Phases configuration.
+// Known phases (PLAN, IMPLEMENT, DOCS, VERIFY) don't require prompts.
+// Unknown phases require a worker.prompt since no built-in skills exist for them.
+func validatePhases(phases []PhaseStepConfig) error {
+	seen := make(map[string]bool, len(phases))
+	for _, p := range phases {
+		if p.Name == "" {
+			return fmt.Errorf("phase name must not be empty")
+		}
+		if seen[p.Name] {
+			return fmt.Errorf("duplicate phase name: %s", p.Name)
+		}
+		seen[p.Name] = true
+
+		// Unknown phases must have a worker prompt
+		if !knownPhases[TaskPhase(p.Name)] {
+			if p.Worker == nil || p.Worker.Prompt == "" {
+				return fmt.Errorf("unknown phase %q requires worker.prompt", p.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// phaseWorkerPrompt returns the API-provided worker prompt for a phase, or empty string.
+func (c *Controller) phaseWorkerPrompt(phase TaskPhase) string {
+	if stepCfg, ok := c.phaseConfigs[phase]; ok && stepCfg.Worker != nil {
+		return stepCfg.Worker.Prompt
+	}
+	return ""
+}
+
+// phaseReviewerPrompt returns the API-provided reviewer prompt for a phase, or empty string.
+func (c *Controller) phaseReviewerPrompt(phase TaskPhase) string {
+	if stepCfg, ok := c.phaseConfigs[phase]; ok && stepCfg.Reviewer != nil {
+		return stepCfg.Reviewer.Prompt
+	}
+	return ""
+}
+
+// phaseJudgeCriteria returns the API-provided judge criteria for a phase, or empty string.
+func (c *Controller) phaseJudgeCriteria(phase TaskPhase) string {
+	if stepCfg, ok := c.phaseConfigs[phase]; ok && stepCfg.Judge != nil {
+		return stepCfg.Judge.Criteria
+	}
+	return ""
 }
