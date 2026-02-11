@@ -1561,3 +1561,102 @@ func TestRenderWithParameters(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatExternalComments(t *testing.T) {
+	tests := []struct {
+		name     string
+		comments []issueComment
+		want     string
+	}{
+		{
+			name:     "no comments",
+			comments: nil,
+			want:     "",
+		},
+		{
+			name: "single external comment",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "alice"},
+					Body:      "This approach looks wrong.",
+					CreatedAt: "2025-01-15T10:30:00Z",
+				},
+			},
+			want: "**@alice** (2025-01-15):\n> This approach looks wrong.\n\n",
+		},
+		{
+			name: "filters agentium comments",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "alice"},
+					Body:      "Please fix the tests.",
+					CreatedAt: "2025-01-15T10:30:00Z",
+				},
+				{
+					Author:    issueCommentAuthor{Login: "agentium-bot"},
+					Body:      "Phase complete.\n\n<!-- agentium:gcp:agentium-abc123 -->",
+					CreatedAt: "2025-01-15T11:00:00Z",
+				},
+			},
+			want: "**@alice** (2025-01-15):\n> Please fix the tests.\n\n",
+		},
+		{
+			name: "all agentium comments returns empty",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "agentium-bot"},
+					Body:      "Status update.\n\n<!-- agentium:gcp:agentium-abc123 -->",
+					CreatedAt: "2025-01-15T11:00:00Z",
+				},
+			},
+			want: "",
+		},
+		{
+			name: "multiline comment body",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "bob"},
+					Body:      "Line one.\nLine two.\nLine three.",
+					CreatedAt: "2025-02-01T08:00:00Z",
+				},
+			},
+			want: "**@bob** (2025-02-01):\n> Line one.\n> Line two.\n> Line three.\n\n",
+		},
+		{
+			name: "short createdAt preserved as-is",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "carol"},
+					Body:      "Short date.",
+					CreatedAt: "2025-03",
+				},
+			},
+			want: "**@carol** (2025-03):\n> Short date.\n\n",
+		},
+		{
+			name: "multiple external comments in order",
+			comments: []issueComment{
+				{
+					Author:    issueCommentAuthor{Login: "alice"},
+					Body:      "First comment.",
+					CreatedAt: "2025-01-10T09:00:00Z",
+				},
+				{
+					Author:    issueCommentAuthor{Login: "bob"},
+					Body:      "Second comment.",
+					CreatedAt: "2025-01-11T10:00:00Z",
+				},
+			},
+			want: "**@alice** (2025-01-10):\n> First comment.\n\n**@bob** (2025-01-11):\n> Second comment.\n\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatExternalComments(tt.comments)
+			if got != tt.want {
+				t.Errorf("formatExternalComments() =\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}

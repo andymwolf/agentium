@@ -16,6 +16,20 @@ Before exploring the codebase, **read the issue body first**. If the issue alrea
 3. **If a sufficient plan exists in the issue**: Extract the relevant data and emit `AGENTIUM_HANDOFF` immediately
 4. **If no plan exists in the issue**: Proceed with codebase exploration and produce a plan
 
+### Prior Discussion
+
+If the task context includes a **Prior Discussion** section, review those comments carefully before planning. Comments are shown in chronological order with timestamps.
+
+**Temporal awareness:** Comments evolve over time. More recent comments generally supersede older ones. When you encounter contradictory information between comments, **favor the most recent comment** — earlier discussion often reflects exploratory thinking or outdated assumptions that were later resolved. The issue body itself may not have been updated to reflect the final consensus.
+
+Prior discussion may contain:
+- Feedback from prior implementation attempts that failed review
+- Reviewer observations or requested changes
+- Clarification or narrowing of requirements from the issue author
+- Evolving design decisions where earlier ideas were abandoned
+
+Incorporate the **latest consensus** into your plan. If prior feedback highlights specific problems with a previous approach, explicitly address how your plan avoids repeating those issues.
+
 ### Objectives (when codebase exploration is needed)
 
 1. Explore the relevant codebase areas to understand existing patterns
