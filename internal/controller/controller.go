@@ -660,16 +660,17 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		// Check if this is a tracker issue — expand instead of running phase loop
 		issue := c.issueDetailsByNumber[nextTask.ID]
 		if issue != nil && isTrackerIssue(issue) {
+			taskID := taskKey("issue", nextTask.ID)
 			expanded, err := c.expandTrackerIssue(ctx, nextTask.ID, issue)
 			if err != nil {
 				c.logError("Tracker #%s expansion failed: %v", nextTask.ID, err)
-				taskID := taskKey("issue", nextTask.ID)
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseBlocked
 				}
-			} else if !expanded {
-				c.logInfo("Tracker #%s has no sub-issues, marking NOTHING_TO_DO", nextTask.ID)
-				taskID := taskKey("issue", nextTask.ID)
+			} else {
+				if !expanded {
+					c.logInfo("Tracker #%s has no sub-issues, marking NOTHING_TO_DO", nextTask.ID)
+				}
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseNothingToDo
 				}

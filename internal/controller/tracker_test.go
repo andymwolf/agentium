@@ -224,3 +224,105 @@ func TestExpandTrackerIssue_NoSubIssues(t *testing.T) {
 		t.Error("expandTrackerIssue() = true, want false for empty body")
 	}
 }
+
+func TestExpandTrackerIssue_WithSubIssues(t *testing.T) {
+	// Pre-populate sub-issue details so fetchSubIssueDetails skips the gh call
+	sub10 := issueDetail{
+		Number: 10,
+		Title:  "Sub-issue 10",
+		Body:   "Implement feature A",
+		Labels: []issueLabel{{Name: "enhancement"}},
+	}
+	sub11 := issueDetail{
+		Number: 11,
+		Title:  "Sub-issue 11",
+		Body:   "Implement feature B\n\nDepends on #10",
+		Labels: []issueLabel{{Name: "enhancement"}},
+	}
+
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+		},
+		taskStates: map[string]*TaskState{
+			"issue:100": {ID: "100", Type: "issue", Phase: PhaseImplement},
+		},
+		taskQueue: []TaskQueueItem{
+			{Type: "issue", ID: "100"},
+			{Type: "issue", ID: "200"},
+		},
+		issueDetails: []issueDetail{sub10, sub11},
+		issueDetailsByNumber: map[string]*issueDetail{
+			"10": &sub10,
+			"11": &sub11,
+		},
+		trackerSubIssues: make(map[string][]string),
+		logger:           newTestLogger(),
+	}
+
+	tracker := &issueDetail{
+		Number: 100,
+		Title:  "Tracker: feature rollout",
+		Body:   "## Sub-issues\n- [ ] #10\n- [ ] #11",
+		Labels: []issueLabel{{Name: "tracker"}},
+	}
+
+	expanded, err := c.expandTrackerIssue(context.TODO(), "100", tracker)
+	if err != nil {
+		t.Fatalf("expandTrackerIssue() error = %v", err)
+	}
+	if !expanded {
+		t.Fatal("expandTrackerIssue() = false, want true")
+	}
+
+	// Verify sub-issues were queued and dependency-ordered (#10 before #11).
+	if len(c.taskQueue) != 4 {
+		t.Fatalf("task queue length = %d, want 4; queue: %v", len(c.taskQueue), c.taskQueue)
+	}
+	// Sub-issues must appear in dependency order: #10 before #11
+	idx10, idx11 := -1, -1
+	queueIDs := make(map[string]bool)
+	for i, item := range c.taskQueue {
+		queueIDs[item.ID] = true
+		if item.ID == "10" {
+			idx10 = i
+		}
+		if item.ID == "11" {
+			idx11 = i
+		}
+	}
+	if idx10 == -1 || idx11 == -1 {
+		t.Fatalf("sub-issues not found in queue: %v", c.taskQueue)
+	}
+	if idx10 >= idx11 {
+		t.Errorf("#10 (idx %d) should appear before #11 (idx %d) in queue", idx10, idx11)
+	}
+	// Original tasks still present
+	for _, id := range []string{"100", "200"} {
+		if !queueIDs[id] {
+			t.Errorf("task #%s missing from queue", id)
+		}
+	}
+
+	// Verify task states created for sub-issues
+	for _, id := range []string{"10", "11"} {
+		tk := taskKey("issue", id)
+		state, ok := c.taskStates[tk]
+		if !ok {
+			t.Errorf("task state not created for sub-issue #%s", id)
+			continue
+		}
+		if state.Phase != PhaseImplement {
+			t.Errorf("sub-issue #%s phase = %q, want %q", id, state.Phase, PhaseImplement)
+		}
+	}
+
+	// Verify tracker -> sub-issue mapping
+	subIDs, ok := c.trackerSubIssues["100"]
+	if !ok {
+		t.Fatal("trackerSubIssues missing entry for tracker #100")
+	}
+	if len(subIDs) != 2 || subIDs[0] != "10" || subIDs[1] != "11" {
+		t.Errorf("trackerSubIssues[100] = %v, want [10, 11]", subIDs)
+	}
+}

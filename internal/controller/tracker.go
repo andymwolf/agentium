@@ -101,16 +101,7 @@ func (c *Controller) expandTrackerIssue(ctx context.Context, trackerID string, t
 	c.rebuildDependencyGraphWithSubIssues(subIssueIDs)
 
 	// Track tracker -> sub-issue mapping
-	if c.trackerSubIssues == nil {
-		c.trackerSubIssues = make(map[string][]string)
-	}
 	c.trackerSubIssues[trackerID] = subIssueIDs
-
-	// Mark tracker as NOTHING_TO_DO
-	trackerTK := taskKey("issue", trackerID)
-	if state, ok := c.taskStates[trackerTK]; ok {
-		state.Phase = PhaseNothingToDo
-	}
 
 	// Post expansion comment on tracker
 	c.postTrackerStatusComment(ctx, trackerID, subIssueIDs, "expanded")
@@ -119,6 +110,9 @@ func (c *Controller) expandTrackerIssue(ctx context.Context, trackerID string, t
 }
 
 // fetchSubIssueDetails fetches issue details for IDs not already cached.
+// Note: on partial failure, successfully fetched issues remain in
+// issueDetails/issueDetailsByNumber. This is harmless since no tasks
+// are queued for them when the caller returns an error.
 func (c *Controller) fetchSubIssueDetails(ctx context.Context, issueIDs []string) error {
 	for _, id := range issueIDs {
 		if c.issueDetailsByNumber[id] != nil {
@@ -186,14 +180,14 @@ func (c *Controller) rebuildDependencyGraphWithSubIssues(subIssueIDs []string) {
 	}
 
 	// Parse dependencies for newly added sub-issues
+	subSet := make(map[string]bool, len(subIssueIDs))
+	for _, id := range subIssueIDs {
+		subSet[id] = true
+	}
 	for i := range c.issueDetails {
 		id := strconv.Itoa(c.issueDetails[i].Number)
-		for _, subID := range subIssueIDs {
-			if id == subID {
-				deps := parseDependencies(c.issueDetails[i].Body)
-				c.issueDetails[i].DependsOn = deps
-				break
-			}
+		if subSet[id] {
+			c.issueDetails[i].DependsOn = parseDependencies(c.issueDetails[i].Body)
 		}
 	}
 
@@ -246,10 +240,10 @@ func (c *Controller) postTrackerStatusComment(ctx context.Context, trackerID str
 		return
 	}
 
-	// Post the comment using the standard issue comment mechanism
-	// Temporarily set activeTask to the tracker ID for postIssueComment
+	// Post the comment using the standard issue comment mechanism.
+	// Temporarily set activeTask to the tracker ID for postIssueComment.
 	savedActive := c.activeTask
 	c.activeTask = trackerID
+	defer func() { c.activeTask = savedActive }()
 	c.postIssueComment(ctx, body)
-	c.activeTask = savedActive
 }
