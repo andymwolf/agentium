@@ -10,12 +10,14 @@ import {
 } from './types.js';
 import { getWorkflow } from './workflow.js';
 import { executePhase } from './phase-executor.js';
+import type { LangfuseTracer } from '../observability/tracer.js';
 
 /**
  * Session controller options
  */
 export interface SessionControllerOptions {
   adapter: AgentAdapter;
+  tracer?: LangfuseTracer;
 }
 
 /**
@@ -26,9 +28,11 @@ export interface SessionControllerOptions {
  */
 export class SessionController {
   private adapter: AgentAdapter;
+  private tracer?: LangfuseTracer;
 
   constructor(options: SessionControllerOptions) {
     this.adapter = options.adapter;
+    this.tracer = options.tracer;
   }
 
   /**
@@ -40,6 +44,12 @@ export class SessionController {
   async execute(request: SessionRequest): Promise<SessionResult> {
     const startTime = Date.now();
     const taskId = request.task_id || uuidv4();
+
+    // Start Langfuse trace for this task
+    const traceContext = this.tracer?.startTrace(taskId, {
+      workflow: request.workflow || 'default',
+      repository: request.repository?.url,
+    });
 
     // Initialize session context
     const context = this.createSessionContext(taskId, request);
@@ -55,6 +65,8 @@ export class SessionController {
       const result = await executePhase(phase, context, {
         adapter: this.adapter,
         previousPhaseOutput,
+        tracer: this.tracer,
+        traceContext,
       });
 
       phaseResults.push(result);
@@ -79,6 +91,15 @@ export class SessionController {
 
     // Determine overall session status
     const status = this.determineSessionStatus(phaseResults);
+
+    // Complete Langfuse trace
+    if (traceContext) {
+      this.tracer?.completeTrace(traceContext, {
+        status,
+        totalTokens: this.aggregateTokens(phaseResults),
+      });
+      await this.tracer?.flush();
+    }
 
     return {
       task_id: taskId,
@@ -144,6 +165,34 @@ export class SessionController {
     // Session fails if any phase failed
     const hasFailed = phaseResults.some((phase) => phase.status === 'failed');
     return hasFailed ? 'failed' : 'completed';
+  }
+
+  /**
+   * Aggregate token metrics across all phases
+   */
+  private aggregateTokens(phaseResults: PhaseResult[]): {
+    input_tokens: number;
+    output_tokens: number;
+  } {
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for (const phase of phaseResults) {
+      if (phase.worker.token_metrics) {
+        inputTokens += phase.worker.token_metrics.input_tokens || 0;
+        outputTokens += phase.worker.token_metrics.output_tokens || 0;
+      }
+      if (phase.reviewer?.token_metrics) {
+        inputTokens += phase.reviewer.token_metrics.input_tokens || 0;
+        outputTokens += phase.reviewer.token_metrics.output_tokens || 0;
+      }
+      if (phase.judge?.token_metrics) {
+        inputTokens += phase.judge.token_metrics.input_tokens || 0;
+        outputTokens += phase.judge.token_metrics.output_tokens || 0;
+      }
+    }
+
+    return { input_tokens: inputTokens, output_tokens: outputTokens };
   }
 
   /**

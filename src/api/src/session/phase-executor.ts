@@ -13,6 +13,8 @@ import {
   shouldSkipJudge,
   SkipEvaluationContext,
 } from './skip-conditions.js';
+import type { LangfuseTracer } from '../observability/tracer.js';
+import type { TraceContext, SpanContext } from '../observability/types.js';
 
 /**
  * Options for phase execution
@@ -20,6 +22,8 @@ import {
 export interface PhaseExecutionOptions {
   adapter: AgentAdapter;
   previousPhaseOutput?: string;
+  tracer?: LangfuseTracer;
+  traceContext?: TraceContext;
 }
 
 /**
@@ -36,7 +40,13 @@ export async function executePhase(
   options: PhaseExecutionOptions
 ): Promise<PhaseResult> {
   const startTime = Date.now();
-  const { adapter, previousPhaseOutput } = options;
+  const { adapter, previousPhaseOutput, tracer, traceContext } = options;
+
+  // Start Langfuse span for this phase
+  let spanContext: SpanContext | undefined;
+  if (tracer && traceContext) {
+    spanContext = tracer.startPhase(traceContext, phase.name);
+  }
 
   // Build template context for this phase
   const templateContext: TemplateContext = {
@@ -45,6 +55,18 @@ export async function executePhase(
 
   // Step 1: Run Worker
   const workerResult = await executeWorker(phase, context, adapter, templateContext);
+
+  // Record Worker generation
+  if (tracer && spanContext && workerResult.token_metrics) {
+    tracer.recordGeneration(spanContext, {
+      name: 'Worker',
+      model: '',
+      input: '',
+      output: workerResult.output || '',
+      tokenMetrics: workerResult.token_metrics,
+      status: workerResult.status === 'completed' ? 'completed' : 'skipped',
+    });
+  }
 
   // Update template context with worker output
   templateContext.worker_output = workerResult.output || '';
@@ -57,6 +79,22 @@ export async function executePhase(
     templateContext,
     workerResult
   );
+
+  // Record Reviewer generation or skip event
+  if (tracer && spanContext) {
+    if (reviewerResult.status === 'skipped') {
+      tracer.recordSkipped(spanContext, 'Reviewer', reviewerResult.skip_reason || 'unknown');
+    } else if (reviewerResult.token_metrics) {
+      tracer.recordGeneration(spanContext, {
+        name: 'Reviewer',
+        model: '',
+        input: '',
+        output: reviewerResult.feedback || '',
+        tokenMetrics: reviewerResult.token_metrics,
+        status: 'completed',
+      });
+    }
+  }
 
   // Update template context with reviewer output
   templateContext.reviewer_output = reviewerResult.feedback || '';
@@ -71,8 +109,32 @@ export async function executePhase(
     reviewerResult
   );
 
+  // Record Judge generation or skip event
+  if (tracer && spanContext) {
+    if (judgeResult.status === 'skipped') {
+      tracer.recordSkipped(spanContext, 'Judge', judgeResult.skip_reason || 'unknown');
+    } else if (judgeResult.token_metrics) {
+      tracer.recordGeneration(spanContext, {
+        name: 'Judge',
+        model: '',
+        input: '',
+        output: judgeResult.reasoning || '',
+        tokenMetrics: judgeResult.token_metrics,
+        status: 'completed',
+      });
+    }
+  }
+
   // Determine overall phase status
   const status = determinePhaseStatus(workerResult, judgeResult);
+
+  // End Langfuse span
+  if (tracer && spanContext) {
+    tracer.endPhase(spanContext, {
+      status,
+      durationMs: Date.now() - startTime,
+    });
+  }
 
   return {
     name: phase.name,

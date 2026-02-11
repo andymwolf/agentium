@@ -11,8 +11,10 @@ import (
 
 // ReviewResult holds the raw feedback from a reviewer agent.
 type ReviewResult struct {
-	Feedback string
-	Error    error
+	Feedback     string
+	Error        error
+	InputTokens  int // Input tokens consumed by the reviewer
+	OutputTokens int // Output tokens consumed by the reviewer
 }
 
 // reviewRunParams holds parameters for running a reviewer agent.
@@ -140,7 +142,11 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 
 	c.logInfo("Reviewer completed for phase %s", params.CompletedPhase)
 
-	return ReviewResult{Feedback: feedback}, nil
+	return ReviewResult{
+		Feedback:     feedback,
+		InputTokens:  result.InputTokens,
+		OutputTokens: result.OutputTokens,
+	}, nil
 }
 
 // buildReviewPrompt composes the reviewer prompt with phase context.

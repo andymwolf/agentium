@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
+	"github.com/andywolf/agentium/internal/observability"
 )
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
@@ -386,6 +388,14 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+	// Start Langfuse trace for this task
+	traceCtx := c.tracer.StartTrace(taskID, observability.TraceOptions{
+		Workflow:   "phase_loop",
+		Repository: c.config.Repository,
+		SessionID:  c.config.ID,
+	})
+	var totalInputTokens, totalOutputTokens int
+
 	// Initialize handoff store with issue context if enabled
 	if c.isHandoffEnabled() {
 		issueCtx := c.buildIssueContext()
@@ -417,6 +427,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 			}
 			c.logInfo("Phase loop: reached terminal phase %s", currentPhase)
+			c.tracer.CompleteTrace(traceCtx, observability.CompleteOptions{
+				Status:            string(currentPhase),
+				TotalInputTokens:  totalInputTokens,
+				TotalOutputTokens: totalOutputTokens,
+			})
 			return nil
 		}
 
@@ -451,6 +466,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		state.MaxPhaseIterations = maxIter
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
+
+		// Start Langfuse span for this phase
+		phaseStart := time.Now()
+		spanCtx := c.tracer.StartPhase(traceCtx, string(currentPhase), observability.SpanOptions{
+			Iteration:     1,
+			MaxIterations: maxIter,
+		})
 
 		// Inner loop: iterate within the current phase
 		advanced := false
@@ -504,6 +526,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					c.logError("Phase %s iteration %d failed: %v", currentPhase, iter, err)
 					continue
 				}
+
+				// Record Worker generation in Langfuse
+				c.tracer.RecordGeneration(spanCtx, observability.GenerationInput{
+					Name:         "Worker",
+					Model:        c.config.Agent,
+					InputTokens:  result.InputTokens,
+					OutputTokens: result.OutputTokens,
+					Status:       "completed",
+				})
+				totalInputTokens += result.InputTokens
+				totalOutputTokens += result.OutputTokens
 
 				// Full output for internal processing (handoff parsing, judge context)
 				phaseOutput = result.RawTextContent
@@ -672,6 +705,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Check if reviewer should be skipped (skip=true takes precedence over skip_on)
 			if skipReviewer, skipReason := c.shouldSkipReviewer(phaseOutput, taskID); skipReviewer {
 				c.logInfo("Phase %s: reviewer skip condition met (%s), skipping review/judge (auto-advance)", currentPhase, skipReason)
+				c.tracer.RecordSkipped(spanCtx, "Reviewer", skipReason)
+				c.tracer.RecordSkipped(spanCtx, "Judge", "reviewer_skipped")
 				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
 					fmt.Sprintf("Reviewer skip condition (%s) met — skipping review (auto-advance)", skipReason))
 
@@ -714,6 +749,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
+			// Record Reviewer generation in Langfuse
+			c.tracer.RecordGeneration(spanCtx, observability.GenerationInput{
+				Name:         "Reviewer",
+				Model:        c.config.Agent,
+				InputTokens:  reviewResult.InputTokens,
+				OutputTokens: reviewResult.OutputTokens,
+				Status:       "completed",
+			})
+			totalInputTokens += reviewResult.InputTokens
+			totalOutputTokens += reviewResult.OutputTokens
+
 			// Post reviewer feedback to appropriate location (filtered for readability)
 			reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
 			reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
@@ -728,6 +774,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Check if judge should be skipped (skip=true takes precedence over skip_on)
 			if skipJudge, skipReason := c.shouldSkipJudge(phaseOutput, taskID); skipJudge {
 				c.logInfo("Phase %s: judge skip condition met (%s), skipping judge (auto-advance)", currentPhase, skipReason)
+				c.tracer.RecordSkipped(spanCtx, "Judge", skipReason)
 				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
 					fmt.Sprintf("Judge skip condition (%s) met — skipping judge (auto-advance)", skipReason))
 
@@ -755,6 +802,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
 				judgeResult = JudgeResult{Verdict: VerdictAdvance}
 			}
+
+			// Record Judge generation in Langfuse
+			c.tracer.RecordGeneration(spanCtx, observability.GenerationInput{
+				Name:         "Judge",
+				Model:        c.config.Agent,
+				InputTokens:  judgeResult.InputTokens,
+				OutputTokens: judgeResult.OutputTokens,
+				Status:       "completed",
+			})
+			totalInputTokens += judgeResult.InputTokens
+			totalOutputTokens += judgeResult.OutputTokens
 
 			// Track consecutive no-signal count for fail-closed behavior
 			if !judgeResult.SignalFound {
@@ -837,6 +895,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if prNumber := c.getPRNumberForTask(); prNumber != "" {
 					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
 				}
+				c.tracer.EndPhase(spanCtx, "blocked", time.Since(phaseStart).Milliseconds())
+				c.tracer.CompleteTrace(traceCtx, observability.CompleteOptions{
+					Status:            "blocked",
+					TotalInputTokens:  totalInputTokens,
+					TotalOutputTokens: totalOutputTokens,
+				})
 				return nil
 			}
 
@@ -869,6 +933,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.memoryStore.ClearByType(memory.EvalFeedback)
 			}
 		}
+
+		// End phase span in Langfuse
+		phaseStatus := "completed"
+		if !advanced {
+			phaseStatus = "exhausted"
+		}
+		c.tracer.EndPhase(spanCtx, phaseStatus, time.Since(phaseStart).Milliseconds())
 
 		// Move to next phase
 		nextPhase := c.advancePhase(currentPhase)
