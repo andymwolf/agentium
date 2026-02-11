@@ -574,6 +574,9 @@ func (c *Controller) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Start background resource monitor (logs memory pressure warnings)
+	go c.startResourceMonitor(ctx)
+
 	// Run main task processing loop
 	if err := c.runMainLoop(ctx); err != nil {
 		return err
