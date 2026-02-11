@@ -53,15 +53,6 @@ const (
 	// AgentiumGID is the group ID for the agentium group in agent containers.
 	// This must match the GID in the agent Dockerfiles (defaults to same as UID).
 	AgentiumGID = 1000
-
-	// MaxReviewBodyLen is the maximum length for review body text before truncation.
-	MaxReviewBodyLen = 500
-
-	// MaxCommentBodyLen is the maximum length for inline comment text before truncation.
-	MaxCommentBodyLen = 300
-
-	// MaxIssueBodyLen is the maximum length for issue body text before truncation.
-	MaxIssueBodyLen = 1000
 )
 
 // TaskPhase represents the current phase of a task in its lifecycle
@@ -1443,11 +1434,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 	if issue != nil {
 		sb.WriteString(fmt.Sprintf("**Title:** %s\n\n", issue.Title))
 		if issue.Body != "" {
-			body := issue.Body
-			if len(body) > MaxIssueBodyLen {
-				body = body[:MaxIssueBodyLen] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", body))
+			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", issue.Body))
 		}
 	}
 
