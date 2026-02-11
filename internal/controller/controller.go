@@ -1066,12 +1066,25 @@ type issueLabel struct {
 	Name string `json:"name"`
 }
 
+// issueCommentAuthor represents the author of a GitHub issue comment.
+type issueCommentAuthor struct {
+	Login string `json:"login"`
+}
+
+// issueComment represents a single comment on a GitHub issue.
+type issueComment struct {
+	Author    issueCommentAuthor `json:"author"`
+	Body      string             `json:"body"`
+	CreatedAt string             `json:"createdAt"`
+}
+
 type issueDetail struct {
-	Number    int          `json:"number"`
-	Title     string       `json:"title"`
-	Body      string       `json:"body"`
-	Labels    []issueLabel `json:"labels"`
-	DependsOn []string     // Parsed dependency issue IDs (populated by buildDependencyGraph)
+	Number    int            `json:"number"`
+	Title     string         `json:"title"`
+	Body      string         `json:"body"`
+	Labels    []issueLabel   `json:"labels"`
+	Comments  []issueComment `json:"comments"`
+	DependsOn []string       // Parsed dependency issue IDs (populated by buildDependencyGraph)
 }
 
 // extractPackageLabelFromIssue extracts the package path from issue labels using the configured label prefix.
@@ -1274,7 +1287,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 		// Use gh CLI to fetch issue
 		cmd := c.execCommand(ctx, "gh", "issue", "view", taskID,
 			"--repo", c.config.Repository,
-			"--json", "number,title,body,labels",
+			"--json", "number,title,body,labels,comments",
 		)
 		cmd.Env = c.envWithGitHubToken()
 
@@ -1300,6 +1313,26 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 	}
 
 	return issues
+}
+
+// formatExternalComments formats non-Agentium issue comments as structured markdown.
+// Comments containing the Agentium signature (<!-- agentium:) are filtered out.
+// Returns an empty string if no external comments exist.
+func formatExternalComments(comments []issueComment) string {
+	var sb strings.Builder
+	for _, c := range comments {
+		if strings.Contains(c.Body, "<!-- agentium:") {
+			continue
+		}
+		date := c.CreatedAt
+		if len(date) >= 10 {
+			date = date[:10] // trim to YYYY-MM-DD
+		}
+		sb.WriteString(fmt.Sprintf("**@%s** (%s):\n> %s\n\n",
+			c.Author.Login, date,
+			strings.ReplaceAll(strings.TrimSpace(c.Body), "\n", "\n> ")))
+	}
+	return sb.String()
 }
 
 // nextQueuedTask returns the first task in the queue that hasn't reached a terminal phase.
@@ -1435,6 +1468,12 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 		sb.WriteString(fmt.Sprintf("**Title:** %s\n\n", issue.Title))
 		if issue.Body != "" {
 			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", issue.Body))
+		}
+		if len(issue.Comments) > 0 {
+			if formatted := formatExternalComments(issue.Comments); formatted != "" {
+				sb.WriteString("**Prior Discussion:**\n\n")
+				sb.WriteString(formatted)
+			}
 		}
 	}
 
