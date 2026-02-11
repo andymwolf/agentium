@@ -85,7 +85,6 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 		Tasks:          c.config.Tasks,
 		WorkDir:        c.workDir,
 		GitHubToken:    c.gitHubToken,
-		MaxIterations:  1,
 		MaxDuration:    c.config.MaxDuration,
 		Prompt:         judgePrompt,
 		Metadata:       make(map[string]string),

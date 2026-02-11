@@ -142,7 +142,6 @@ type SessionConfig struct {
 	Repository           string         `json:"repository"`
 	Tasks                []string       `json:"tasks"`
 	Agent                string         `json:"agent"`
-	MaxIterations        int            `json:"max_iterations"`
 	MaxDuration          string         `json:"max_duration"`
 	Prompt               string         `json:"prompt"`
 	PromptContext        *PromptContext `json:"prompt_context,omitempty"`         // Context for template variable substitution
@@ -601,7 +600,6 @@ func (c *Controller) initSession(ctx context.Context) error {
 		c.logInfo("Tasks: %v", c.config.Tasks)
 	}
 	c.logInfo("Agent: %s", c.config.Agent)
-	c.logInfo("Max iterations: %d", c.config.MaxIterations)
 	c.logInfo("Max duration: %s", c.maxDuration)
 
 	// Initialize workspace
@@ -1658,7 +1656,6 @@ func (c *Controller) updateInstanceMetadata(ctx context.Context) {
 
 	status := gcp.SessionStatusMetadata{
 		Iteration:      c.iteration,
-		MaxIterations:  c.config.MaxIterations,
 		CompletedTasks: completed,
 		PendingTasks:   pending,
 	}
@@ -1669,12 +1666,6 @@ func (c *Controller) updateInstanceMetadata(ctx context.Context) {
 }
 
 func (c *Controller) shouldTerminate() bool {
-	// Check iteration limit
-	if c.iteration >= c.config.MaxIterations {
-		c.logInfo("Max iterations reached")
-		return true
-	}
-
 	// Check time limit
 	if time.Since(c.startTime) >= c.maxDuration {
 		c.logInfo("Max duration reached")
@@ -2065,7 +2056,6 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		Tasks:            c.config.Tasks,
 		WorkDir:          c.workDir,
 		GitHubToken:      c.gitHubToken,
-		MaxIterations:    c.config.MaxIterations,
 		MaxDuration:      c.config.MaxDuration,
 		Prompt:           prompt,
 		Metadata:         make(map[string]string),
@@ -2246,7 +2236,7 @@ func (c *Controller) emitFinalLogs() {
 	c.logInfo("=== Session Summary ===")
 	c.logInfo("Session ID: %s", c.config.ID)
 	c.logInfo("Duration: %s", time.Since(c.startTime).Round(time.Second))
-	c.logInfo("Iterations: %d/%d", c.iteration, c.config.MaxIterations)
+	c.logInfo("Iterations: %d", c.iteration)
 
 	// Count completed tasks using taskStates
 	completedCount := 0

@@ -31,7 +31,7 @@ This command provisions a cloud VM, clones the repository, and runs the
 configured AI agent to complete the specified tasks.
 
 Example:
-  agentium run --repo github.com/org/myapp --issues 12,17,24 --max-iterations 30`,
+  agentium run --repo github.com/org/myapp --issues 12,17,24`,
 	RunE: runSession,
 }
 
@@ -41,7 +41,6 @@ func init() {
 	runCmd.Flags().String("repo", "", "GitHub repository (e.g., github.com/org/repo)")
 	runCmd.Flags().StringSlice("issues", nil, "Issue numbers to work on (comma-separated)")
 	runCmd.Flags().String("agent", "claude-code", "Agent to use (claude-code, aider, codex)")
-	runCmd.Flags().Int("max-iterations", 30, "Maximum number of iterations")
 	runCmd.Flags().String("max-duration", "2h", "Maximum session duration")
 	runCmd.Flags().String("provider", "", "Cloud provider (gcp, aws, azure)")
 	runCmd.Flags().String("region", "", "Cloud region")
@@ -56,7 +55,6 @@ func init() {
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
 	_ = viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
-	_ = viper.BindPFlag("session.max_iterations", runCmd.Flags().Lookup("max-iterations"))
 	_ = viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
 	_ = viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
 	_ = viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
@@ -101,10 +99,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
-	}
-	if cmd.Flags().Changed("max-iterations") {
-		maxIter, _ := cmd.Flags().GetInt("max-iterations")
-		cfg.Session.MaxIterations = maxIter
 	}
 	if cmd.Flags().Changed("max-duration") {
 		maxDur, _ := cmd.Flags().GetString("max-duration")
@@ -157,9 +151,16 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if len(cfg.Session.Tasks) > 0 {
 		fmt.Printf("Issues: %s\n", strings.Join(cfg.Session.Tasks, ", "))
 	}
-	fmt.Printf("Agent: %s\n", cfg.Session.Agent)
+	// Display agent(s) - show routing info if multiple adapters are configured
+	router := routing.NewRouter(sessionRouting(cfg, cmd))
+	if adapters := router.Adapters(); len(adapters) > 1 {
+		fmt.Printf("Agents: %s\n", strings.Join(adapters, ", "))
+	} else {
+		fmt.Printf("Agent: %s\n", cfg.Session.Agent)
+	}
 	fmt.Printf("Provider: %s\n", cfg.Cloud.Provider)
-	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
+	fmt.Printf("Region: %s\n", cfg.Cloud.Region)
+	fmt.Printf("Instance: %s\n", cfg.Cloud.MachineType)
 	fmt.Printf("Max duration: %s\n", cfg.Session.MaxDuration)
 	if cfg.Session.AutoMerge {
 		fmt.Println("Auto-merge: enabled")
@@ -184,7 +185,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 		Repository:    cfg.Session.Repository,
 		Tasks:         cfg.Session.Tasks,
 		Agent:         cfg.Session.Agent,
-		MaxIterations: cfg.Session.MaxIterations,
 		MaxDuration:   cfg.Session.MaxDuration,
 		Prompt:        cfg.Session.Prompt,
 		AutoMerge:     cfg.Session.AutoMerge,
@@ -487,6 +487,23 @@ func readCodexAuthFromKeychain() ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// sessionRouting builds a PhaseRouting from config and CLI flags for display purposes.
+// This is called before the full routing merge to show agent info in startup output.
+func sessionRouting(cfg *config.Config, cmd *cobra.Command) *routing.PhaseRouting {
+	var r *routing.PhaseRouting
+	if model, _ := cmd.Flags().GetString("model"); model != "" {
+		spec := routing.ParseModelSpec(model)
+		r = &routing.PhaseRouting{Default: spec}
+	}
+	if cfg.Routing.Default.Model != "" || len(cfg.Routing.Overrides) > 0 {
+		if r == nil {
+			cfgRouting := cfg.Routing
+			r = &cfgRouting
+		}
+	}
+	return r
 }
 
 // validateAuthForRouting checks that required authentication is available for all adapters in routing.

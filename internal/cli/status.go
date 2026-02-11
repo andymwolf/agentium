@@ -120,8 +120,8 @@ func showSessionStatus(ctx context.Context, cmd *cobra.Command, prov provisioner
 		} else if !status.StartTime.IsZero() {
 			fmt.Printf("Uptime: %s\n", time.Since(status.StartTime).Round(time.Second))
 		}
-		if status.MaxIterations > 0 {
-			fmt.Printf("Iteration: %d/%d\n", status.CurrentIteration, status.MaxIterations)
+		if status.CurrentIteration > 0 {
+			fmt.Printf("Iteration: %d\n", status.CurrentIteration)
 		}
 		if len(status.CompletedTasks) > 0 {
 			fmt.Printf("Completed tasks: %v\n", status.CompletedTasks)

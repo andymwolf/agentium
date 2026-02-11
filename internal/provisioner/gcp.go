@@ -241,13 +241,11 @@ func (p *GCPProvisioner) List(ctx context.Context) ([]SessionStatus, error) {
 			if item.Key == "agentium-status" {
 				var sessionStatus struct {
 					Iteration      int      `json:"iteration"`
-					MaxIterations  int      `json:"max_iterations"`
 					CompletedTasks []string `json:"completed_tasks"`
 					PendingTasks   []string `json:"pending_tasks"`
 				}
 				if err := json.Unmarshal([]byte(item.Value), &sessionStatus); err == nil {
 					status.CurrentIteration = sessionStatus.Iteration
-					status.MaxIterations = sessionStatus.MaxIterations
 					status.CompletedTasks = sessionStatus.CompletedTasks
 					status.PendingTasks = sessionStatus.PendingTasks
 				}
@@ -370,13 +368,11 @@ func (p *GCPProvisioner) Status(ctx context.Context, sessionID string) (*Session
 		if item.Key == "agentium-status" {
 			var sessionStatus struct {
 				Iteration      int      `json:"iteration"`
-				MaxIterations  int      `json:"max_iterations"`
 				CompletedTasks []string `json:"completed_tasks"`
 				PendingTasks   []string `json:"pending_tasks"`
 			}
 			if err := json.Unmarshal([]byte(item.Value), &sessionStatus); err == nil {
 				status.CurrentIteration = sessionStatus.Iteration
-				status.MaxIterations = sessionStatus.MaxIterations
 				status.CompletedTasks = sessionStatus.CompletedTasks
 				status.PendingTasks = sessionStatus.PendingTasks
 			}

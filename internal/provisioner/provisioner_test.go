@@ -75,13 +75,12 @@ func TestVMConfig(t *testing.T) {
 		UseSpot:     true,
 		DiskSizeGB:  50,
 		Session: SessionConfig{
-			ID:            "test-session",
-			Repository:    "github.com/org/repo",
-			Tasks:         []string{"1", "2", "3"},
-			Agent:         "claude-code",
-			MaxIterations: 30,
-			MaxDuration:   "2h",
-			Prompt:        "Test prompt",
+			ID:          "test-session",
+			Repository:  "github.com/org/repo",
+			Tasks:       []string{"1", "2", "3"},
+			Agent:       "claude-code",
+			MaxDuration: "2h",
+			Prompt:      "Test prompt",
 			GitHub: GitHubConfig{
 				AppID:            123456,
 				InstallationID:   789012,
@@ -129,7 +128,6 @@ func TestSessionStatus(t *testing.T) {
 		StartTime:        now.Add(-1 * time.Hour),
 		EndTime:          time.Time{},
 		CurrentIteration: 5,
-		MaxIterations:    30,
 		CompletedTasks:   []string{"1", "2"},
 		PendingTasks:     []string{"3"},
 		LastError:        "",
@@ -158,9 +156,6 @@ func TestSessionStatus(t *testing.T) {
 	}
 	if status.CurrentIteration != 5 {
 		t.Errorf("CurrentIteration = %d, want 5", status.CurrentIteration)
-	}
-	if status.MaxIterations != 30 {
-		t.Errorf("MaxIterations = %d, want 30", status.MaxIterations)
 	}
 	if len(status.CompletedTasks) != 2 {
 		t.Errorf("len(CompletedTasks) = %d, want 2", len(status.CompletedTasks))

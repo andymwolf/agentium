@@ -35,7 +35,6 @@ type Session struct {
 	PRs              []string // PR numbers for review sessions
 	WorkDir          string
 	GitHubToken      string
-	MaxIterations    int
 	MaxDuration      string
 	Prompt           string
 	Metadata         map[string]string

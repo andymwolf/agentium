@@ -100,19 +100,17 @@ type CloudConfig struct {
 
 // DefaultsConfig contains default session settings
 type DefaultsConfig struct {
-	MaxIterations int    `mapstructure:"max_iterations"`
-	MaxDuration   string `mapstructure:"max_duration"`
+	MaxDuration string `mapstructure:"max_duration"`
 }
 
 // SessionConfig contains per-session settings
 type SessionConfig struct {
-	Repository    string   `mapstructure:"repository"`
-	Tasks         []string `mapstructure:"tasks"`
-	Agent         string   `mapstructure:"agent"`
-	MaxIterations int      `mapstructure:"max_iterations"`
-	MaxDuration   string   `mapstructure:"max_duration"`
-	Prompt        string   `mapstructure:"prompt"`
-	AutoMerge     bool     `mapstructure:"auto_merge"`
+	Repository  string   `mapstructure:"repository"`
+	Tasks       []string `mapstructure:"tasks"`
+	Agent       string   `mapstructure:"agent"`
+	MaxDuration string   `mapstructure:"max_duration"`
+	Prompt      string   `mapstructure:"prompt"`
+	AutoMerge   bool     `mapstructure:"auto_merge"`
 }
 
 // ControllerConfig contains session controller settings
@@ -167,10 +165,6 @@ func applyDefaults(cfg *Config) {
 		cfg.Cloud.DiskSizeGB = 50
 	}
 
-	if cfg.Defaults.MaxIterations == 0 {
-		cfg.Defaults.MaxIterations = 30
-	}
-
 	if cfg.Defaults.MaxDuration == "" {
 		cfg.Defaults.MaxDuration = "2h"
 	}
@@ -186,10 +180,6 @@ func applyDefaults(cfg *Config) {
 		} else {
 			cfg.Session.Agent = "claude-code"
 		}
-	}
-
-	if cfg.Session.MaxIterations == 0 {
-		cfg.Session.MaxIterations = cfg.Defaults.MaxIterations
 	}
 
 	if cfg.Session.MaxDuration == "" {

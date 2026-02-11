@@ -29,7 +29,6 @@ func TestLoadConfigFromEnv_EnvVar(t *testing.T) {
 				"repository": "github.com/org/repo",
 				"tasks": ["1", "2"],
 				"agent": "claude-code",
-				"max_iterations": 30,
 				"max_duration": "2h"
 			}`,
 			wantID:    "test-session",
@@ -228,7 +227,6 @@ func TestLoadConfigFromEnv_FullConfig(t *testing.T) {
 		"repository": "github.com/org/repo",
 		"tasks": ["1", "2", "3"],
 		"agent": "claude-code",
-		"max_iterations": 50,
 		"max_duration": "4h",
 		"prompt": "Custom prompt here",
 		"github": {
@@ -264,9 +262,6 @@ func TestLoadConfigFromEnv_FullConfig(t *testing.T) {
 	}
 	if config.Agent != "claude-code" {
 		t.Errorf("Agent = %q, want %q", config.Agent, "claude-code")
-	}
-	if config.MaxIterations != 50 {
-		t.Errorf("MaxIterations = %d, want 50", config.MaxIterations)
 	}
 	if config.MaxDuration != "4h" {
 		t.Errorf("MaxDuration = %q, want %q", config.MaxDuration, "4h")
@@ -799,12 +794,11 @@ func TestNewController_RoutingAdapterInit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := SessionConfig{
-				ID:            "test-session",
-				Repository:    "github.com/org/repo",
-				Agent:         "claude-code",
-				MaxIterations: 10,
-				MaxDuration:   "1h",
-				Routing:       tt.routing,
+				ID:          "test-session",
+				Repository:  "github.com/org/repo",
+				Agent:       "claude-code",
+				MaxDuration: "1h",
+				Routing:     tt.routing,
 			}
 
 			c, err := New(config)

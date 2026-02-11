@@ -376,13 +376,11 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					MaxDuration: "2h",
 				},
 				Session: SessionConfig{
-					Agent:         "claude-code",
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					Agent:       "claude-code",
+					MaxDuration: "2h",
 				},
 				Controller: ControllerConfig{
 					Image: "ghcr.io/andymwolf/agentium-controller:latest",
@@ -403,13 +401,11 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					MaxDuration: "2h",
 				},
 				Session: SessionConfig{
-					Agent:         "claude-code",
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					Agent:       "claude-code",
+					MaxDuration: "2h",
 				},
 				Controller: ControllerConfig{
 					Image: "ghcr.io/andymwolf/agentium-controller:latest",
@@ -430,13 +426,11 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					MaxDuration: "2h",
 				},
 				Session: SessionConfig{
-					Agent:         "claude-code",
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					Agent:       "claude-code",
+					MaxDuration: "2h",
 				},
 				Controller: ControllerConfig{
 					Image: "ghcr.io/andymwolf/agentium-controller:latest",
@@ -452,8 +446,7 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  100,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 50,
-					MaxDuration:   "4h",
+					MaxDuration: "4h",
 				},
 				Routing: routing.PhaseRouting{
 					Default: routing.ModelConfig{
@@ -468,8 +461,7 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  100,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 50,
-					MaxDuration:   "4h",
+					MaxDuration: "4h",
 				},
 				Routing: routing.PhaseRouting{
 					Default: routing.ModelConfig{
@@ -477,9 +469,8 @@ func TestApplyDefaults(t *testing.T) {
 					},
 				},
 				Session: SessionConfig{
-					Agent:         "aider",
-					MaxIterations: 50,
-					MaxDuration:   "4h",
+					Agent:       "aider",
+					MaxDuration: "4h",
 				},
 				Controller: ControllerConfig{
 					Image: "ghcr.io/andymwolf/agentium-controller:latest",
@@ -506,14 +497,12 @@ func TestApplyDefaults(t *testing.T) {
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					MaxDuration: "2h",
 				},
 				Session: SessionConfig{
-					Repository:    "github.com/org/repo",
-					Agent:         "claude-code",
-					MaxIterations: 30,
-					MaxDuration:   "2h",
+					Repository:  "github.com/org/repo",
+					Agent:       "claude-code",
+					MaxDuration: "2h",
 				},
 				Controller: ControllerConfig{
 					Image: "ghcr.io/andymwolf/agentium-controller:latest",

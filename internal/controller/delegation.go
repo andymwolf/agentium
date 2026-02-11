@@ -56,7 +56,6 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		Tasks:          c.config.Tasks,
 		WorkDir:        c.workDir,
 		GitHubToken:    c.gitHubToken,
-		MaxIterations:  c.config.MaxIterations,
 		MaxDuration:    c.config.MaxDuration,
 		Prompt:         prompt, // Use phase-aware prompt passed by caller
 		Metadata:       make(map[string]string),
