@@ -71,7 +71,7 @@ func TestNew(t *testing.T) {
 func TestVMConfig(t *testing.T) {
 	config := VMConfig{
 		Region:      "us-central1",
-		MachineType: "e2-medium",
+		MachineType: "e2-standard-2",
 		UseSpot:     true,
 		DiskSizeGB:  50,
 		Session: SessionConfig{
@@ -95,8 +95,8 @@ func TestVMConfig(t *testing.T) {
 	if config.Region != "us-central1" {
 		t.Errorf("Region = %q, want %q", config.Region, "us-central1")
 	}
-	if config.MachineType != "e2-medium" {
-		t.Errorf("MachineType = %q, want %q", config.MachineType, "e2-medium")
+	if config.MachineType != "e2-standard-2" {
+		t.Errorf("MachineType = %q, want %q", config.MachineType, "e2-standard-2")
 	}
 	if !config.UseSpot {
 		t.Error("UseSpot = false, want true")

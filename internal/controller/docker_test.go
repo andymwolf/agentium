@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,5 +236,83 @@ func TestRunAgentContainer_ContextTimeout(t *testing.T) {
 
 	if result.ExitCode == 0 {
 		t.Error("expected non-zero exit code from cancelled context")
+	}
+}
+
+// TestRunAgentContainer_MemoryLimit verifies that when containerMemLimit is set,
+// the --memory and --memory-swap flags are passed to docker run.
+func TestRunAgentContainer_MemoryLimit(t *testing.T) {
+	var capturedArgs []string
+	c := &Controller{
+		config:            SessionConfig{},
+		workDir:           "/tmp",
+		logger:            log.New(io.Discard, "", 0),
+		containerMemLimit: 7 * 1024 * 1024 * 1024, // 7 GB
+		cmdRunner: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			capturedArgs = append([]string{name}, args...)
+			// Return a command that produces valid output for ParseOutput
+			return exec.CommandContext(ctx, "echo", "ok")
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	params := containerRunParams{
+		Agent:   &dockerTestAgent{},
+		Env:     map[string]string{},
+		Command: []string{},
+		LogTag:  "Test",
+	}
+
+	_, err := c.runAgentContainer(ctx, params)
+	if err != nil {
+		t.Fatalf("runAgentContainer failed: %v", err)
+	}
+
+	argStr := strings.Join(capturedArgs, " ")
+	expectedLimit := fmt.Sprintf("%d", 7*1024*1024*1024)
+
+	if !strings.Contains(argStr, "--memory "+expectedLimit) {
+		t.Errorf("expected --memory %s in docker args, got: %s", expectedLimit, argStr)
+	}
+	if !strings.Contains(argStr, "--memory-swap "+expectedLimit) {
+		t.Errorf("expected --memory-swap %s in docker args, got: %s", expectedLimit, argStr)
+	}
+}
+
+// TestRunAgentContainer_NoMemoryLimit verifies that when containerMemLimit is zero,
+// no --memory flags are passed to docker run.
+func TestRunAgentContainer_NoMemoryLimit(t *testing.T) {
+	var capturedArgs []string
+	c := &Controller{
+		config:            SessionConfig{},
+		workDir:           "/tmp",
+		logger:            log.New(io.Discard, "", 0),
+		containerMemLimit: 0,
+		cmdRunner: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			capturedArgs = append([]string{name}, args...)
+			return exec.CommandContext(ctx, "echo", "ok")
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	params := containerRunParams{
+		Agent:   &dockerTestAgent{},
+		Env:     map[string]string{},
+		Command: []string{},
+		LogTag:  "Test",
+	}
+
+	_, err := c.runAgentContainer(ctx, params)
+	if err != nil {
+		t.Fatalf("runAgentContainer failed: %v", err)
+	}
+
+	argStr := strings.Join(capturedArgs, " ")
+	if strings.Contains(argStr, "--memory") {
+		t.Errorf("expected no --memory flag when containerMemLimit is 0, got: %s", argStr)
 	}
 }

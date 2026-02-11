@@ -283,6 +283,9 @@ type Controller struct {
 	eventSink              *event.FileSink         // Local JSONL event sink (nil = disabled)
 	tracer                 observability.Tracer    // Langfuse observability tracer (never nil; NoOpTracer if disabled)
 
+	// Docker container resource limits
+	containerMemLimit uint64 // Docker --memory limit in bytes (0 = no limit)
+
 	// Monorepo support
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
 	scopeValidator *scope.ScopeValidator // Validates file changes are within package scope (nil if not monorepo)
@@ -613,6 +616,19 @@ func (c *Controller) initSession(ctx context.Context) error {
 	// Initialize workspace
 	if err := c.initializeWorkspace(ctx); err != nil {
 		return fmt.Errorf("failed to initialize workspace: %w", err)
+	}
+
+	// Compute Docker memory limit from VM total memory
+	total, _, memErr := readMemInfo()
+	if memErr != nil {
+		c.logInfo("Container memory limit: not set (/proc/meminfo unavailable)")
+	} else {
+		const reserveBytes = 1 << 30 // 1 GB for OS + Docker daemon + controller
+		if total > reserveBytes {
+			c.containerMemLimit = total - reserveBytes
+			c.logInfo("Agent container memory limit: %d MB (VM total: %d MB, reserved: 1024 MB)",
+				c.containerMemLimit/(1024*1024), total/(1024*1024))
+		}
 	}
 
 	// Fetch GitHub token
