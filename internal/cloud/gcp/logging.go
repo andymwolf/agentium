@@ -12,13 +12,16 @@ import (
 
 // pingWithRetry calls pinger with exponential backoff until it succeeds or
 // retries are exhausted. Backoff starts at 1s and doubles each attempt
-// (1s, 2s, 4s, 8s, 16s, 32s for maxRetries=6, ~63s total).
+// (1s, 2s, 4s, 8s, 16s for maxRetries=6, ~31s total wait between attempts).
 func pingWithRetry(ctx context.Context, pinger func(context.Context) error, maxRetries int) error {
 	var err error
 	backoff := time.Second
 	for i := 0; i < maxRetries; i++ {
 		if err = pinger(ctx); err == nil {
 			return nil
+		}
+		if i == maxRetries-1 {
+			break
 		}
 		select {
 		case <-ctx.Done():
