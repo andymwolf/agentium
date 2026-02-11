@@ -124,7 +124,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("container-reuse") {
 		containerReuse, _ := cmd.Flags().GetBool("container-reuse")
-		cfg.Session.ContainerReuse = containerReuse
+		cfg.Session.ContainerReuse = &containerReuse
 	}
 
 	// Validate configuration after applying CLI flags
@@ -194,7 +194,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		MaxDuration:    cfg.Session.MaxDuration,
 		Prompt:         cfg.Session.Prompt,
 		AutoMerge:      cfg.Session.AutoMerge,
-		ContainerReuse: cfg.Session.ContainerReuse,
+		ContainerReuse: cfg.Session.ContainerReuse != nil && *cfg.Session.ContainerReuse,
 		GitHub: provisioner.GitHubConfig{
 			AppID:            cfg.GitHub.AppID,
 			InstallationID:   cfg.GitHub.InstallationID,

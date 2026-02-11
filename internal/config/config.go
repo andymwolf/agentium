@@ -141,7 +141,7 @@ type SessionConfig struct {
 	MaxDuration    string   `mapstructure:"max_duration"`
 	Prompt         string   `mapstructure:"prompt"`
 	AutoMerge      bool     `mapstructure:"auto_merge"`
-	ContainerReuse bool     `mapstructure:"container_reuse"`
+	ContainerReuse *bool    `mapstructure:"container_reuse"`
 }
 
 // ControllerConfig contains session controller settings
@@ -236,9 +236,10 @@ func applyDefaults(cfg *Config) {
 	// Phase loop is enabled by default - the config section just customizes iteration counts.
 	// No explicit "enabled" field needed since presence of phase_loop config implies it's enabled.
 
-	// Propagate container reuse default to session
-	if !cfg.Session.ContainerReuse && cfg.Defaults.ContainerReuse {
-		cfg.Session.ContainerReuse = cfg.Defaults.ContainerReuse
+	// Propagate container reuse default to session (only when not explicitly set)
+	if cfg.Session.ContainerReuse == nil && cfg.Defaults.ContainerReuse {
+		v := true
+		cfg.Session.ContainerReuse = &v
 	}
 
 	// Default monorepo label prefix
