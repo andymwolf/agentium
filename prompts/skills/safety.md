@@ -31,6 +31,12 @@ These constraints are non-negotiable. Violating them will result in session term
 - Do NOT disable security features or linters
 - Run tests before creating a PR
 
+### 6. Issue Lifecycle
+- NEVER close or reopen GitHub issues directly (e.g., `gh issue close`, `gh issue reopen`)
+- The Agentium controller manages issue lifecycle based on PR merges and evaluation signals
+- Report completion status via `AGENTIUM_EVAL` or `AGENTIUM_STATUS` signals only
+- If an issue's acceptance criteria are already met, signal `AGENTIUM_STATUS: NOTHING_TO_DO` instead of closing
+
 ## PROHIBITED ACTIONS
 
 These actions are explicitly forbidden:
@@ -39,6 +45,7 @@ These actions are explicitly forbidden:
 - Force-pushing to any branch (`git push --force`)
 - Deleting remote branches
 - Modifying branch protection rules
+- Closing or reopening GitHub issues (`gh issue close`, `gh issue reopen`)
 - Accessing external services (except GitHub)
 - Installing system packages (`apt`, `brew`, etc.)
 - Modifying files outside `/workspace`

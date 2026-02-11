@@ -56,6 +56,15 @@ func (c *Controller) maybeCreateDraftPR(ctx context.Context, taskID string) erro
 		// Continue to try creating one
 	}
 	if existingPR != nil {
+		// Validate that the PR's branch belongs to this task. Without this check,
+		// branch contamination (task N+1 running on task N's branch) can cause
+		// the wrong PR to be associated with a task.
+		branchIssue := extractIssueNumber(branchName)
+		if branchIssue != "" && branchIssue != state.ID {
+			c.logWarning("Branch %s belongs to issue #%s, not current task #%s — skipping PR #%s adoption",
+				branchName, branchIssue, state.ID, existingPR.Number)
+			return nil
+		}
 		c.logInfo("Found existing PR #%s for branch %s", existingPR.Number, branchName)
 		state.DraftPRCreated = true
 		state.PRNumber = existingPR.Number

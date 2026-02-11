@@ -761,6 +761,10 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		if err := c.runPhaseLoop(ctx); err != nil {
 			c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
 		}
+
+		// Reset workspace to main branch to prevent branch state from leaking
+		// between tasks (e.g., task N+1 inheriting task N's feature branch).
+		c.resetWorkspaceToMain(ctx)
 	}
 
 	// Post final parent status comments
@@ -769,6 +773,21 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// resetWorkspaceToMain checks out the main branch in the workspace directory.
+// This prevents branch state from leaking between tasks — without it, task N+1
+// would start on task N's feature branch, causing maybeCreateDraftPR to associate
+// the wrong PR and VERIFY to merge the wrong PR.
+func (c *Controller) resetWorkspaceToMain(ctx context.Context) {
+	cmd := exec.CommandContext(ctx, "git", "checkout", "main")
+	cmd.Dir = c.workDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.logWarning("Failed to reset workspace to main: %v (output: %s)", err, strings.TrimSpace(string(output)))
+		return
+	}
+	c.logInfo("Workspace reset to main branch")
 }
 
 func (c *Controller) initializeWorkspace(ctx context.Context) error {

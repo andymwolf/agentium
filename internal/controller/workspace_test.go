@@ -92,6 +92,38 @@ func TestEnsureWorkspaceOwnership_EmptyDir(t *testing.T) {
 	}
 }
 
+func TestResetWorkspaceToMain_NonGitDir(t *testing.T) {
+	// resetWorkspaceToMain should warn but not panic when run in a non-git directory
+	tmpDir, err := os.MkdirTemp("", "workspace-reset-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	ctrl := newTestController(tmpDir)
+
+	ctx := context.Background()
+
+	// Should not panic — just logs a warning
+	ctrl.resetWorkspaceToMain(ctx)
+}
+
+func TestResetWorkspaceToMain_ContextCanceled(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "workspace-reset-cancel-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	ctrl := newTestController(tmpDir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Should not panic — just logs a warning due to canceled context
+	ctrl.resetWorkspaceToMain(ctx)
+}
+
 func TestConfigureGitSafeDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "workspace-git-*")
 	if err != nil {
