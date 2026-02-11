@@ -707,6 +707,8 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		// First check: does this issue have open sub-issues?
 		subIssueIDs, detectErr := c.detectSubIssues(ctx, nextTask.ID)
 		if detectErr != nil {
+			// Hard-fail: if we cannot determine sub-issue structure, we must not
+			// guess — processing a parent issue as a leaf task produces wrong work.
 			return fmt.Errorf("cannot continue without GitHub API: %w", detectErr)
 		}
 		if len(subIssueIDs) > 0 {
