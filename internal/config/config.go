@@ -40,6 +40,25 @@ type PhaseLoopConfig struct {
 	JudgeSkipOn            string `mapstructure:"judge_skip_on"`
 }
 
+// PhaseStepConfigYAML defines the configuration for a single phase step in YAML config.
+type PhaseStepConfigYAML struct {
+	Name          string                 `mapstructure:"name"`
+	MaxIterations int                    `mapstructure:"max_iterations"`
+	Worker        *StepPromptConfigYAML  `mapstructure:"worker"`
+	Reviewer      *StepPromptConfigYAML  `mapstructure:"reviewer"`
+	Judge         *JudgePromptConfigYAML `mapstructure:"judge"`
+}
+
+// StepPromptConfigYAML contains an override prompt for a worker or reviewer step in YAML config.
+type StepPromptConfigYAML struct {
+	Prompt string `mapstructure:"prompt"`
+}
+
+// JudgePromptConfigYAML contains override criteria for a judge step in YAML config.
+type JudgePromptConfigYAML struct {
+	Criteria string `mapstructure:"criteria"`
+}
+
 // CodexConfig contains Codex agent authentication settings
 type CodexConfig struct {
 	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json (default: ~/.codex/auth.json)
@@ -54,18 +73,19 @@ type MonorepoConfig struct {
 
 // Config represents the full Agentium configuration
 type Config struct {
-	Project    ProjectConfig        `mapstructure:"project"`
-	GitHub     GitHubConfig         `mapstructure:"github"`
-	Cloud      CloudConfig          `mapstructure:"cloud"`
-	Defaults   DefaultsConfig       `mapstructure:"defaults"`
-	Session    SessionConfig        `mapstructure:"session"`
-	Controller ControllerConfig     `mapstructure:"controller"`
-	Claude     ClaudeConfig         `mapstructure:"claude"`
-	Codex      CodexConfig          `mapstructure:"codex"`
-	Routing    routing.PhaseRouting `mapstructure:"routing"`
-	Delegation DelegationConfigYAML `mapstructure:"delegation"`
-	PhaseLoop  PhaseLoopConfig      `mapstructure:"phase_loop"`
-	Monorepo   MonorepoConfig       `mapstructure:"monorepo"`
+	Project    ProjectConfig         `mapstructure:"project"`
+	GitHub     GitHubConfig          `mapstructure:"github"`
+	Cloud      CloudConfig           `mapstructure:"cloud"`
+	Defaults   DefaultsConfig        `mapstructure:"defaults"`
+	Session    SessionConfig         `mapstructure:"session"`
+	Controller ControllerConfig      `mapstructure:"controller"`
+	Claude     ClaudeConfig          `mapstructure:"claude"`
+	Codex      CodexConfig           `mapstructure:"codex"`
+	Routing    routing.PhaseRouting  `mapstructure:"routing"`
+	Delegation DelegationConfigYAML  `mapstructure:"delegation"`
+	PhaseLoop  PhaseLoopConfig       `mapstructure:"phase_loop"`
+	Phases     []PhaseStepConfigYAML `mapstructure:"phases"`
+	Monorepo   MonorepoConfig        `mapstructure:"monorepo"`
 }
 
 // ClaudeConfig contains Claude AI authentication settings

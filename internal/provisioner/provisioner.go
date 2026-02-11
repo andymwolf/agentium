@@ -84,6 +84,7 @@ type SessionConfig struct {
 	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
 	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
 	Fallback      *ProvFallbackConfig   `json:"fallback,omitempty"`
+	Phases        []ProvPhaseStepConfig `json:"phases,omitempty"`
 	AutoMerge     bool                  `json:"auto_merge,omitempty"`
 	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
@@ -120,6 +121,25 @@ type ProvMonorepoConfig struct {
 	Enabled     bool                `json:"enabled"`
 	LabelPrefix string              `json:"label_prefix"`
 	Tiers       map[string][]string `json:"tiers,omitempty"`
+}
+
+// ProvPhaseStepConfig defines the configuration for a single phase step in provisioned sessions.
+type ProvPhaseStepConfig struct {
+	Name          string                 `json:"name"`
+	MaxIterations int                    `json:"max_iterations,omitempty"`
+	Worker        *ProvStepPromptConfig  `json:"worker,omitempty"`
+	Reviewer      *ProvStepPromptConfig  `json:"reviewer,omitempty"`
+	Judge         *ProvJudgePromptConfig `json:"judge,omitempty"`
+}
+
+// ProvStepPromptConfig contains an override prompt for a worker or reviewer step.
+type ProvStepPromptConfig struct {
+	Prompt string `json:"prompt"`
+}
+
+// ProvJudgePromptConfig contains override criteria for a judge step.
+type ProvJudgePromptConfig struct {
+	Criteria string `json:"criteria"`
 }
 
 // ProvFallbackConfig controls adapter execution fallback for provisioned sessions.

@@ -60,9 +60,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		PackagePath:      c.packagePath,
 	}
 
-	// Compose phase-aware skills if selector is available
-	if c.skillSelector != nil {
-		phase := c.determineActivePhase()
+	// Compose phase-aware skills: API-provided worker prompt takes precedence over built-in skills
+	phase := c.determineActivePhase()
+	if workerPrompt := c.phaseWorkerPrompt(phase); workerPrompt != "" {
+		session.IterationContext.Phase = string(phase)
+		session.IterationContext.SkillsPrompt = workerPrompt
+		c.logInfo("Using API-provided worker prompt for phase %s", phase)
+	} else if c.skillSelector != nil {
 		phaseStr := string(phase)
 		session.IterationContext.Phase = phaseStr
 		session.IterationContext.SkillsPrompt = c.skillSelector.SelectForPhase(phaseStr)
