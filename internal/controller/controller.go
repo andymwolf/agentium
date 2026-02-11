@@ -188,8 +188,9 @@ type SessionConfig struct {
 
 // MonorepoSessionConfig contains monorepo-specific settings for the session.
 type MonorepoSessionConfig struct {
-	Enabled     bool   `json:"enabled"`
-	LabelPrefix string `json:"label_prefix"` // Default: "pkg"
+	Enabled     bool                `json:"enabled"`
+	LabelPrefix string              `json:"label_prefix"` // Default: "pkg"
+	Tiers       map[string][]string `json:"tiers,omitempty"`
 }
 
 // DefaultConfigPath is the default path for the session config file
@@ -284,6 +285,9 @@ type Controller struct {
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
 	scopeValidator *scope.ScopeValidator // Validates file changes are within package scope (nil if not monorepo)
 
+	// Tracker support
+	trackerSubIssues map[string][]string // tracker issue ID -> sub-issue IDs
+
 	// Shutdown management
 	shutdownHooks []ShutdownHook
 	shutdownOnce  sync.Once
@@ -363,17 +367,18 @@ func New(config SessionConfig) (*Controller, error) {
 	}
 
 	c := &Controller{
-		config:          config,
-		agent:           agentAdapter,
-		workDir:         workDir,
-		iteration:       0,
-		maxDuration:     maxDuration,
-		taskStates:      make(map[string]*TaskState),
-		logger:          logger,
-		cloudLogger:     cloudLogger,
-		secretManager:   secretManager,
-		metadataUpdater: metadataUpdater,
-		shutdownCh:      make(chan struct{}),
+		config:           config,
+		agent:            agentAdapter,
+		workDir:          workDir,
+		iteration:        0,
+		maxDuration:      maxDuration,
+		taskStates:       make(map[string]*TaskState),
+		logger:           logger,
+		cloudLogger:      cloudLogger,
+		secretManager:    secretManager,
+		metadataUpdater:  metadataUpdater,
+		shutdownCh:       make(chan struct{}),
+		trackerSubIssues: make(map[string][]string),
 	}
 
 	// Initialize task states and build task queue
@@ -652,6 +657,26 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		// Build prompt for issue task
 		c.logInfo("Focusing on issue #%s", nextTask.ID)
 
+		// Check if this is a tracker issue — expand instead of running phase loop
+		issue := c.issueDetailsByNumber[nextTask.ID]
+		if issue != nil && isTrackerIssue(issue) {
+			expanded, err := c.expandTrackerIssue(ctx, nextTask.ID, issue)
+			if err != nil {
+				c.logError("Tracker #%s expansion failed: %v", nextTask.ID, err)
+				taskID := taskKey("issue", nextTask.ID)
+				if state, ok := c.taskStates[taskID]; ok {
+					state.Phase = PhaseBlocked
+				}
+			} else if !expanded {
+				c.logInfo("Tracker #%s has no sub-issues, marking NOTHING_TO_DO", nextTask.ID)
+				taskID := taskKey("issue", nextTask.ID)
+				if state, ok := c.taskStates[taskID]; ok {
+					state.Phase = PhaseNothingToDo
+				}
+			}
+			continue
+		}
+
 		// Initialize monorepo package scope for this issue
 		if err := c.initPackageScope(nextTask.ID); err != nil {
 			c.logError("Issue #%s blocked: %v", nextTask.ID, err)
@@ -686,6 +711,11 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		if err := c.runPhaseLoop(ctx); err != nil {
 			c.logError("Phase loop failed for issue #%s: %v", nextTask.ID, err)
 		}
+	}
+
+	// Post final tracker status comments
+	for trackerID, subIDs := range c.trackerSubIssues {
+		c.postTrackerStatusComment(ctx, trackerID, subIDs, "completed")
 	}
 
 	return nil
@@ -1020,6 +1050,9 @@ func (c *Controller) extractPackageLabelFromIssue(issue *issueDetail) (string, b
 // It returns the resolved package path, or an error if:
 // - Monorepo is enabled but no package label is found
 // - The package label doesn't match a valid workspace package
+//
+// When tiers are configured, multiple pkg:* labels are allowed. Infrastructure/integration
+// packages are implicitly permitted alongside a single domain/app package.
 func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, error) {
 	if c.config.Monorepo == nil || !c.config.Monorepo.Enabled {
 		return "", nil
@@ -1036,13 +1069,43 @@ func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, erro
 		return "", fmt.Errorf("issue #%s not found in fetched details", issueNumber)
 	}
 
-	// Extract package label
+	// Check for tracker issues — skip package scope
+	if isTrackerIssue(issue) {
+		return "", nil
+	}
+
+	prefix := c.config.Monorepo.LabelPrefix
+	if prefix == "" {
+		prefix = "pkg"
+	}
+
+	// When tiers are configured, use tier-aware validation
+	if len(c.config.Monorepo.Tiers) > 0 {
+		// Collect label name strings
+		var labelNames []string
+		for _, l := range issue.Labels {
+			labelNames = append(labelNames, l.Name)
+		}
+
+		classifications, err := workspace.ClassifyPackageLabels(labelNames, prefix, c.config.Monorepo.Tiers, c.workDir)
+		if err != nil {
+			return "", fmt.Errorf("issue #%s: %w", issueNumber, err)
+		}
+
+		if len(classifications) == 0 {
+			return "", fmt.Errorf("monorepo requires %s:<package> label on issue #%s", prefix, issueNumber)
+		}
+
+		pkgPath, err := workspace.ValidatePackageLabels(classifications)
+		if err != nil {
+			return "", fmt.Errorf("issue #%s: %w", issueNumber, err)
+		}
+		return pkgPath, nil
+	}
+
+	// No tiers configured — preserve existing single-label behavior
 	pkgName, found := c.extractPackageLabelFromIssue(issue)
 	if !found {
-		prefix := c.config.Monorepo.LabelPrefix
-		if prefix == "" {
-			prefix = "pkg"
-		}
 		return "", fmt.Errorf("monorepo requires %s:<package> label on issue #%s", prefix, issueNumber)
 	}
 

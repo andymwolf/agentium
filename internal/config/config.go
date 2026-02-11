@@ -47,8 +47,9 @@ type CodexConfig struct {
 
 // MonorepoConfig contains monorepo-specific settings for pnpm workspaces
 type MonorepoConfig struct {
-	Enabled     bool   `mapstructure:"enabled"`      // Set by agentium init when pnpm-workspace.yaml is detected
-	LabelPrefix string `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
+	Enabled     bool                `mapstructure:"enabled"`      // Set by agentium init when pnpm-workspace.yaml is detected
+	LabelPrefix string              `mapstructure:"label_prefix"` // Prefix for package labels (default: "pkg")
+	Tiers       map[string][]string `mapstructure:"tiers"`        // Tier name -> package paths (e.g., "infra": ["packages/db", "packages/config"])
 }
 
 // Config represents the full Agentium configuration
