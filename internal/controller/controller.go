@@ -282,6 +282,7 @@ type Controller struct {
 
 	// Parent issue -> sub-issue expansion
 	parentSubIssues map[string][]string // parent issue ID -> sub-issue IDs
+	subIssueCache   map[string][]string // issueID → cached open sub-issue IDs
 
 	// Shutdown management
 	shutdownHooks []ShutdownHook
@@ -374,6 +375,7 @@ func New(config SessionConfig) (*Controller, error) {
 		metadataUpdater: metadataUpdater,
 		shutdownCh:      make(chan struct{}),
 		parentSubIssues: make(map[string][]string),
+		subIssueCache:   make(map[string][]string),
 		tracer:          &observability.NoOpTracer{},
 	}
 
@@ -703,7 +705,10 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		c.logInfo("Focusing on issue #%s", nextTask.ID)
 
 		// First check: does this issue have open sub-issues?
-		subIssueIDs := c.detectSubIssues(ctx, nextTask.ID)
+		subIssueIDs, detectErr := c.detectSubIssues(ctx, nextTask.ID)
+		if detectErr != nil {
+			return fmt.Errorf("cannot continue without GitHub API: %w", detectErr)
+		}
 		if len(subIssueIDs) > 0 {
 			taskID := taskKey("issue", nextTask.ID)
 			if expandErr := c.expandParentIssue(ctx, nextTask.ID, subIssueIDs); expandErr != nil {
@@ -1125,10 +1130,8 @@ func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, erro
 		return "", fmt.Errorf("issue #%s not found in fetched details", issueNumber)
 	}
 
-	// Check for parent/tracker issues — skip package scope
-	if hasTrackerLabel(issue) {
-		return "", nil
-	}
+	// Parent issues with sub-issues are expanded before reaching this point,
+	// so no special check is needed here.
 
 	prefix := c.config.Monorepo.LabelPrefix
 	if prefix == "" {

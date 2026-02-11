@@ -8,124 +8,6 @@ import (
 	"testing"
 )
 
-func TestHasTrackerLabel(t *testing.T) {
-	tests := []struct {
-		name   string
-		labels []issueLabel
-		want   bool
-	}{
-		{
-			name:   "tracker label present",
-			labels: []issueLabel{{Name: "tracker"}, {Name: "bug"}},
-			want:   true,
-		},
-		{
-			name:   "tracker label uppercase",
-			labels: []issueLabel{{Name: "Tracker"}},
-			want:   true,
-		},
-		{
-			name:   "tracker label mixed case",
-			labels: []issueLabel{{Name: "TRACKER"}},
-			want:   true,
-		},
-		{
-			name:   "no tracker label",
-			labels: []issueLabel{{Name: "bug"}, {Name: "enhancement"}},
-			want:   false,
-		},
-		{
-			name:   "empty labels",
-			labels: nil,
-			want:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			issue := &issueDetail{Labels: tt.labels}
-			got := hasTrackerLabel(issue)
-			if got != tt.want {
-				t.Errorf("hasTrackerLabel() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestParseSubIssues(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want []string
-	}{
-		{
-			name: "tasklist checkboxes",
-			body: `## Sub-issues
-- [ ] #10
-- [x] #11
-- [ ] #12`,
-			want: []string{"10", "11", "12"},
-		},
-		{
-			name: "full URLs",
-			body: `## Tasks
-- [ ] https://github.com/org/repo/issues/20
-- [ ] https://github.com/org/repo/issues/21`,
-			want: []string{"20", "21"},
-		},
-		{
-			name: "plain list items",
-			body: `- #30 Implement auth
-- #31 Add tests`,
-			want: []string{"30", "31"},
-		},
-		{
-			name: "table cells",
-			body: `| Issue | Status |
-| #40 | TODO |
-| #41 | DONE |`,
-			want: []string{"40", "41"},
-		},
-		{
-			name: "mixed formats dedup",
-			body: `- [ ] #50
-- #50 duplicate
-- [ ] #51`,
-			want: []string{"50", "51"},
-		},
-		{
-			name: "empty body",
-			body: "",
-			want: nil,
-		},
-		{
-			name: "prose references not matched",
-			body: "See issue #99 for context. We discussed #100 in the meeting.",
-			want: nil,
-		},
-		{
-			name: "asterisk list items",
-			body: `* [ ] #60
-* #61 some task`,
-			want: []string{"60", "61"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := parseSubIssues(tt.body)
-			if len(got) != len(tt.want) {
-				t.Fatalf("parseSubIssues() got %v (len %d), want %v (len %d)", got, len(got), tt.want, len(tt.want))
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("parseSubIssues()[%d] = %q, want %q", i, got[i], tt.want[i])
-				}
-			}
-		})
-	}
-}
-
 func TestInsertAfterTask(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -234,7 +116,11 @@ func TestExpandParentIssue_WithSubIssues(t *testing.T) {
 			"11": &sub11,
 		},
 		parentSubIssues: make(map[string][]string),
-		logger:          newTestLogger(),
+		subIssueCache: map[string][]string{
+			"10": {}, // no grandchildren
+			"11": {}, // no grandchildren
+		},
+		logger: newTestLogger(),
 	}
 
 	err := c.expandParentIssue(context.TODO(), "100", []string{"10", "11"})
@@ -329,7 +215,11 @@ func TestSubIssueQueueOrdering_SubIssuesBeforeSiblings(t *testing.T) {
 			"201": &sub201,
 		},
 		parentSubIssues: make(map[string][]string),
-		logger:          newTestLogger(),
+		subIssueCache: map[string][]string{
+			"200": {}, // no grandchildren
+			"201": {}, // no grandchildren
+		},
+		logger: newTestLogger(),
 	}
 
 	err := c.expandParentIssue(context.TODO(), "100", []string{"200", "201"})

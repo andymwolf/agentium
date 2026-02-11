@@ -4,62 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
-
-// hasTrackerLabel checks whether an issue has the "tracker" label (case-insensitive).
-// Kept as fallback for when the sub-issues API is unavailable.
-func hasTrackerLabel(issue *issueDetail) bool {
-	for _, label := range issue.Labels {
-		if strings.EqualFold(label.Name, "tracker") {
-			return true
-		}
-	}
-	return false
-}
-
-// subIssuePatterns matches issue references in issue bodies.
-// Supports:
-//   - GitHub tasklist: "- [ ] #123", "- [x] #124"
-//   - Full URL: "- [ ] https://github.com/.../issues/125"
-//   - Plain list: "- #123 description"
-//   - Table cell: "| #123 |"
-var subIssuePatterns = []*regexp.Regexp{
-	// Tasklist with checkbox: - [ ] #123 or - [x] #123
-	regexp.MustCompile(`(?m)^[-*]\s+\[[ xX]\]\s+#(\d+)`),
-	// Tasklist with checkbox + full URL: - [ ] https://github.com/.../issues/123
-	regexp.MustCompile(`(?m)^[-*]\s+\[[ xX]\]\s+https://github\.com/[^/]+/[^/]+/issues/(\d+)`),
-	// Plain list item: - #123
-	regexp.MustCompile(`(?m)^[-*]\s+#(\d+)`),
-	// Full URL in plain list: - https://github.com/.../issues/123
-	regexp.MustCompile(`(?m)^[-*]\s+https://github\.com/[^/]+/[^/]+/issues/(\d+)`),
-	// Table cell: | #123 |
-	regexp.MustCompile(`\|\s*#(\d+)\s*\|`),
-}
-
-// parseSubIssues extracts issue numbers from an issue body using regex patterns.
-// Returns deduplicated IDs in order of first appearance.
-// Used as fallback when the GitHub sub-issues API is unavailable.
-func parseSubIssues(body string) []string {
-	seen := make(map[string]bool)
-	var ids []string
-
-	for _, pattern := range subIssuePatterns {
-		matches := pattern.FindAllStringSubmatch(body, -1)
-		for _, match := range matches {
-			if len(match) >= 2 {
-				id := match[1]
-				if !seen[id] {
-					seen[id] = true
-					ids = append(ids, id)
-				}
-			}
-		}
-	}
-	return ids
-}
 
 // subIssuesGraphQLResponse represents the GraphQL response for sub-issues.
 type subIssuesGraphQLResponse struct {
@@ -130,18 +78,33 @@ func (c *Controller) fetchOpenSubIssues(ctx context.Context, issueID string) ([]
 	return ids, nil
 }
 
-// detectSubIssues checks for sub-issues via the GitHub API, falling back to
-// regex-based body parsing if the API call fails and the issue has a tracker label.
-func (c *Controller) detectSubIssues(ctx context.Context, issueID string) []string {
-	subIssueIDs, err := c.fetchOpenSubIssues(ctx, issueID)
-	if err != nil {
-		c.logWarning("Sub-issues API failed for #%s: %v, falling back to body parsing", issueID, err)
-		issue := c.issueDetailsByNumber[issueID]
-		if issue != nil && hasTrackerLabel(issue) {
-			subIssueIDs = parseSubIssues(issue.Body)
+// detectSubIssues queries the GitHub sub-issues API with caching and exponential
+// backoff retry (1s, 2s, 4s, 8s, 16s). Returns an error after 6 failed attempts.
+func (c *Controller) detectSubIssues(ctx context.Context, issueID string) ([]string, error) {
+	if cached, ok := c.subIssueCache[issueID]; ok {
+		return cached, nil
+	}
+
+	var ids []string
+	var lastErr error
+	delays := []time.Duration{0, 1 * time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
+	for attempt, delay := range delays {
+		if attempt > 0 {
+			c.logWarning("Sub-issues API failed for #%s (attempt %d/6), retrying in %s: %v",
+				issueID, attempt, delay, lastErr)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		ids, lastErr = c.fetchOpenSubIssues(ctx, issueID)
+		if lastErr == nil {
+			c.subIssueCache[issueID] = ids
+			return ids, nil
 		}
 	}
-	return subIssueIDs
+	return nil, fmt.Errorf("sub-issues API failed for #%s after 6 attempts: %w", issueID, lastErr)
 }
 
 // expandParentIssue expands a parent issue's sub-issues into the task queue.
@@ -184,6 +147,23 @@ func (c *Controller) expandParentIssue(ctx context.Context, parentID string, sub
 
 	// Post expansion comment on parent
 	c.postParentStatusComment(ctx, parentID, subIssueIDs, "expanded")
+
+	// Recursively expand sub-issues that themselves have sub-issues
+	for _, id := range subIssueIDs {
+		grandchildIDs, err := c.detectSubIssues(ctx, id)
+		if err != nil {
+			return err
+		}
+		if len(grandchildIDs) > 0 {
+			tk := taskKey("issue", id)
+			if state, ok := c.taskStates[tk]; ok {
+				state.Phase = PhaseNothingToDo
+			}
+			if err := c.expandParentIssue(ctx, id, grandchildIDs); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
