@@ -372,7 +372,7 @@ func TestApplyDefaults(t *testing.T) {
 			expected: Config{
 				Cloud: CloudConfig{
 					Provider:    "gcp",
-					MachineType: "e2-medium",
+					MachineType: "e2-standard-2",
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{
@@ -502,7 +502,7 @@ func TestApplyDefaults(t *testing.T) {
 				},
 				Cloud: CloudConfig{
 					Provider:    "gcp",
-					MachineType: "e2-medium",
+					MachineType: "e2-standard-2",
 					DiskSizeGB:  50,
 				},
 				Defaults: DefaultsConfig{

@@ -49,6 +49,12 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		"-w", "/workspace",
 	}
 
+	// Apply memory limit if computed at startup
+	if c.containerMemLimit > 0 {
+		limit := fmt.Sprintf("%d", c.containerMemLimit)
+		args = append(args, "--memory", limit, "--memory-swap", limit)
+	}
+
 	// Add -i flag when piping stdin (keeps stdin open for prompt delivery)
 	if params.StdinPrompt != "" {
 		args = append(args, "-i")
@@ -88,7 +94,7 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 	args = append(args, params.Agent.ContainerImage())
 	args = append(args, params.Command...)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := c.execCommand(ctx, "docker", args...)
 
 	// Pipe prompt via stdin if provided (for non-interactive mode)
 	if params.StdinPrompt != "" {

@@ -155,7 +155,7 @@ func applyDefaults(cfg *Config) {
 	if cfg.Cloud.MachineType == "" {
 		switch cfg.Cloud.Provider {
 		case "gcp":
-			cfg.Cloud.MachineType = "e2-medium"
+			cfg.Cloud.MachineType = "e2-standard-2"
 		case "aws":
 			cfg.Cloud.MachineType = "t3.medium"
 		case "azure":
