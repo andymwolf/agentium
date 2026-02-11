@@ -300,3 +300,23 @@ func TestLangfuseTracerSpanContext(t *testing.T) {
 		t.Error("expected non-empty SpanID")
 	}
 }
+
+func TestLangfuseTracerDoubleStop(t *testing.T) {
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk",
+		SecretKey: "sk",
+		BaseURL:   "http://localhost:1",
+	}, newTestLogger())
+
+	ctx := context.Background()
+
+	// First stop should succeed
+	if err := tracer.Stop(ctx); err != nil {
+		t.Fatalf("first Stop() returned error: %v", err)
+	}
+
+	// Second stop must not panic (double-close on channel)
+	if err := tracer.Stop(ctx); err != nil {
+		t.Fatalf("second Stop() returned error: %v", err)
+	}
+}

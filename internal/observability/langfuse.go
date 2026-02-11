@@ -51,9 +51,10 @@ type LangfuseTracer struct {
 	events     chan ingestionEvent
 	logger     *log.Logger
 
-	wg      sync.WaitGroup
-	stopCh  chan struct{}
-	flushMu sync.Mutex // protects concurrent drain operations
+	wg       sync.WaitGroup
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	flushMu  sync.Mutex // protects concurrent drain operations
 }
 
 // NewLangfuseTracer creates a new LangfuseTracer and starts its background
@@ -341,8 +342,9 @@ func (t *LangfuseTracer) sendBatch(ctx context.Context, batch []ingestionEvent) 
 }
 
 // Stop shuts down the background flush goroutine and flushes remaining events.
+// Safe to call multiple times; subsequent calls are no-ops.
 func (t *LangfuseTracer) Stop(ctx context.Context) error {
-	close(t.stopCh)
+	t.stopOnce.Do(func() { close(t.stopCh) })
 	t.wg.Wait()
 	// After goroutine exits, drain any stragglers enqueued after the final drain
 	return t.Flush(ctx)
