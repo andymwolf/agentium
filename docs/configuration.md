@@ -316,6 +316,21 @@ Sub-agent delegation (experimental feature).
 | `strategy` | string | No | `sequential` | Delegation strategy (only `sequential` is currently supported) |
 | `sub_agents` | map | No | - | Named sub-agent configurations |
 
+### observability
+
+Langfuse tracing for session observability. When enabled, every session produces structured traces showing the full Worker/Reviewer/Judge lifecycle with token metrics. See [Langfuse Setup](langfuse-setup.md) for the full getting-started guide.
+
+Tracing is configured via environment variables (not the YAML config file) because the keys are secrets that should not be checked into source control.
+
+| Environment Variable | Required | Default | Description |
+|---------------------|----------|---------|-------------|
+| `LANGFUSE_PUBLIC_KEY` | Yes | - | Langfuse public API key (`pk-lf-...`) |
+| `LANGFUSE_SECRET_KEY` | Yes | - | Langfuse secret API key (`sk-lf-...`) |
+| `LANGFUSE_BASE_URL` | No | `https://cloud.langfuse.com` | Langfuse API base URL (for self-hosted instances) |
+| `LANGFUSE_ENABLED` | No | `true` (when keys set) | Set to `false` to disable tracing even when keys are present |
+
+Tracing is enabled automatically when both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set. The Go controller uses the Langfuse REST ingestion API directly (no additional dependencies), while the TypeScript API uses the official `langfuse` npm package.
+
 ## Session Configuration
 
 Session-level settings (repository, issues, agent, etc.) are derived at runtime from CLI flags and config file defaults. They are **not** intended to be set directly in the config file. Instead:
