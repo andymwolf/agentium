@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0](https://github.com/andymwolf/agentium/compare/v0.5.0...v0.6.0) (2026-02-11)
+
+
+### Features
+
+* accept parameters in task request for prompt template injection ([#426](https://github.com/andymwolf/agentium/issues/426)) ([7ceb5db](https://github.com/andymwolf/agentium/commit/7ceb5db6210b5c450e25591bbfbb8b865403ccec)), closes [#417](https://github.com/andymwolf/agentium/issues/417)
+* add Langfuse observability integration ([2ad0d51](https://github.com/andymwolf/agentium/commit/2ad0d5132a66cd9f156ec54e2ef037cc57df2714))
+* add Langfuse observability integration for Go controller and TypeScript API ([df97d21](https://github.com/andymwolf/agentium/commit/df97d210346972aceee108f86c25bb6f7cfcb815)), closes [#438](https://github.com/andymwolf/agentium/issues/438)
+* add tier-aware label validation and tracker/sub-issue support ([#435](https://github.com/andymwolf/agentium/issues/435)) ([ae94786](https://github.com/andymwolf/agentium/commit/ae9478655f72e6802f44a8905605a6302f02cc9f))
+* add VM resource monitoring for memory pressure visibility ([95dd59b](https://github.com/andymwolf/agentium/commit/95dd59b70210f0bd458242c2a8bd44074915aa70))
+* add VM resource monitoring for memory pressure visibility ([febc1ab](https://github.com/andymwolf/agentium/commit/febc1abeaed559faef6566ebcb5c0577fcb31891)), closes [#441](https://github.com/andymwolf/agentium/issues/441)
+* bump default VM to e2-standard-2 and add dynamic Docker memory limits ([ea4442e](https://github.com/andymwolf/agentium/commit/ea4442eebbc312db79b2b9dcb78879e50e64169d)), closes [#442](https://github.com/andymwolf/agentium/issues/442)
+* remove arbitrary 1000-character issue body truncation ([d0ed69a](https://github.com/andymwolf/agentium/commit/d0ed69ad399aa895c8d19a14d95c6b7756f65478)), closes [#445](https://github.com/andymwolf/agentium/issues/445)
+* Support skip_on conditions for reviewer/judge ([#433](https://github.com/andymwolf/agentium/issues/433)) ([adad146](https://github.com/andymwolf/agentium/commit/adad146d385fcb7370233c7d90b9abee3f93890b))
+
+
+### Bug Fixes
+
+* add logging.viewer role to provisioner IAM requirements ([#432](https://github.com/andymwolf/agentium/issues/432)) ([58a4fcb](https://github.com/andymwolf/agentium/commit/58a4fcb5d195e6193a59eedf6db0f3f40c838d47))
+* correct BigQuery labels schema and surface gcloud stderr in logs command ([#431](https://github.com/andymwolf/agentium/issues/431)) ([2fc80fc](https://github.com/andymwolf/agentium/commit/2fc80fc89a4fbd6c90e160468dee2d2faf5fa4c2))
+* Derive issue_url fallback and guard issue_number on task type ([#430](https://github.com/andymwolf/agentium/issues/430)) ([3ef73fb](https://github.com/andymwolf/agentium/commit/3ef73fbc2e34f84497adce1672a701740e7c88bb)), closes [#428](https://github.com/andymwolf/agentium/issues/428) [#429](https://github.com/andymwolf/agentium/issues/429)
+* harden Langfuse observability lifecycle and error handling ([95d4189](https://github.com/andymwolf/agentium/commit/95d4189d69bbf22c04b61a69acb6335e3b06a8ed)), closes [#438](https://github.com/andymwolf/agentium/issues/438)
+* prevent double-close panic in LangfuseTracer.Stop() ([4ec71f6](https://github.com/andymwolf/agentium/commit/4ec71f637ac5ef2417919190b7be70c8bc78441a))
+* resolve Cloud Logging PermissionDenied on session VMs ([#437](https://github.com/andymwolf/agentium/issues/437)) ([eef9834](https://github.com/andymwolf/agentium/commit/eef983490f786e6fd0184d13d114e4403963fd73))
+
 ## [0.5.0](https://github.com/andymwolf/agentium/compare/v0.4.1...v0.5.0) (2026-02-10)
 
 
