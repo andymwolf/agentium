@@ -2,10 +2,13 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
 )
 
-func TestIsTrackerIssue(t *testing.T) {
+func TestHasTrackerLabel(t *testing.T) {
 	tests := []struct {
 		name   string
 		labels []issueLabel
@@ -41,9 +44,9 @@ func TestIsTrackerIssue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			issue := &issueDetail{Labels: tt.labels}
-			got := isTrackerIssue(issue)
+			got := hasTrackerLabel(issue)
 			if got != tt.want {
-				t.Errorf("isTrackerIssue() = %v, want %v", got, tt.want)
+				t.Errorf("hasTrackerLabel() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -199,33 +202,7 @@ func TestInsertAfterTask(t *testing.T) {
 	}
 }
 
-func TestExpandTrackerIssue_NoSubIssues(t *testing.T) {
-	c := &Controller{
-		config: SessionConfig{
-			Repository: "org/repo",
-		},
-		taskStates:       make(map[string]*TaskState),
-		trackerSubIssues: make(map[string][]string),
-		logger:           newTestLogger(),
-	}
-
-	tracker := &issueDetail{
-		Number: 100,
-		Title:  "Tracker issue",
-		Body:   "This is just a regular description with no sub-issues.",
-		Labels: []issueLabel{{Name: "tracker"}},
-	}
-
-	expanded, err := c.expandTrackerIssue(context.TODO(), "100", tracker)
-	if err != nil {
-		t.Fatalf("expandTrackerIssue() error = %v", err)
-	}
-	if expanded {
-		t.Error("expandTrackerIssue() = true, want false for empty body")
-	}
-}
-
-func TestExpandTrackerIssue_WithSubIssues(t *testing.T) {
+func TestExpandParentIssue_WithSubIssues(t *testing.T) {
 	// Pre-populate sub-issue details so fetchSubIssueDetails skips the gh call
 	sub10 := issueDetail{
 		Number: 10,
@@ -256,23 +233,13 @@ func TestExpandTrackerIssue_WithSubIssues(t *testing.T) {
 			"10": &sub10,
 			"11": &sub11,
 		},
-		trackerSubIssues: make(map[string][]string),
-		logger:           newTestLogger(),
+		parentSubIssues: make(map[string][]string),
+		logger:          newTestLogger(),
 	}
 
-	tracker := &issueDetail{
-		Number: 100,
-		Title:  "Tracker: feature rollout",
-		Body:   "## Sub-issues\n- [ ] #10\n- [ ] #11",
-		Labels: []issueLabel{{Name: "tracker"}},
-	}
-
-	expanded, err := c.expandTrackerIssue(context.TODO(), "100", tracker)
+	err := c.expandParentIssue(context.TODO(), "100", []string{"10", "11"})
 	if err != nil {
-		t.Fatalf("expandTrackerIssue() error = %v", err)
-	}
-	if !expanded {
-		t.Fatal("expandTrackerIssue() = false, want true")
+		t.Fatalf("expandParentIssue() error = %v", err)
 	}
 
 	// Verify sub-issues were queued and dependency-ordered (#10 before #11).
@@ -317,12 +284,244 @@ func TestExpandTrackerIssue_WithSubIssues(t *testing.T) {
 		}
 	}
 
-	// Verify tracker -> sub-issue mapping
-	subIDs, ok := c.trackerSubIssues["100"]
+	// Verify parent -> sub-issue mapping
+	subIDs, ok := c.parentSubIssues["100"]
 	if !ok {
-		t.Fatal("trackerSubIssues missing entry for tracker #100")
+		t.Fatal("parentSubIssues missing entry for parent #100")
 	}
 	if len(subIDs) != 2 || subIDs[0] != "10" || subIDs[1] != "11" {
-		t.Errorf("trackerSubIssues[100] = %v, want [10, 11]", subIDs)
+		t.Errorf("parentSubIssues[100] = %v, want [10, 11]", subIDs)
 	}
+}
+
+func TestSubIssueQueueOrdering_SubIssuesBeforeSiblings(t *testing.T) {
+	// Parent=#100, subs=#200,#201 (201 depends on 200), sibling=#150.
+	// After expansion, queue should be: [100, 200, 201, 150]
+	// NOT [100, 150, 200, 201] as a full topological sort would produce.
+	sub200 := issueDetail{
+		Number: 200,
+		Title:  "Sub-issue 200",
+		Body:   "First sub-task",
+		Labels: []issueLabel{{Name: "enhancement"}},
+	}
+	sub201 := issueDetail{
+		Number: 201,
+		Title:  "Sub-issue 201",
+		Body:   "Second sub-task\n\nDepends on #200",
+		Labels: []issueLabel{{Name: "enhancement"}},
+	}
+
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+		},
+		taskStates: map[string]*TaskState{
+			"issue:100": {ID: "100", Type: "issue", Phase: PhaseImplement},
+			"issue:150": {ID: "150", Type: "issue", Phase: PhaseImplement},
+		},
+		taskQueue: []TaskQueueItem{
+			{Type: "issue", ID: "100"},
+			{Type: "issue", ID: "150"},
+		},
+		issueDetails: []issueDetail{sub200, sub201},
+		issueDetailsByNumber: map[string]*issueDetail{
+			"200": &sub200,
+			"201": &sub201,
+		},
+		parentSubIssues: make(map[string][]string),
+		logger:          newTestLogger(),
+	}
+
+	err := c.expandParentIssue(context.TODO(), "100", []string{"200", "201"})
+	if err != nil {
+		t.Fatalf("expandParentIssue() error = %v", err)
+	}
+
+	// Expected order: [100, 200, 201, 150]
+	wantOrder := []string{"100", "200", "201", "150"}
+	if len(c.taskQueue) != len(wantOrder) {
+		t.Fatalf("queue length = %d, want %d; queue: %v", len(c.taskQueue), len(wantOrder), queueIDs(c.taskQueue))
+	}
+	for i, want := range wantOrder {
+		if c.taskQueue[i].ID != want {
+			t.Errorf("queue[%d].ID = %q, want %q (full queue: %v)", i, c.taskQueue[i].ID, want, queueIDs(c.taskQueue))
+		}
+	}
+}
+
+func TestParseSubIssuesGraphQLResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonResp string
+		wantIDs  []string
+	}{
+		{
+			name: "mixed open and closed",
+			jsonResp: `{
+				"data": {
+					"repository": {
+						"issue": {
+							"subIssues": {
+								"nodes": [
+									{"number": 10, "state": "OPEN"},
+									{"number": 11, "state": "CLOSED"},
+									{"number": 12, "state": "OPEN"}
+								]
+							}
+						}
+					}
+				}
+			}`,
+			wantIDs: []string{"10", "12"},
+		},
+		{
+			name: "all closed",
+			jsonResp: `{
+				"data": {
+					"repository": {
+						"issue": {
+							"subIssues": {
+								"nodes": [
+									{"number": 10, "state": "CLOSED"},
+									{"number": 11, "state": "CLOSED"}
+								]
+							}
+						}
+					}
+				}
+			}`,
+			wantIDs: nil,
+		},
+		{
+			name: "no sub-issues",
+			jsonResp: `{
+				"data": {
+					"repository": {
+						"issue": {
+							"subIssues": {
+								"nodes": []
+							}
+						}
+					}
+				}
+			}`,
+			wantIDs: nil,
+		},
+		{
+			name: "all open",
+			jsonResp: `{
+				"data": {
+					"repository": {
+						"issue": {
+							"subIssues": {
+								"nodes": [
+									{"number": 363, "state": "OPEN"},
+									{"number": 364, "state": "OPEN"}
+								]
+							}
+						}
+					}
+				}
+			}`,
+			wantIDs: []string{"363", "364"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var resp subIssuesGraphQLResponse
+			if err := json.Unmarshal([]byte(tt.jsonResp), &resp); err != nil {
+				t.Fatalf("failed to parse test JSON: %v", err)
+			}
+
+			// Filter open sub-issues using the same logic as production code
+			var ids []string
+			for _, node := range resp.Data.Repository.Issue.SubIssues.Nodes {
+				if strings.EqualFold(node.State, "OPEN") {
+					ids = append(ids, strconv.Itoa(node.Number))
+				}
+			}
+
+			if len(ids) != len(tt.wantIDs) {
+				t.Fatalf("got %v (len %d), want %v (len %d)", ids, len(ids), tt.wantIDs, len(tt.wantIDs))
+			}
+			for i := range ids {
+				if ids[i] != tt.wantIDs[i] {
+					t.Errorf("[%d] = %q, want %q", i, ids[i], tt.wantIDs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseRepoOwnerName(t *testing.T) {
+	tests := []struct {
+		name      string
+		repo      string
+		wantOwner string
+		wantName  string
+		wantErr   bool
+	}{
+		{
+			name:      "simple owner/repo",
+			repo:      "org/repo",
+			wantOwner: "org",
+			wantName:  "repo",
+		},
+		{
+			name:      "with github.com prefix",
+			repo:      "github.com/org/repo",
+			wantOwner: "org",
+			wantName:  "repo",
+		},
+		{
+			name:      "with https prefix",
+			repo:      "https://github.com/org/repo",
+			wantOwner: "org",
+			wantName:  "repo",
+		},
+		{
+			name:      "with .git suffix",
+			repo:      "org/repo.git",
+			wantOwner: "org",
+			wantName:  "repo",
+		},
+		{
+			name:    "invalid single part",
+			repo:    "just-a-name",
+			wantErr: true,
+		},
+		{
+			name:    "empty string",
+			repo:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, name, err := parseRepoOwnerName(tt.repo)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseRepoOwnerName(%q) error = %v, wantErr %v", tt.repo, err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if owner != tt.wantOwner {
+				t.Errorf("owner = %q, want %q", owner, tt.wantOwner)
+			}
+			if name != tt.wantName {
+				t.Errorf("name = %q, want %q", name, tt.wantName)
+			}
+		})
+	}
+}
+
+// queueIDs extracts IDs from a task queue for test output.
+func queueIDs(queue []TaskQueueItem) []string {
+	ids := make([]string, len(queue))
+	for i, item := range queue {
+		ids[i] = item.ID
+	}
+	return ids
 }
