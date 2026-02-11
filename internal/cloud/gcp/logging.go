@@ -10,6 +10,26 @@ import (
 	"google.golang.org/api/option"
 )
 
+// pingWithRetry calls pinger with exponential backoff until it succeeds or
+// retries are exhausted. Backoff starts at 1s and doubles each attempt
+// (1s, 2s, 4s, 8s, 16s, 32s for maxRetries=6, ~63s total).
+func pingWithRetry(ctx context.Context, pinger func(context.Context) error, maxRetries int) error {
+	var err error
+	backoff := time.Second
+	for i := 0; i < maxRetries; i++ {
+		if err = pinger(ctx); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+	return fmt.Errorf("ping failed after %d retries: %w", maxRetries, err)
+}
+
 // Severity levels for structured logging
 type Severity string
 
@@ -95,6 +115,13 @@ func NewCloudLogger(ctx context.Context, cfg CloudLoggerConfig, opts ...option.C
 	client, err := logging.NewClient(ctx, cfg.ProjectID, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logging client: %w", err)
+	}
+
+	// Ping with retry to wait for IAM propagation. GCP IAM bindings can take
+	// 60+ seconds to propagate, so we retry with exponential backoff.
+	if err := pingWithRetry(ctx, client.Ping, 6); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("logging client ping failed: %w", err)
 	}
 
 	logger := client.Logger(cfg.LogName)
@@ -237,9 +264,12 @@ func (cl *CloudLogger) Flush() error {
 }
 
 // Close flushes remaining logs and closes the Cloud Logging client.
+// The underlying client is always closed even if flush fails.
 func (cl *CloudLogger) Close() error {
-	if err := cl.writer.Flush(); err != nil {
-		return fmt.Errorf("failed to flush logs: %w", err)
+	flushErr := cl.writer.Flush()
+	closeErr := cl.writer.Close()
+	if flushErr != nil {
+		return fmt.Errorf("failed to flush logs: %w", flushErr)
 	}
-	return cl.writer.Close()
+	return closeErr
 }

@@ -363,7 +363,13 @@ resource "google_compute_instance" "agentium" {
     ]
   }
 
-  depends_on = [google_project_service.compute]
+  depends_on = [
+    google_project_service.compute,
+    google_project_iam_member.logging_writer,
+    google_project_iam_member.secret_accessor,
+    google_project_iam_member.compute_admin,
+    google_service_account_iam_member.self_user,
+  ]
 }
 
 # Firewall rule to allow outbound traffic
