@@ -317,6 +317,15 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Propagate Langfuse config from config file
+	if cfg.Langfuse.PublicKeySecret != "" || cfg.Langfuse.SecretKeySecret != "" {
+		sessionConfig.Langfuse = &provisioner.ProvLangfuseConfig{
+			PublicKeySecret: cfg.Langfuse.PublicKeySecret,
+			SecretKeySecret: cfg.Langfuse.SecretKeySecret,
+			BaseURL:         cfg.Langfuse.BaseURL,
+		}
+	}
+
 	// Propagate fallback config from routing
 	if cfg.Routing.Default.FallbackEnabled {
 		sessionConfig.Fallback = &provisioner.ProvFallbackConfig{

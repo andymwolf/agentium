@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/cloud/gcp"
@@ -74,23 +75,55 @@ func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentNam
 	c.cloudLogger.LogWithLabels(gcp.SeverityInfo, msg, labels)
 }
 
-// initTracer initializes the Langfuse observability tracer from environment variables.
-// If LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are set (and LANGFUSE_ENABLED is not "false"),
-// a LangfuseTracer is created. Otherwise the default NoOpTracer is kept.
-func (c *Controller) initTracer(logger *log.Logger) {
-	publicKey := os.Getenv("LANGFUSE_PUBLIC_KEY")
-	secretKey := os.Getenv("LANGFUSE_SECRET_KEY")
-
-	if publicKey == "" || secretKey == "" {
-		return
-	}
-
+// initTracer initializes the Langfuse observability tracer.
+// It checks environment variables first (backward compat for local dev),
+// then falls back to fetching keys from GCP Secret Manager using config paths.
+// If neither source provides keys, the default NoOpTracer is kept.
+func (c *Controller) initTracer(ctx context.Context, logger *log.Logger) {
 	if os.Getenv("LANGFUSE_ENABLED") == "false" {
 		logger.Printf("Langfuse: disabled via LANGFUSE_ENABLED=false")
 		return
 	}
 
+	// 1. Try environment variables first (backward compat / local dev)
+	publicKey := os.Getenv("LANGFUSE_PUBLIC_KEY")
+	secretKey := os.Getenv("LANGFUSE_SECRET_KEY")
+
+	// 2. If env vars are empty, try fetching from Secret Manager
+	if publicKey == "" || secretKey == "" {
+		pubPath := c.config.Langfuse.PublicKeySecret
+		secPath := c.config.Langfuse.SecretKeySecret
+		if pubPath == "" || secPath == "" {
+			if pubPath != secPath {
+				logger.Printf("Langfuse: incomplete config — both public_key_secret and secret_key_secret are required")
+			}
+			return // No env vars and no secret paths configured
+		}
+
+		var err error
+		publicKey, err = c.fetchSecret(ctx, pubPath)
+		if err != nil {
+			logger.Printf("Langfuse: failed to fetch public key from %s: %v", pubPath, err)
+			return
+		}
+		secretKey, err = c.fetchSecret(ctx, secPath)
+		if err != nil {
+			logger.Printf("Langfuse: failed to fetch secret key from %s: %v", secPath, err)
+			return
+		}
+		publicKey = strings.TrimSpace(publicKey)
+		secretKey = strings.TrimSpace(secretKey)
+	}
+
+	if publicKey == "" || secretKey == "" {
+		return
+	}
+
+	// Determine base URL: env var > config > default
 	baseURL := os.Getenv("LANGFUSE_BASE_URL")
+	if baseURL == "" {
+		baseURL = c.config.Langfuse.BaseURL
+	}
 
 	lt := observability.NewLangfuseTracer(observability.LangfuseConfig{
 		PublicKey: publicKey,

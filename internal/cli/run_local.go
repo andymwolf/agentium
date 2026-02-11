@@ -193,6 +193,15 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Propagate Langfuse config from config file.
+	// Fields are set individually because Langfuse is a value struct (not a pointer),
+	// so we only overwrite when the config file provides values.
+	if cfg.Langfuse.PublicKeySecret != "" || cfg.Langfuse.SecretKeySecret != "" {
+		sessionConfig.Langfuse.PublicKeySecret = cfg.Langfuse.PublicKeySecret
+		sessionConfig.Langfuse.SecretKeySecret = cfg.Langfuse.SecretKeySecret
+		sessionConfig.Langfuse.BaseURL = cfg.Langfuse.BaseURL
+	}
+
 	// Handle --model (overrides default for all phases)
 	if model, _ := cmd.Flags().GetString("model"); model != "" {
 		spec := routing.ParseModelSpec(model)
