@@ -174,6 +174,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		sessionConfig.Monorepo = &controller.MonorepoSessionConfig{
 			Enabled:     cfg.Monorepo.Enabled,
 			LabelPrefix: cfg.Monorepo.LabelPrefix,
+			Tiers:       cfg.Monorepo.Tiers,
 		}
 	}
 

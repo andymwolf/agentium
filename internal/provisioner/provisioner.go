@@ -118,8 +118,9 @@ type ProvPhaseLoopConfig struct {
 
 // ProvMonorepoConfig contains monorepo settings for provisioned sessions.
 type ProvMonorepoConfig struct {
-	Enabled     bool   `json:"enabled"`
-	LabelPrefix string `json:"label_prefix"`
+	Enabled     bool                `json:"enabled"`
+	LabelPrefix string              `json:"label_prefix"`
+	Tiers       map[string][]string `json:"tiers,omitempty"`
 }
 
 // ProvFallbackConfig controls adapter execution fallback for provisioned sessions.

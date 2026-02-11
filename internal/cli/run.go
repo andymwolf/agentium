@@ -292,6 +292,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		sessionConfig.Monorepo = &provisioner.ProvMonorepoConfig{
 			Enabled:     cfg.Monorepo.Enabled,
 			LabelPrefix: cfg.Monorepo.LabelPrefix,
+			Tiers:       cfg.Monorepo.Tiers,
 		}
 	}
 
