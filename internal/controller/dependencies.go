@@ -1,6 +1,10 @@
 package controller
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -341,4 +345,213 @@ func parseIssueNumberFromBranch(branch string) string {
 	}
 
 	return parts[0]
+}
+
+// buildDependencyGraph constructs an inter-issue dependency graph from issue bodies.
+// It parses dependencies, detects and breaks cycles (with warnings), and reorders the task queue.
+// This method is only called when there are multiple issues in the batch.
+func (c *Controller) buildDependencyGraph() {
+	if len(c.issueDetails) <= 1 {
+		return
+	}
+
+	// Build set of batch issue IDs
+	batchIDs := make(map[string]bool)
+	for _, issue := range c.issueDetails {
+		batchIDs[strconv.Itoa(issue.Number)] = true
+	}
+
+	// Parse dependencies and populate DependsOn field
+	for i := range c.issueDetails {
+		deps := parseDependencies(c.issueDetails[i].Body)
+		c.issueDetails[i].DependsOn = deps
+	}
+
+	// Build the dependency graph
+	c.depGraph = NewDependencyGraph(c.issueDetails, batchIDs)
+
+	// Log any cycles that were broken
+	if brokenEdges := c.depGraph.BrokenEdges(); len(brokenEdges) > 0 {
+		for _, edge := range brokenEdges {
+			c.logWarning("Cycle detected: edge from #%s to #%s was removed", edge.ParentID, edge.ChildID)
+		}
+	}
+
+	// Reorder task queue if graph has dependencies
+	if c.depGraph.HasDependencies() {
+		c.reorderTaskQueue(c.depGraph.SortedIssueIDs())
+		c.logInfo("Task queue reordered based on dependencies: %v", c.depGraph.SortedIssueIDs())
+	}
+}
+
+// reorderTaskQueue reorders the task queue to match the topologically sorted issue order.
+func (c *Controller) reorderTaskQueue(sortedIDs []string) {
+	issueMap := make(map[string]TaskQueueItem)
+
+	for _, item := range c.taskQueue {
+		issueMap[item.ID] = item
+	}
+
+	// Rebuild queue in topological order
+	newQueue := make([]TaskQueueItem, 0, len(c.taskQueue))
+
+	for _, id := range sortedIDs {
+		if item, ok := issueMap[id]; ok {
+			newQueue = append(newQueue, item)
+			delete(issueMap, id)
+		}
+	}
+
+	// Append any remaining issues not in the sorted list (shouldn't happen, but be safe)
+	for _, item := range issueMap {
+		newQueue = append(newQueue, item)
+	}
+
+	c.taskQueue = newQueue
+}
+
+// resolveParentBranch determines the branch a child issue should be based on.
+// Returns the parent's branch name if the child depends on a parent issue, or "" to use main.
+// Returns an error if the child should be marked BLOCKED (e.g., parent failed or has no branch).
+func (c *Controller) resolveParentBranch(ctx context.Context, childID string) (string, error) {
+	if c.depGraph == nil {
+		return "", nil
+	}
+
+	parents := c.depGraph.ParentsOf(childID)
+	if len(parents) == 0 {
+		return "", nil
+	}
+
+	// For chained dependencies, only the immediate parent matters
+	// (multi-parent chaining already linearized the graph)
+	parentID := parents[0]
+
+	// Check if parent is in our batch
+	parentTaskID := taskKey("issue", parentID)
+	parentState, inBatch := c.taskStates[parentTaskID]
+
+	if inBatch {
+		// In-batch parent: check its completion state
+		switch parentState.Phase {
+		case PhaseComplete:
+			// Parent completed successfully, find its branch
+			existingWork := c.detectExistingWork(ctx, parentID)
+			if existingWork != nil && existingWork.Branch != "" {
+				c.logInfo("Issue #%s will branch from parent #%s's branch: %s", childID, parentID, existingWork.Branch)
+				return existingWork.Branch, nil
+			}
+			// Parent complete but no branch found (maybe it was merged?)
+			c.logInfo("Issue #%s: parent #%s complete but no branch found, using main", childID, parentID)
+			return "", nil
+
+		case PhaseNothingToDo:
+			// Parent had nothing to do, no dependency effect
+			c.logInfo("Issue #%s: parent #%s had nothing to do, using main", childID, parentID)
+			return "", nil
+
+		case PhaseBlocked:
+			// Parent is blocked, child should also be blocked
+			return "", fmt.Errorf("parent issue #%s is blocked", parentID)
+
+		default:
+			// Parent not yet complete, child should wait (block for now, controller will re-check)
+			return "", fmt.Errorf("parent issue #%s not yet complete (phase: %s)", parentID, parentState.Phase)
+		}
+	}
+
+	// External parent (not in batch): check for existing PR
+	return c.resolveExternalParentBranch(ctx, parentID, childID)
+}
+
+// resolveExternalParentBranch resolves the branch for an external (not in batch) parent issue.
+func (c *Controller) resolveExternalParentBranch(ctx context.Context, parentID, childID string) (string, error) {
+	// Look for an existing PR for the external parent
+	existingWork := c.detectExistingWork(ctx, parentID)
+	if existingWork == nil {
+		// No work found for external parent - child is blocked
+		return "", fmt.Errorf("external parent issue #%s has no branch or PR", parentID)
+	}
+
+	if existingWork.PRNumber != "" {
+		// External parent has a PR - check if it's merged
+		merged, err := c.isPRMerged(ctx, existingWork.PRNumber)
+		if err != nil {
+			c.logWarning("Failed to check merge status of PR #%s: %v", existingWork.PRNumber, err)
+			// Assume not merged, use the branch
+			c.logInfo("Issue #%s will branch from external parent #%s's PR branch: %s", childID, parentID, existingWork.Branch)
+			return existingWork.Branch, nil
+		}
+
+		if merged {
+			// PR is merged, code is in main
+			c.logInfo("Issue #%s: external parent #%s's PR merged, using main", childID, parentID)
+			return "", nil
+		}
+
+		// PR is open, use its branch
+		c.logInfo("Issue #%s will branch from external parent #%s's open PR branch: %s", childID, parentID, existingWork.Branch)
+		return existingWork.Branch, nil
+	}
+
+	// External parent has a branch but no PR
+	c.logInfo("Issue #%s will branch from external parent #%s's branch: %s", childID, parentID, existingWork.Branch)
+	return existingWork.Branch, nil
+}
+
+// isPRMerged checks if a PR has been merged.
+func (c *Controller) isPRMerged(ctx context.Context, prNumber string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "gh", "pr", "view", prNumber,
+		"--repo", c.config.Repository,
+		"--json", "state",
+	)
+	cmd.Dir = c.workDir
+	cmd.Env = c.envWithGitHubToken()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+
+	var result struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		return false, err
+	}
+
+	return result.State == "MERGED", nil
+}
+
+// propagateBlocked marks all children of a blocked issue as BLOCKED via BFS.
+func (c *Controller) propagateBlocked(issueID string) {
+	if c.depGraph == nil {
+		return
+	}
+
+	// BFS through children
+	queue := []string{issueID}
+	visited := make(map[string]bool)
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if visited[current] {
+			continue
+		}
+		visited[current] = true
+
+		children := c.depGraph.ChildrenOf(current)
+		for _, childID := range children {
+			taskID := taskKey("issue", childID)
+			if state, ok := c.taskStates[taskID]; ok {
+				if state.Phase != PhaseBlocked && state.Phase != PhaseComplete && state.Phase != PhaseNothingToDo {
+					state.Phase = PhaseBlocked
+					c.logInfo("Issue #%s marked BLOCKED (parent #%s blocked)", childID, current)
+					queue = append(queue, childID)
+				}
+			}
+		}
+	}
 }
