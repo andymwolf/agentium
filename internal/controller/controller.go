@@ -280,8 +280,9 @@ type Controller struct {
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
 	scopeValidator *scope.ScopeValidator // Validates file changes are within package scope (nil if not monorepo)
 
-	// Tracker support
-	trackerSubIssues map[string][]string // tracker issue ID -> sub-issue IDs
+	// Parent issue -> sub-issue expansion
+	parentSubIssues map[string][]string // parent issue ID -> sub-issue IDs
+	subIssueCache   map[string][]string // issueID → cached open sub-issue IDs
 
 	// Shutdown management
 	shutdownHooks []ShutdownHook
@@ -362,19 +363,20 @@ func New(config SessionConfig) (*Controller, error) {
 	}
 
 	c := &Controller{
-		config:           config,
-		agent:            agentAdapter,
-		workDir:          workDir,
-		iteration:        0,
-		maxDuration:      maxDuration,
-		taskStates:       make(map[string]*TaskState),
-		logger:           logger,
-		cloudLogger:      cloudLogger,
-		secretManager:    secretManager,
-		metadataUpdater:  metadataUpdater,
-		shutdownCh:       make(chan struct{}),
-		trackerSubIssues: make(map[string][]string),
-		tracer:           &observability.NoOpTracer{},
+		config:          config,
+		agent:           agentAdapter,
+		workDir:         workDir,
+		iteration:       0,
+		maxDuration:     maxDuration,
+		taskStates:      make(map[string]*TaskState),
+		logger:          logger,
+		cloudLogger:     cloudLogger,
+		secretManager:   secretManager,
+		metadataUpdater: metadataUpdater,
+		shutdownCh:      make(chan struct{}),
+		parentSubIssues: make(map[string][]string),
+		subIssueCache:   make(map[string][]string),
+		tracer:          &observability.NoOpTracer{},
 	}
 
 	// Initialize Langfuse tracer if configured via environment variables
@@ -702,20 +704,22 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		// Build prompt for issue task
 		c.logInfo("Focusing on issue #%s", nextTask.ID)
 
-		// Check if this is a tracker issue — expand instead of running phase loop
-		issue := c.issueDetailsByNumber[nextTask.ID]
-		if issue != nil && isTrackerIssue(issue) {
+		// First check: does this issue have open sub-issues?
+		subIssueIDs, detectErr := c.detectSubIssues(ctx, nextTask.ID)
+		if detectErr != nil {
+			// Hard-fail: if we cannot determine sub-issue structure, we must not
+			// guess — processing a parent issue as a leaf task produces wrong work.
+			return fmt.Errorf("cannot continue without GitHub API: %w", detectErr)
+		}
+		if len(subIssueIDs) > 0 {
 			taskID := taskKey("issue", nextTask.ID)
-			expanded, err := c.expandTrackerIssue(ctx, nextTask.ID, issue)
-			if err != nil {
-				c.logError("Tracker #%s expansion failed: %v", nextTask.ID, err)
+			if expandErr := c.expandParentIssue(ctx, nextTask.ID, subIssueIDs); expandErr != nil {
+				c.logError("Sub-issue expansion failed for #%s: %v", nextTask.ID, expandErr)
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseBlocked
 				}
 			} else {
-				if !expanded {
-					c.logInfo("Tracker #%s has no sub-issues, marking NOTHING_TO_DO", nextTask.ID)
-				}
+				c.logInfo("Issue #%s: expanded %d sub-issues %v — parent complete", nextTask.ID, len(subIssueIDs), subIssueIDs)
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseNothingToDo
 				}
@@ -759,9 +763,9 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		}
 	}
 
-	// Post final tracker status comments
-	for trackerID, subIDs := range c.trackerSubIssues {
-		c.postTrackerStatusComment(ctx, trackerID, subIDs, "completed")
+	// Post final parent status comments
+	for parentID, subIDs := range c.parentSubIssues {
+		c.postParentStatusComment(ctx, parentID, subIDs, "completed")
 	}
 
 	return nil
@@ -1128,10 +1132,8 @@ func (c *Controller) resolveAndValidatePackage(issueNumber string) (string, erro
 		return "", fmt.Errorf("issue #%s not found in fetched details", issueNumber)
 	}
 
-	// Check for tracker issues — skip package scope
-	if isTrackerIssue(issue) {
-		return "", nil
-	}
+	// Parent issues with sub-issues are expanded before reaching this point,
+	// so no special check is needed here.
 
 	prefix := c.config.Monorepo.LabelPrefix
 	if prefix == "" {
