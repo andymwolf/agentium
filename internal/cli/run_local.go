@@ -54,10 +54,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	if agent := viper.GetString("session.agent"); agent != "" {
 		cfg.Session.Agent = agent
 	}
-	if cmd.Flags().Changed("max-iterations") {
-		maxIter, _ := cmd.Flags().GetInt("max-iterations")
-		cfg.Session.MaxIterations = maxIter
-	}
 	if cmd.Flags().Changed("max-duration") {
 		maxDur, _ := cmd.Flags().GetString("max-duration")
 		cfg.Session.MaxDuration = maxDur
@@ -102,7 +98,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Printf("Agent: %s\n", cfg.Session.Agent)
 	fmt.Printf("Workspace: %s\n", workDir)
-	fmt.Printf("Max iterations: %d\n", cfg.Session.MaxIterations)
 	fmt.Printf("Max duration: %s\n", cfg.Session.MaxDuration)
 	if cfg.Session.AutoMerge {
 		fmt.Println("Auto-merge: enabled")
@@ -143,7 +138,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		Repository:           cfg.Session.Repository,
 		Tasks:                cfg.Session.Tasks,
 		Agent:                cfg.Session.Agent,
-		MaxIterations:        cfg.Session.MaxIterations,
 		MaxDuration:          cfg.Session.MaxDuration,
 		Prompt:               cfg.Session.Prompt,
 		Interactive:          true, // Enable interactive mode

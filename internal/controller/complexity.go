@@ -59,7 +59,6 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 		Tasks:          c.config.Tasks,
 		WorkDir:        c.workDir,
 		GitHubToken:    c.gitHubToken,
-		MaxIterations:  1,
 		MaxDuration:    c.config.MaxDuration,
 		Prompt:         assessorPrompt,
 		Metadata:       make(map[string]string),

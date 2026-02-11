@@ -26,7 +26,6 @@ cloud:
 
 # Default session settings
 defaults:
-  max_iterations: 30                # Maximum iterations before termination
   max_duration: "2h"                # Maximum session duration
 
 # Phase routing - which adapter+model to use per phase

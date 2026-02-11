@@ -21,7 +21,7 @@ It supports multiple AI agents (Claude Code, Aider, custom) and cloud providers
 that automatically terminates when tasks complete or limits are reached.
 
 Example:
-  agentium run --repo github.com/org/myapp --issues 12,17,24 --max-iterations 30`,
+  agentium run --repo github.com/org/myapp --issues 12,17,24`,
 }
 
 // Execute runs the root command

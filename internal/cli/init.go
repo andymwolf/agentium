@@ -67,8 +67,7 @@ type projectConfig struct {
 		Region   string `yaml:"region"`
 	} `yaml:"cloud"`
 	Defaults struct {
-		MaxIterations int    `yaml:"max_iterations"`
-		MaxDuration   string `yaml:"max_duration"`
+		MaxDuration string `yaml:"max_duration"`
 	} `yaml:"defaults"`
 	Routing struct {
 		Default struct {
@@ -156,7 +155,6 @@ func writeConfig(cmd *cobra.Command, configPath, cwd string) error {
 	}
 
 	cfg.GitHub.PrivateKeySecret = fmt.Sprintf("projects/YOUR_PROJECT/secrets/%s-github-key", cfg.Project.Name)
-	cfg.Defaults.MaxIterations = 30
 	cfg.Defaults.MaxDuration = "2h"
 	cfg.Routing.Default.Adapter = "claude-code"
 	cfg.Routing.Default.Model = "claude-sonnet-4-20250514"

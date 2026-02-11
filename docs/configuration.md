@@ -46,7 +46,6 @@ cloud:
 
 # Default session settings
 defaults:
-  max_iterations: 30                # Maximum agent iterations per session
   max_duration: "2h"                # Maximum session duration (Go duration format)
 
 # Codex agent authentication
@@ -151,7 +150,6 @@ monorepo:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `max_iterations` | int | No | `30` | Max iterations before session termination |
 | `max_duration` | string | No | `2h` | Max session duration (Go duration: `30m`, `2h`, `4h`) |
 
 ### codex
@@ -335,9 +333,9 @@ Tracing is enabled automatically when both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_S
 
 Session-level settings (repository, issues, agent, etc.) are derived at runtime from CLI flags and config file defaults. They are **not** intended to be set directly in the config file. Instead:
 
-- `--repo`, `--issues`, `--agent`, `--max-iterations`, `--max-duration` are passed as CLI flags to `agentium run`
+- `--repo`, `--issues`, `--agent`, `--max-duration` are passed as CLI flags to `agentium run`
 - If `--agent` is not provided, it falls back to `routing.default.adapter` (or `claude-code` if not configured)
-- `max_iterations` and `max_duration` fall back to values in the `defaults` section
+- `max_duration` falls back to the value in the `defaults` section
 - The `repository` field falls back to `project.repository` if `--repo` is not provided (though `--repo` is always required for `run`)
 
 ## Environment Variables
@@ -353,7 +351,6 @@ All configuration values can be set via environment variables with the `AGENTIUM
 | `AGENTIUM_CLOUD_PROVIDER` | `cloud.provider` |
 | `AGENTIUM_CLOUD_REGION` | `cloud.region` |
 | `AGENTIUM_CLOUD_PROJECT` | `cloud.project` |
-| `AGENTIUM_DEFAULTS_MAX_ITERATIONS` | `defaults.max_iterations` |
 | `AGENTIUM_DEFAULTS_MAX_DURATION` | `defaults.max_duration` |
 | `AGENTIUM_ROUTING_DEFAULT_ADAPTER` | `routing.default.adapter` |
 | `AGENTIUM_CLAUDE_AUTH_MODE` | `claude.auth_mode` |
@@ -437,7 +434,6 @@ cloud:
   disk_size_gb: 100
 
 defaults:
-  max_iterations: 50
   max_duration: "4h"
 
 claude:
@@ -474,7 +470,6 @@ cloud:
   disk_size_gb: 30
 
 defaults:
-  max_iterations: 20
   max_duration: "1h"
 
 routing:

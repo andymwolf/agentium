@@ -252,8 +252,6 @@ cloud:
   disk_size_gb: 50
 
 defaults:
-  agent: "claude-code"
-  max_iterations: 30
   max_duration: "2h"
 
 phase_loop:

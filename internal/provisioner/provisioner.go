@@ -73,7 +73,6 @@ type SessionConfig struct {
 	Repository    string                `json:"repository"`
 	Tasks         []string              `json:"tasks"`
 	Agent         string                `json:"agent"`
-	MaxIterations int                   `json:"max_iterations"`
 	MaxDuration   string                `json:"max_duration"`
 	Prompt        string                `json:"prompt"`
 	PromptContext *PromptContext        `json:"prompt_context,omitempty"` // Context for template variable substitution
@@ -153,7 +152,6 @@ type SessionStatus struct {
 	StartTime        time.Time
 	EndTime          time.Time
 	CurrentIteration int
-	MaxIterations    int
 	CompletedTasks   []string
 	PendingTasks     []string
 	LastError        string

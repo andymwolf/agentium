@@ -54,7 +54,6 @@ func TestComputeMetadataUpdater_UpdateStatus_AddsNewKey(t *testing.T) {
 
 	status := SessionStatusMetadata{
 		Iteration:      2,
-		MaxIterations:  5,
 		CompletedTasks: []string{"1"},
 		PendingTasks:   []string{"2", "3"},
 	}
@@ -93,9 +92,6 @@ func TestComputeMetadataUpdater_UpdateStatus_AddsNewKey(t *testing.T) {
 	if parsed.Iteration != 2 {
 		t.Errorf("expected iteration 2, got %d", parsed.Iteration)
 	}
-	if parsed.MaxIterations != 5 {
-		t.Errorf("expected max_iterations 5, got %d", parsed.MaxIterations)
-	}
 	if len(parsed.CompletedTasks) != 1 || parsed.CompletedTasks[0] != "1" {
 		t.Errorf("unexpected completed_tasks: %v", parsed.CompletedTasks)
 	}
@@ -105,7 +101,7 @@ func TestComputeMetadataUpdater_UpdateStatus_AddsNewKey(t *testing.T) {
 }
 
 func TestComputeMetadataUpdater_UpdateStatus_UpdatesExistingKey(t *testing.T) {
-	oldValue := `{"iteration":1,"max_iterations":5,"completed_tasks":[],"pending_tasks":["1","2"]}`
+	oldValue := `{"iteration":1,"completed_tasks":[],"pending_tasks":["1","2"]}`
 	mock := &mockMetadataAPI{
 		getInstance: func(ctx context.Context, project, zone, instance string) (*compute.Instance, error) {
 			return &compute.Instance{
@@ -126,7 +122,6 @@ func TestComputeMetadataUpdater_UpdateStatus_UpdatesExistingKey(t *testing.T) {
 
 	status := SessionStatusMetadata{
 		Iteration:      3,
-		MaxIterations:  5,
 		CompletedTasks: []string{"1", "2"},
 		PendingTasks:   []string{},
 	}
@@ -198,7 +193,7 @@ func TestComputeMetadataUpdater_UpdateStatus_SetMetadataError(t *testing.T) {
 
 	updater := NewComputeMetadataUpdaterWithAPI(mock, "test-project", "us-central1-a", "test-instance")
 
-	err := updater.UpdateStatus(context.Background(), SessionStatusMetadata{Iteration: 1, MaxIterations: 3})
+	err := updater.UpdateStatus(context.Background(), SessionStatusMetadata{Iteration: 1})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -223,7 +218,6 @@ func TestComputeMetadataUpdater_UpdateStatus_JSONFields(t *testing.T) {
 
 	status := SessionStatusMetadata{
 		Iteration:      4,
-		MaxIterations:  10,
 		CompletedTasks: []string{"issue:5", "pr:12"},
 		PendingTasks:   []string{"issue:7"},
 	}
@@ -240,7 +234,7 @@ func TestComputeMetadataUpdater_UpdateStatus_JSONFields(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	expectedKeys := []string{"iteration", "max_iterations", "completed_tasks", "pending_tasks"}
+	expectedKeys := []string{"iteration", "completed_tasks", "pending_tasks"}
 	for _, key := range expectedKeys {
 		if _, ok := m[key]; !ok {
 			t.Errorf("missing expected JSON key %q", key)
@@ -249,9 +243,6 @@ func TestComputeMetadataUpdater_UpdateStatus_JSONFields(t *testing.T) {
 
 	if m["iteration"].(float64) != 4 {
 		t.Errorf("expected iteration 4, got %v", m["iteration"])
-	}
-	if m["max_iterations"].(float64) != 10 {
-		t.Errorf("expected max_iterations 10, got %v", m["max_iterations"])
 	}
 }
 

@@ -43,7 +43,6 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		Tasks:          c.config.Tasks,
 		WorkDir:        c.workDir,
 		GitHubToken:    c.gitHubToken,
-		MaxIterations:  1,
 		MaxDuration:    c.config.MaxDuration,
 		Prompt:         reviewPrompt,
 		Metadata:       make(map[string]string),

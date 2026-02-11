@@ -23,7 +23,6 @@ type MetadataUpdater interface {
 // instance metadata key. It matches the format parsed by the provisioner.
 type SessionStatusMetadata struct {
 	Iteration      int      `json:"iteration"`
-	MaxIterations  int      `json:"max_iterations"`
 	CompletedTasks []string `json:"completed_tasks"`
 	PendingTasks   []string `json:"pending_tasks"`
 }
