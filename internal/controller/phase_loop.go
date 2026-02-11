@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
+	"github.com/andywolf/agentium/internal/observability"
 )
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
@@ -386,6 +388,36 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
+	// Start Langfuse trace for this task
+	traceCtx := c.tracer.StartTrace(taskID, observability.TraceOptions{
+		Workflow:   "phase_loop",
+		Repository: c.config.Repository,
+		SessionID:  c.config.ID,
+	})
+	var totalInputTokens, totalOutputTokens int
+	traceStatus := "error" // default status if function exits unexpectedly
+
+	// Track active phase span for deferred cleanup on early returns
+	var activeSpanCtx observability.SpanContext
+	var activePhaseStart time.Time
+	var hasActiveSpan bool
+
+	endActiveSpan := func(status string) {
+		if hasActiveSpan {
+			c.tracer.EndPhase(activeSpanCtx, status, time.Since(activePhaseStart).Milliseconds())
+			hasActiveSpan = false
+		}
+	}
+
+	defer func() {
+		endActiveSpan("interrupted")
+		c.tracer.CompleteTrace(traceCtx, observability.CompleteOptions{
+			Status:            traceStatus,
+			TotalInputTokens:  totalInputTokens,
+			TotalOutputTokens: totalOutputTokens,
+		})
+	}()
+
 	// Initialize handoff store with issue context if enabled
 	if c.isHandoffEnabled() {
 		issueCtx := c.buildIssueContext()
@@ -399,6 +431,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
+			traceStatus = "cancelled"
 			return ctx.Err()
 		default:
 		}
@@ -417,6 +450,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				}
 			}
 			c.logInfo("Phase loop: reached terminal phase %s", currentPhase)
+			traceStatus = string(currentPhase)
 			return nil
 		}
 
@@ -426,6 +460,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		// finalizeDraftPR() can run.
 		if c.shouldTerminate() {
 			c.logInfo("Phase loop: global termination condition met")
+			traceStatus = "terminated"
 			return nil
 		}
 
@@ -452,17 +487,26 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
 
+		// Start Langfuse span for this phase
+		activePhaseStart = time.Now()
+		activeSpanCtx = c.tracer.StartPhase(traceCtx, string(currentPhase), observability.SpanOptions{
+			MaxIterations: maxIter,
+		})
+		hasActiveSpan = true
+
 		// Inner loop: iterate within the current phase
 		advanced := false
 		noSignalCount := 0
 		for iter := 1; iter <= maxIter; iter++ {
 			select {
 			case <-ctx.Done():
+				traceStatus = "cancelled"
 				return ctx.Err()
 			default:
 			}
 
 			if c.shouldTerminate() {
+				traceStatus = "terminated"
 				return nil
 			}
 
@@ -471,6 +515,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			if err := c.refreshGitHubTokenIfNeeded(); err != nil {
 				c.logError("Phase %s: failed to refresh GitHub token: %v", currentPhase, err)
 				state.Phase = PhaseBlocked
+				traceStatus = "blocked"
 				return fmt.Errorf("failed to refresh GitHub token: %w", err)
 			}
 
@@ -504,6 +549,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					c.logError("Phase %s iteration %d failed: %v", currentPhase, iter, err)
 					continue
 				}
+
+				// Record Worker generation in Langfuse
+				c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
+					Name:         "Worker",
+					Model:        c.config.Agent,
+					InputTokens:  result.InputTokens,
+					OutputTokens: result.OutputTokens,
+					Status:       "completed",
+				})
+				totalInputTokens += result.InputTokens
+				totalOutputTokens += result.OutputTokens
 
 				// Full output for internal processing (handoff parsing, judge context)
 				phaseOutput = result.RawTextContent
@@ -672,6 +728,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Check if reviewer should be skipped (skip=true takes precedence over skip_on)
 			if skipReviewer, skipReason := c.shouldSkipReviewer(phaseOutput, taskID); skipReviewer {
 				c.logInfo("Phase %s: reviewer skip condition met (%s), skipping review/judge (auto-advance)", currentPhase, skipReason)
+				c.tracer.RecordSkipped(activeSpanCtx, "Reviewer", skipReason)
+				c.tracer.RecordSkipped(activeSpanCtx, "Judge", "reviewer_skipped")
 				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
 					fmt.Sprintf("Reviewer skip condition (%s) met — skipping review (auto-advance)", skipReason))
 
@@ -714,6 +772,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
+			// Record Reviewer generation in Langfuse
+			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
+				Name:         "Reviewer",
+				Model:        c.config.Agent,
+				InputTokens:  reviewResult.InputTokens,
+				OutputTokens: reviewResult.OutputTokens,
+				Status:       "completed",
+			})
+			totalInputTokens += reviewResult.InputTokens
+			totalOutputTokens += reviewResult.OutputTokens
+
 			// Post reviewer feedback to appropriate location (filtered for readability)
 			reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
 			reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
@@ -728,6 +797,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Check if judge should be skipped (skip=true takes precedence over skip_on)
 			if skipJudge, skipReason := c.shouldSkipJudge(phaseOutput, taskID); skipJudge {
 				c.logInfo("Phase %s: judge skip condition met (%s), skipping judge (auto-advance)", currentPhase, skipReason)
+				c.tracer.RecordSkipped(activeSpanCtx, "Judge", skipReason)
 				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
 					fmt.Sprintf("Judge skip condition (%s) met — skipping judge (auto-advance)", skipReason))
 
@@ -755,6 +825,17 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
 				judgeResult = JudgeResult{Verdict: VerdictAdvance}
 			}
+
+			// Record Judge generation in Langfuse
+			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
+				Name:         "Judge",
+				Model:        c.config.Agent,
+				InputTokens:  judgeResult.InputTokens,
+				OutputTokens: judgeResult.OutputTokens,
+				Status:       "completed",
+			})
+			totalInputTokens += judgeResult.InputTokens
+			totalOutputTokens += judgeResult.OutputTokens
 
 			// Track consecutive no-signal count for fail-closed behavior
 			if !judgeResult.SignalFound {
@@ -837,6 +918,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				if prNumber := c.getPRNumberForTask(); prNumber != "" {
 					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
 				}
+				endActiveSpan("blocked")
+				traceStatus = "blocked"
 				return nil
 			}
 
@@ -869,6 +952,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.memoryStore.ClearByType(memory.EvalFeedback)
 			}
 		}
+
+		// End phase span in Langfuse
+		phaseStatus := "completed"
+		if !advanced {
+			phaseStatus = "exhausted"
+		}
+		endActiveSpan(phaseStatus)
 
 		// Move to next phase
 		nextPhase := c.advancePhase(currentPhase)

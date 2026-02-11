@@ -11,6 +11,7 @@ Welcome to the Agentium documentation. This directory contains comprehensive gui
 | [CLI Reference](cli-reference.md) | All commands, flags, and usage examples |
 | [Cloud Setup Guides](cloud-setup/) | Provider-specific setup instructions |
 | [GitHub App Setup](github-app-setup.md) | Creating and configuring a GitHub App |
+| [Langfuse Setup](langfuse-setup.md) | Langfuse observability tracing for sessions |
 | [Troubleshooting](troubleshooting.md) | Common issues, error messages, and solutions |
 
 ## Cloud Provider Guides

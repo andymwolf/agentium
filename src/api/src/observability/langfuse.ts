@@ -1,3 +1,4 @@
+import { Langfuse } from 'langfuse';
 import type {
   TracerConfig,
   LangfuseClient,
@@ -12,31 +13,105 @@ import type {
 } from './types.js';
 
 /**
- * Create a Langfuse client instance
+ * Create a Langfuse client instance using the real Langfuse SDK.
  *
- * In production, this would use the actual Langfuse SDK.
- * For now, this provides a type-safe wrapper that can be swapped out
- * once the langfuse package is added as a dependency.
+ * When observability is disabled or keys are missing, returns a no-op client.
  *
  * @param config - The tracer configuration
- * @returns A Langfuse client instance
+ * @returns A LangfuseClient adapter wrapping the real SDK
  */
 export function createLangfuseClient(config: TracerConfig): LangfuseClient {
-  // If observability is disabled, return a no-op client
-  if (config.enabled === false) {
+  if (config.enabled === false || !config.publicKey || !config.secretKey) {
     return createNoOpClient();
   }
 
-  // In a real implementation, this would initialize the Langfuse SDK:
-  // import { Langfuse } from 'langfuse';
-  // return new Langfuse({
-  //   publicKey: config.publicKey,
-  //   secretKey: config.secretKey,
-  //   baseUrl: config.baseUrl,
-  // });
+  const langfuse = new Langfuse({
+    publicKey: config.publicKey,
+    secretKey: config.secretKey,
+    baseUrl: config.baseUrl,
+  });
 
-  // For now, return a mock implementation for testing
-  return createMockClient();
+  return createSdkAdapter(langfuse);
+}
+
+/**
+ * Wrap the real Langfuse SDK instance as our LangfuseClient interface.
+ */
+function createSdkAdapter(langfuse: Langfuse): LangfuseClient {
+  return {
+    trace(options: LangfuseTraceOptions): LangfuseTrace {
+      const traceClient = langfuse.trace({
+        id: options.id,
+        name: options.name,
+        metadata: options.metadata,
+      });
+
+      return createTraceAdapter(traceClient);
+    },
+    async flush(): Promise<void> {
+      await langfuse.flushAsync();
+    },
+  };
+}
+
+/**
+ * Adapt a LangfuseTraceClient to our LangfuseTrace interface.
+ */
+function createTraceAdapter(
+  traceClient: ReturnType<Langfuse['trace']>
+): LangfuseTrace {
+  return {
+    get id(): string {
+      return traceClient.id;
+    },
+    span(options: LangfuseSpanOptions): LangfuseSpan {
+      const spanClient = traceClient.span({
+        name: options.name,
+        metadata: options.metadata,
+      });
+      return createSpanAdapter(spanClient);
+    },
+    update(options: LangfuseUpdateOptions): void {
+      traceClient.update({
+        output: options.output,
+        metadata: options.metadata,
+      });
+    },
+  };
+}
+
+/**
+ * Adapt a LangfuseSpanClient to our LangfuseSpan interface.
+ */
+function createSpanAdapter(
+  spanClient: ReturnType<ReturnType<Langfuse['trace']>['span']>
+): LangfuseSpan {
+  return {
+    get id(): string {
+      return spanClient.id;
+    },
+    generation(options: LangfuseGenerationOptions): void {
+      spanClient.generation({
+        name: options.name,
+        model: options.model,
+        input: options.input,
+        output: options.output,
+        usage: options.usage,
+        metadata: options.metadata,
+      });
+    },
+    event(options: LangfuseEventOptions): void {
+      spanClient.event({
+        name: options.name,
+        metadata: options.metadata,
+      });
+    },
+    end(options?: LangfuseEndOptions): void {
+      spanClient.end({
+        metadata: options?.metadata,
+      });
+    },
+  };
 }
 
 /**

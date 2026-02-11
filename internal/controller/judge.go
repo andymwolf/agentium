@@ -21,9 +21,11 @@ const (
 
 // JudgeResult holds the parsed judge verdict and feedback.
 type JudgeResult struct {
-	Verdict     JudgeVerdict
-	Feedback    string
-	SignalFound bool // Whether the AGENTIUM_EVAL signal was found in output
+	Verdict      JudgeVerdict
+	Feedback     string
+	SignalFound  bool // Whether the AGENTIUM_EVAL signal was found in output
+	InputTokens  int  // Input tokens consumed by the judge
+	OutputTokens int  // Output tokens consumed by the judge
 }
 
 // judgeRunParams holds parameters for running a judge agent.
@@ -167,6 +169,8 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 		parseSource = result.Summary
 	}
 	judgeResult := parseJudgeVerdict(parseSource)
+	judgeResult.InputTokens = result.InputTokens
+	judgeResult.OutputTokens = result.OutputTokens
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
 
 	// On ITERATE, store both reviewer feedback and judge directive in memory for the worker.

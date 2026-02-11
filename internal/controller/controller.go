@@ -25,6 +25,7 @@ import (
 	"github.com/andywolf/agentium/internal/github"
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
+	"github.com/andywolf/agentium/internal/observability"
 	"github.com/andywolf/agentium/internal/prompt"
 	"github.com/andywolf/agentium/internal/routing"
 	"github.com/andywolf/agentium/internal/scope"
@@ -280,6 +281,7 @@ type Controller struct {
 	orchestrator           *SubTaskOrchestrator    // Sub-task delegation orchestrator (nil = disabled)
 	metadataUpdater        gcp.MetadataUpdater     // Instance metadata updater (nil if unavailable)
 	eventSink              *event.FileSink         // Local JSONL event sink (nil = disabled)
+	tracer                 observability.Tracer    // Langfuse observability tracer (never nil; NoOpTracer if disabled)
 
 	// Monorepo support
 	packagePath    string                // Current package path for monorepo scope (empty if not monorepo)
@@ -379,7 +381,11 @@ func New(config SessionConfig) (*Controller, error) {
 		metadataUpdater:  metadataUpdater,
 		shutdownCh:       make(chan struct{}),
 		trackerSubIssues: make(map[string][]string),
+		tracer:           &observability.NoOpTracer{},
 	}
+
+	// Initialize Langfuse tracer if configured via environment variables
+	c.initTracer(logger)
 
 	// Initialize task states and build task queue
 	initialIssuePhase := PhaseImplement
@@ -510,6 +516,37 @@ func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentNam
 		result.InputTokens, result.OutputTokens, result.InputTokens+result.OutputTokens)
 
 	c.cloudLogger.LogWithLabels(gcp.SeverityInfo, msg, labels)
+}
+
+// initTracer initializes the Langfuse observability tracer from environment variables.
+// If LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are set (and LANGFUSE_ENABLED is not "false"),
+// a LangfuseTracer is created. Otherwise the default NoOpTracer is kept.
+func (c *Controller) initTracer(logger *log.Logger) {
+	publicKey := os.Getenv("LANGFUSE_PUBLIC_KEY")
+	secretKey := os.Getenv("LANGFUSE_SECRET_KEY")
+
+	if publicKey == "" || secretKey == "" {
+		return
+	}
+
+	if os.Getenv("LANGFUSE_ENABLED") == "false" {
+		logger.Printf("Langfuse: disabled via LANGFUSE_ENABLED=false")
+		return
+	}
+
+	baseURL := os.Getenv("LANGFUSE_BASE_URL")
+
+	lt := observability.NewLangfuseTracer(observability.LangfuseConfig{
+		PublicKey: publicKey,
+		SecretKey: secretKey,
+		BaseURL:   baseURL,
+	}, logger)
+
+	c.tracer = lt
+	c.AddShutdownHook(func(ctx context.Context) error {
+		return c.tracer.Stop(ctx)
+	})
+	logger.Printf("Langfuse: tracer initialized (base_url=%s)", lt.BaseURL())
 }
 
 // AddShutdownHook registers a function to be called during graceful shutdown.

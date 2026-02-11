@@ -300,8 +300,49 @@ gcloud compute ssh INSTANCE_NAME \
   --command="cat /var/log/cloud-init-output.log"
 ```
 
+## Langfuse Integration
+
+To enable Langfuse observability tracing on session VMs, set the Langfuse API keys as environment variables. The controller reads these at startup and sends traces automatically.
+
+### Option A: Environment Variables via Startup Script
+
+Add the keys to the VM metadata startup script in your Terraform configuration (`terraform/modules/vm/main.tf`):
+
+```bash
+export LANGFUSE_PUBLIC_KEY="pk-lf-your-public-key"
+export LANGFUSE_SECRET_KEY="sk-lf-your-secret-key"
+```
+
+### Option B: GCP Secret Manager (Recommended for Production)
+
+Store the keys in Secret Manager alongside your other secrets:
+
+```bash
+# Create secrets
+echo -n "pk-lf-your-public-key" | \
+  gcloud secrets versions add langfuse-public-key --data-file=-
+echo -n "sk-lf-your-secret-key" | \
+  gcloud secrets versions add langfuse-secret-key --data-file=-
+```
+
+Then fetch them in the VM startup script:
+
+```bash
+export LANGFUSE_PUBLIC_KEY=$(gcloud secrets versions access latest \
+  --secret="langfuse-public-key" --project="$PROJECT_ID")
+export LANGFUSE_SECRET_KEY=$(gcloud secrets versions access latest \
+  --secret="langfuse-secret-key" --project="$PROJECT_ID")
+```
+
+### Verifying Traces
+
+After running a session, open your [Langfuse Cloud dashboard](https://cloud.langfuse.com) and navigate to **Traces**. Each task appears as a trace with phase spans and W/R/J generations nested underneath.
+
+For the full setup guide, see [Langfuse Setup](../langfuse-setup.md).
+
 ## Next Steps
 
 - [Configuration Reference](../configuration.md) - Full config options
 - [CLI Reference](../cli-reference.md) - Command documentation
+- [Langfuse Setup](../langfuse-setup.md) - Langfuse observability tracing
 - [Troubleshooting](../troubleshooting.md) - General troubleshooting
