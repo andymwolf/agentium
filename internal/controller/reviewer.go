@@ -61,6 +61,7 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 			Phase:        skillPhase,
 			SkillsPrompt: reviewerPrompt,
 		}
+		c.logInfo("Using API-provided reviewer prompt for phase %s", params.CompletedPhase)
 	} else if c.skillSelector != nil {
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,

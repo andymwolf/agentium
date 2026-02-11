@@ -103,6 +103,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 			Phase:        skillPhase,
 			SkillsPrompt: judgeCriteria,
 		}
+		c.logInfo("Using API-provided judge criteria for phase %s", params.CompletedPhase)
 	} else if c.skillSelector != nil {
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
