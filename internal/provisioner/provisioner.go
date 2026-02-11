@@ -68,26 +68,27 @@ type PromptContext struct {
 
 // SessionConfig contains the session configuration to pass to the VM
 type SessionConfig struct {
-	ID            string                `json:"id"`
-	CloudProvider string                `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
-	Repository    string                `json:"repository"`
-	Tasks         []string              `json:"tasks"`
-	Agent         string                `json:"agent"`
-	MaxDuration   string                `json:"max_duration"`
-	Prompt        string                `json:"prompt"`
-	PromptContext *PromptContext        `json:"prompt_context,omitempty"` // Context for template variable substitution
-	GitHub        GitHubConfig          `json:"github"`
-	ClaudeAuth    ClaudeAuthConfig      `json:"claude_auth"`
-	CodexAuth     CodexAuthConfig       `json:"codex_auth,omitempty"`
-	Credentials   *Credentials          `json:"credentials,omitempty"` // Injected OAuth credentials for LLM providers
-	Routing       *routing.PhaseRouting `json:"routing,omitempty"`
-	Delegation    *ProvDelegationConfig `json:"delegation,omitempty"`
-	PhaseLoop     *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
-	Fallback      *ProvFallbackConfig   `json:"fallback,omitempty"`
-	Phases        []ProvPhaseStepConfig `json:"phases,omitempty"`
-	AutoMerge     bool                  `json:"auto_merge,omitempty"`
-	Langfuse      *ProvLangfuseConfig   `json:"langfuse,omitempty"`
-	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
+	ID             string                `json:"id"`
+	CloudProvider  string                `json:"cloud_provider,omitempty"` // Cloud provider (gcp, aws, azure)
+	Repository     string                `json:"repository"`
+	Tasks          []string              `json:"tasks"`
+	Agent          string                `json:"agent"`
+	MaxDuration    string                `json:"max_duration"`
+	Prompt         string                `json:"prompt"`
+	PromptContext  *PromptContext        `json:"prompt_context,omitempty"` // Context for template variable substitution
+	GitHub         GitHubConfig          `json:"github"`
+	ClaudeAuth     ClaudeAuthConfig      `json:"claude_auth"`
+	CodexAuth      CodexAuthConfig       `json:"codex_auth,omitempty"`
+	Credentials    *Credentials          `json:"credentials,omitempty"` // Injected OAuth credentials for LLM providers
+	Routing        *routing.PhaseRouting `json:"routing,omitempty"`
+	Delegation     *ProvDelegationConfig `json:"delegation,omitempty"`
+	PhaseLoop      *ProvPhaseLoopConfig  `json:"phase_loop,omitempty"`
+	Fallback       *ProvFallbackConfig   `json:"fallback,omitempty"`
+	Phases         []ProvPhaseStepConfig `json:"phases,omitempty"`
+	AutoMerge      bool                  `json:"auto_merge,omitempty"`
+	ContainerReuse bool                  `json:"container_reuse,omitempty"`
+	Langfuse       *ProvLangfuseConfig   `json:"langfuse,omitempty"`
+	Monorepo       *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
 
 // SubAgentConfig specifies agent overrides for a delegated sub-task type.

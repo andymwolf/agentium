@@ -51,6 +51,7 @@ func init() {
 	runCmd.Flags().StringSlice("phase-model", nil, "Per-phase model override (format: PHASE=adapter:model)")
 	runCmd.Flags().Bool("local", false, "Run locally for interactive debugging (no VM provisioning)")
 	runCmd.Flags().Bool("auto-merge", false, "Automatically merge PR after CI checks pass")
+	runCmd.Flags().Bool("container-reuse", false, "Reuse long-lived containers across iterations within a phase")
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -59,6 +60,7 @@ func init() {
 	_ = viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
 	_ = viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
 	_ = viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
+	_ = viper.BindPFlag("defaults.container_reuse", runCmd.Flags().Lookup("container-reuse"))
 }
 
 func runSession(cmd *cobra.Command, args []string) error {
@@ -120,6 +122,10 @@ func runSession(cmd *cobra.Command, args []string) error {
 		autoMerge, _ := cmd.Flags().GetBool("auto-merge")
 		cfg.Session.AutoMerge = autoMerge
 	}
+	if cmd.Flags().Changed("container-reuse") {
+		containerReuse, _ := cmd.Flags().GetBool("container-reuse")
+		cfg.Session.ContainerReuse = containerReuse
+	}
 
 	// Validate configuration after applying CLI flags
 	if err = cfg.ValidateForRun(); err != nil {
@@ -180,14 +186,15 @@ func runSession(cmd *cobra.Command, args []string) error {
 
 	// Build session config for the VM
 	sessionConfig := provisioner.SessionConfig{
-		ID:            sessionID,
-		CloudProvider: cfg.Cloud.Provider,
-		Repository:    cfg.Session.Repository,
-		Tasks:         cfg.Session.Tasks,
-		Agent:         cfg.Session.Agent,
-		MaxDuration:   cfg.Session.MaxDuration,
-		Prompt:        cfg.Session.Prompt,
-		AutoMerge:     cfg.Session.AutoMerge,
+		ID:             sessionID,
+		CloudProvider:  cfg.Cloud.Provider,
+		Repository:     cfg.Session.Repository,
+		Tasks:          cfg.Session.Tasks,
+		Agent:          cfg.Session.Agent,
+		MaxDuration:    cfg.Session.MaxDuration,
+		Prompt:         cfg.Session.Prompt,
+		AutoMerge:      cfg.Session.AutoMerge,
+		ContainerReuse: cfg.Session.ContainerReuse,
 		GitHub: provisioner.GitHubConfig{
 			AppID:            cfg.GitHub.AppID,
 			InstallationID:   cfg.GitHub.InstallationID,

@@ -129,17 +129,19 @@ type CloudConfig struct {
 
 // DefaultsConfig contains default session settings
 type DefaultsConfig struct {
-	MaxDuration string `mapstructure:"max_duration"`
+	MaxDuration    string `mapstructure:"max_duration"`
+	ContainerReuse bool   `mapstructure:"container_reuse"`
 }
 
 // SessionConfig contains per-session settings
 type SessionConfig struct {
-	Repository  string   `mapstructure:"repository"`
-	Tasks       []string `mapstructure:"tasks"`
-	Agent       string   `mapstructure:"agent"`
-	MaxDuration string   `mapstructure:"max_duration"`
-	Prompt      string   `mapstructure:"prompt"`
-	AutoMerge   bool     `mapstructure:"auto_merge"`
+	Repository     string   `mapstructure:"repository"`
+	Tasks          []string `mapstructure:"tasks"`
+	Agent          string   `mapstructure:"agent"`
+	MaxDuration    string   `mapstructure:"max_duration"`
+	Prompt         string   `mapstructure:"prompt"`
+	AutoMerge      bool     `mapstructure:"auto_merge"`
+	ContainerReuse bool     `mapstructure:"container_reuse"`
 }
 
 // ControllerConfig contains session controller settings
@@ -233,6 +235,11 @@ func applyDefaults(cfg *Config) {
 
 	// Phase loop is enabled by default - the config section just customizes iteration counts.
 	// No explicit "enabled" field needed since presence of phase_loop config implies it's enabled.
+
+	// Propagate container reuse default to session
+	if !cfg.Session.ContainerReuse && cfg.Defaults.ContainerReuse {
+		cfg.Session.ContainerReuse = cfg.Defaults.ContainerReuse
+	}
 
 	// Default monorepo label prefix
 	if cfg.Monorepo.LabelPrefix == "" {
