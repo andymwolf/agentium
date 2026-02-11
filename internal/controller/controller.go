@@ -1320,17 +1320,17 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 // Returns an empty string if no external comments exist.
 func formatExternalComments(comments []issueComment) string {
 	var sb strings.Builder
-	for _, c := range comments {
-		if strings.Contains(c.Body, "<!-- agentium:") {
+	for _, comment := range comments {
+		if strings.Contains(comment.Body, "<!-- agentium:") {
 			continue
 		}
-		date := c.CreatedAt
+		date := comment.CreatedAt
 		if len(date) >= 10 {
 			date = date[:10] // trim to YYYY-MM-DD
 		}
 		sb.WriteString(fmt.Sprintf("**@%s** (%s):\n> %s\n\n",
-			c.Author.Login, date,
-			strings.ReplaceAll(strings.TrimSpace(c.Body), "\n", "\n> ")))
+			comment.Author.Login, date,
+			strings.ReplaceAll(strings.TrimSpace(comment.Body), "\n", "\n> ")))
 	}
 	return sb.String()
 }
