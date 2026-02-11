@@ -40,6 +40,50 @@ func (a *Adapter) SupportsPlanMode() bool {
 	return true
 }
 
+// SupportsContinuation indicates Claude Code supports --continue for conversation
+// continuation within long-lived containers.
+func (a *Adapter) SupportsContinuation() bool {
+	return true
+}
+
+// BuildContinueCommand constructs the command for continuation mode.
+// It omits --system-prompt and --append-system-prompt (they carry over from the
+// first invocation) and adds --continue. The incremental feedback is delivered
+// via stdin.
+func (a *Adapter) BuildContinueCommand(session *agent.Session, iteration int) []string {
+	if session.Interactive {
+		// Interactive mode doesn't use continuation
+		return a.BuildCommand(session, iteration)
+	}
+
+	var args []string
+	if session.IterationContext != nil && session.IterationContext.Phase == "PLAN" {
+		args = []string{
+			"--print",
+			"--verbose",
+			"--output-format", "stream-json",
+			"--permission-mode", "plan",
+			"--continue",
+		}
+	} else {
+		args = []string{
+			"--print",
+			"--verbose",
+			"--output-format", "stream-json",
+			"--dangerously-skip-permissions",
+			"--continue",
+		}
+	}
+
+	// Pass model override from routing config
+	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
+		args = append(args, "--model", session.IterationContext.ModelOverride)
+	}
+
+	// No --system-prompt or --append-system-prompt: they carry over from invocation 1
+	return args
+}
+
 // BuildEnv constructs environment variables for the Claude Code container
 func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]string {
 	authMode := session.ClaudeAuthMode

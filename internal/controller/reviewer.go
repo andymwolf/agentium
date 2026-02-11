@@ -115,14 +115,24 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	c.logInfo("Running reviewer for phase %s (iteration %d/%d): adapter=%s model=%s",
 		params.CompletedPhase, params.Iteration, params.MaxIterations, activeAgent.Name(), modelName)
 
-	result, err := c.runAgentContainer(ctx, containerRunParams{
+	reviewerParams := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
 		Env:         env,
 		Command:     command,
 		LogTag:      "Reviewer",
 		StdinPrompt: stdinPrompt,
-	})
+	}
+
+	// Use pooled execution if container pool is active
+	var result *agent.IterationResult
+	var err error
+	if c.containerPool != nil && c.containerPool.IsHealthy(RoleReviewerContainer) {
+		c.logInfo("Using pooled execution for Reviewer")
+		result, err = c.runAgentContainerPooled(ctx, RoleReviewerContainer, reviewerParams)
+	} else {
+		result, err = c.runAgentContainer(ctx, reviewerParams)
+	}
 	if err != nil {
 		c.logError("Reviewer container failed for phase %s: %v", params.CompletedPhase, err)
 		return ReviewResult{}, fmt.Errorf("reviewer failed: %w", err)

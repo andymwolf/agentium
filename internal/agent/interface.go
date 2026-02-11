@@ -103,6 +103,20 @@ type StdinPromptProvider interface {
 	GetStdinPrompt(session *Session, iteration int) string
 }
 
+// ContinuationCapable is an optional interface for agents that support conversation
+// continuation within a long-lived container. When supported, the controller can
+// use --continue (or equivalent) to resume the conversation context from a previous
+// invocation, avoiding full prompt reconstruction on iterations 2+.
+type ContinuationCapable interface {
+	// SupportsContinuation returns true if the adapter supports --continue mode.
+	SupportsContinuation() bool
+
+	// BuildContinueCommand constructs the command for continuation mode.
+	// This typically omits --system-prompt and --append-system-prompt (they carry
+	// over from the first invocation) and adds the --continue flag.
+	BuildContinueCommand(session *Session, iteration int) []string
+}
+
 // PlanModeCapable is an optional interface for agents that support plan-only mode.
 // This can be used to signal read-only planning capabilities.
 type PlanModeCapable interface {

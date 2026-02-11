@@ -159,16 +159,17 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Handoff    struct{}              `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
-	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
-	Delegation *DelegationConfig     `json:"delegation,omitempty"`
-	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
-	Fallback   *FallbackConfig       `json:"fallback,omitempty"`
-	Phases     []PhaseStepConfig     `json:"phases,omitempty"`
-	Verbose    bool                  `json:"verbose,omitempty"`
-	AutoMerge  bool                  `json:"auto_merge,omitempty"`
-	Langfuse LangfuseSessionConfig `json:"langfuse,omitempty"`
-	Monorepo *MonorepoSessionConfig `json:"monorepo,omitempty"`
+	Handoff        struct{}               `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
+	Routing        *routing.PhaseRouting  `json:"routing,omitempty"`
+	Delegation     *DelegationConfig      `json:"delegation,omitempty"`
+	PhaseLoop      *PhaseLoopConfig       `json:"phase_loop,omitempty"`
+	Fallback       *FallbackConfig        `json:"fallback,omitempty"`
+	Phases         []PhaseStepConfig      `json:"phases,omitempty"`
+	ContainerReuse bool                   `json:"container_reuse,omitempty"` // Enable long-lived phase containers
+	Verbose        bool                   `json:"verbose,omitempty"`
+	AutoMerge      bool                   `json:"auto_merge,omitempty"`
+	Langfuse       LangfuseSessionConfig  `json:"langfuse,omitempty"`
+	Monorepo       *MonorepoSessionConfig `json:"monorepo,omitempty"`
 }
 
 // PhaseStepConfig defines the configuration for a single phase step.
@@ -297,6 +298,9 @@ type Controller struct {
 
 	// Custom phase step configs (indexed by phase name for O(1) lookup)
 	phaseConfigs map[TaskPhase]*PhaseStepConfig
+
+	// Long-lived container pool for the current phase (nil = one-shot mode)
+	containerPool *ContainerPool
 
 	// Docker container resource limits
 	containerMemLimit uint64 // Docker --memory limit in bytes (0 = no limit)

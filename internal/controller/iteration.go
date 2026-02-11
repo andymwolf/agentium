@@ -165,6 +165,11 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		return c.runAgentContainerInteractive(ctx, params)
 	}
 
+	// Use pooled execution if container pool is active
+	if c.containerPool != nil && c.containerPool.IsHealthy(RoleWorkerContainer) {
+		return c.runIterationPooled(ctx, activeAgent, session, params)
+	}
+
 	execStart := time.Now()
 	result, err := c.runAgentContainer(ctx, params)
 	execDuration := time.Since(execStart)
@@ -193,6 +198,63 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	}
 
 	return result, err
+}
+
+// runIterationPooled executes a worker iteration using the container pool.
+// On iteration 1, uses the full prompt. On iteration 2+, uses continuation mode
+// if the agent supports it (only incremental feedback, --continue flag).
+//
+// Note: adapter fallback (retrying with a different adapter on execution failure)
+// is not replicated in the pooled path. The pooled container is started with a
+// specific adapter image at phase start, so mid-iteration adapter switching is
+// not possible. On pooled exec failure, the pool is marked unhealthy and the
+// next iteration falls back to one-shot execution, which does support fallback.
+func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.Agent, session *agent.Session, params containerRunParams) (*agent.IterationResult, error) {
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	state := c.taskStates[taskID]
+
+	// Check if this is a continuation iteration (2+) with a capable agent
+	if state != nil && state.PhaseIteration > 1 {
+		if cc, ok := activeAgent.(agent.ContinuationCapable); ok && cc.SupportsContinuation() {
+			return c.runIterationContinue(ctx, activeAgent, session, state)
+		}
+	}
+
+	// Iteration 1 or non-continuation-capable: use full prompt via pooled exec
+	c.logInfo("Using pooled execution for Worker (iteration %d)", c.iteration)
+	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
+}
+
+// runIterationContinue executes a worker continuation iteration.
+// It builds only the incremental feedback (reviewer analysis + judge directives)
+// and pipes it via stdin with the --continue flag, preserving the conversation
+// context from the first invocation.
+func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent.Agent, session *agent.Session, state *TaskState) (*agent.IterationResult, error) {
+	c.logInfo("Using continuation mode for Worker (phase iteration %d)", state.PhaseIteration)
+
+	cc, ok := activeAgent.(agent.ContinuationCapable)
+	if !ok {
+		return nil, fmt.Errorf("agent %s does not implement ContinuationCapable", activeAgent.Name())
+	}
+	command := cc.BuildContinueCommand(session, c.iteration)
+
+	// Build incremental feedback as the stdin prompt
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch)
+	if feedbackSection == "" {
+		feedbackSection = fmt.Sprintf("Continue working on the current phase. This is iteration %d.", state.PhaseIteration)
+	}
+
+	params := containerRunParams{
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         activeAgent.BuildEnv(session, c.iteration),
+		Command:     command,
+		LogTag:      "Agent (continue)",
+		StdinPrompt: feedbackSection,
+	}
+
+	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
 }
 
 // buildFallbackParams constructs container run parameters for the fallback adapter.

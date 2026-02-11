@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/observability"
@@ -515,6 +516,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
 
+		// Start long-lived containers for this phase if container reuse is enabled
+		if c.config.ContainerReuse {
+			c.startPhaseContainerPool(ctx, currentPhase)
+		}
+
 		// Start Langfuse span for this phase
 		activePhaseStart = time.Now()
 		activeSpanCtx = c.tracer.StartPhase(traceCtx, string(currentPhase), observability.SpanOptions{
@@ -981,6 +987,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 		}
 
+		// Stop long-lived containers for this phase
+		c.stopPhaseContainerPool(ctx)
+
 		// End phase span in Langfuse
 		phaseStatus := "completed"
 		if !advanced {
@@ -1367,4 +1376,86 @@ func (c *Controller) phaseJudgeCriteria(phase TaskPhase) string {
 		return stepCfg.Judge.Criteria
 	}
 	return ""
+}
+
+// startPhaseContainerPool creates and starts long-lived containers for the
+// given phase. Each role (worker, reviewer, judge) gets its own container
+// with the correct adapter image, environment, and auth mounts based on
+// model routing configuration.
+func (c *Controller) startPhaseContainerPool(ctx context.Context, phase TaskPhase) {
+	pool := NewContainerPool(c.workDir, c.containerMemLimit, c.config.ID, string(phase), c.execCommand, c.logger)
+
+	// Base session for building env
+	session := &agent.Session{
+		ID:             c.config.ID,
+		Repository:     c.config.Repository,
+		GitHubToken:    c.gitHubToken,
+		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
+	}
+
+	// Resolve per-role adapters using the same compound key fallback chains
+	// as reviewer.go and judge.go
+	roles := []ContainerRole{RoleWorkerContainer, RoleReviewerContainer, RoleJudgeContainer}
+	for _, role := range roles {
+		roleAgent := c.resolveAgentForRole(phase, role)
+
+		c.ensureGHCRAuth(ctx, roleAgent.ContainerImage())
+
+		env := roleAgent.BuildEnv(session, 0)
+		authMounts := c.buildAuthMounts(roleAgent)
+
+		if _, err := pool.Start(ctx, role, roleAgent.ContainerImage(), env, authMounts); err != nil {
+			c.logWarning("Failed to start pooled container for role %s: %v (falling back to one-shot)", role, err)
+			pool.StopAll(ctx)
+			return
+		}
+	}
+
+	c.containerPool = pool
+	c.logInfo("Container pool started for phase %s (3 containers)", phase)
+}
+
+// stopPhaseContainerPool stops and removes all containers in the current pool.
+func (c *Controller) stopPhaseContainerPool(ctx context.Context) {
+	if c.containerPool == nil {
+		return
+	}
+	c.containerPool.StopAll(ctx)
+	c.containerPool = nil
+	c.logInfo("Container pool stopped")
+}
+
+// resolveAgentForRole returns the agent adapter to use for a given phase and
+// container role, using the same compound key fallback chains as reviewer.go
+// and judge.go:
+//   - Worker:   {PHASE} → default
+//   - Reviewer: {PHASE}_REVIEW → REVIEW → default
+//   - Judge:    {PHASE}_JUDGE  → JUDGE  → default
+func (c *Controller) resolveAgentForRole(phase TaskPhase, role ContainerRole) agent.Agent {
+	if c.modelRouter == nil || !c.modelRouter.IsConfigured() {
+		return c.agent
+	}
+
+	phaseStr := string(phase)
+	var modelCfg = c.modelRouter.ModelForPhase(phaseStr) // Worker default
+
+	switch role {
+	case RoleReviewerContainer:
+		modelCfg = c.modelRouter.ModelForPhase(fmt.Sprintf("%s_REVIEW", phaseStr))
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase("REVIEW")
+		}
+	case RoleJudgeContainer:
+		modelCfg = c.modelRouter.ModelForPhase(fmt.Sprintf("%s_JUDGE", phaseStr))
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase("JUDGE")
+		}
+	}
+
+	if modelCfg.Adapter != "" {
+		if a, ok := c.adapters[modelCfg.Adapter]; ok {
+			return a
+		}
+	}
+	return c.agent
 }

@@ -23,17 +23,7 @@ import (
 // - Attaches stdin/stdout/stderr directly to the process
 // - Returns a basic result based on exit code (structured output cannot be parsed)
 func (c *Controller) runAgentContainerInteractive(ctx context.Context, params containerRunParams) (*agent.IterationResult, error) {
-	// Authenticate with GHCR if needed (once per session)
-	if !c.dockerAuthed && strings.Contains(params.Agent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
-		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
-			"-u", "x-access-token", "--password-stdin")
-		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
-		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
-		} else {
-			c.dockerAuthed = true
-		}
-	}
+	c.ensureGHCRAuth(ctx, params.Agent.ContainerImage())
 
 	// Build Docker arguments for interactive mode
 	args := []string{
@@ -57,25 +47,8 @@ func (c *Controller) runAgentContainerInteractive(ctx context.Context, params co
 		}
 	}
 
-	// Mount Claude OAuth credentials if configured
-	if c.config.ClaudeAuth.AuthMode == "oauth" {
-		authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
-		if err != nil {
-			c.logWarning("failed to write Claude auth file: %v", err)
-		} else if authPath != "" {
-			args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
-		}
-	}
-
-	// Mount Codex OAuth credentials if configured
-	if c.config.CodexAuth.AuthJSONBase64 != "" {
-		authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
-		if err != nil {
-			c.logWarning("failed to write Codex auth file: %v", err)
-		} else if authPath != "" {
-			args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
-		}
-	}
+	// Mount OAuth credentials for the active adapter
+	args = append(args, c.buildAuthMounts(params.Agent)...)
 
 	args = append(args, params.Agent.ContainerImage())
 	args = append(args, params.Command...)
