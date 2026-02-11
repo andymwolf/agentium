@@ -86,6 +86,7 @@ type SessionConfig struct {
 	Fallback      *ProvFallbackConfig   `json:"fallback,omitempty"`
 	Phases        []ProvPhaseStepConfig `json:"phases,omitempty"`
 	AutoMerge     bool                  `json:"auto_merge,omitempty"`
+	Langfuse      *ProvLangfuseConfig   `json:"langfuse,omitempty"`
 	Monorepo      *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }
 
@@ -140,6 +141,13 @@ type ProvStepPromptConfig struct {
 // ProvJudgePromptConfig contains override criteria for a judge step.
 type ProvJudgePromptConfig struct {
 	Criteria string `json:"criteria"`
+}
+
+// ProvLangfuseConfig contains Langfuse observability settings for provisioned sessions.
+type ProvLangfuseConfig struct {
+	PublicKeySecret string `json:"public_key_secret,omitempty"` // GCP Secret Manager path for public key
+	SecretKeySecret string `json:"secret_key_secret,omitempty"` // GCP Secret Manager path for secret key
+	BaseURL         string `json:"base_url,omitempty"`          // Langfuse API base URL
 }
 
 // ProvFallbackConfig controls adapter execution fallback for provisioned sessions.

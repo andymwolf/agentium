@@ -159,15 +159,20 @@ type SessionConfig struct {
 		MaxEntries    int  `json:"max_entries,omitempty"`
 		ContextBudget int  `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
-	Handoff    struct{}               `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
-	Routing    *routing.PhaseRouting  `json:"routing,omitempty"`
-	Delegation *DelegationConfig      `json:"delegation,omitempty"`
-	PhaseLoop  *PhaseLoopConfig       `json:"phase_loop,omitempty"`
-	Fallback   *FallbackConfig        `json:"fallback,omitempty"`
-	Phases     []PhaseStepConfig      `json:"phases,omitempty"`
-	Verbose    bool                   `json:"verbose,omitempty"`
-	AutoMerge  bool                   `json:"auto_merge,omitempty"`
-	Monorepo   *MonorepoSessionConfig `json:"monorepo,omitempty"`
+	Handoff    struct{}              `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
+	Routing    *routing.PhaseRouting `json:"routing,omitempty"`
+	Delegation *DelegationConfig     `json:"delegation,omitempty"`
+	PhaseLoop  *PhaseLoopConfig      `json:"phase_loop,omitempty"`
+	Fallback   *FallbackConfig       `json:"fallback,omitempty"`
+	Phases     []PhaseStepConfig     `json:"phases,omitempty"`
+	Verbose    bool                  `json:"verbose,omitempty"`
+	AutoMerge  bool                  `json:"auto_merge,omitempty"`
+	Langfuse   struct {
+		PublicKeySecret string `json:"public_key_secret,omitempty"`
+		SecretKeySecret string `json:"secret_key_secret,omitempty"`
+		BaseURL         string `json:"base_url,omitempty"`
+	} `json:"langfuse,omitempty"`
+	Monorepo *MonorepoSessionConfig `json:"monorepo,omitempty"`
 }
 
 // PhaseStepConfig defines the configuration for a single phase step.
@@ -396,9 +401,6 @@ func New(config SessionConfig) (*Controller, error) {
 		tracer:          &observability.NoOpTracer{},
 	}
 
-	// Initialize Langfuse tracer if configured via environment variables
-	c.initTracer(logger)
-
 	// Build phaseConfigs map from Phases slice for O(1) lookup
 	if len(config.Phases) > 0 {
 		if err := validatePhases(config.Phases); err != nil {
@@ -552,6 +554,9 @@ func (c *Controller) initSession(ctx context.Context) error {
 	if err := c.fetchGitHubToken(ctx); err != nil {
 		return fmt.Errorf("failed to fetch GitHub token: %w", err)
 	}
+
+	// Initialize Langfuse tracer (env vars or Secret Manager)
+	c.initTracer(ctx, c.logger)
 
 	// Pre-pull agent container images to avoid first-iteration latency
 	c.prePullAgentImages(ctx)

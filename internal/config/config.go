@@ -64,6 +64,14 @@ type CodexConfig struct {
 	AuthJSONPath string `mapstructure:"auth_json_path"` // Path to auth.json (default: ~/.codex/auth.json)
 }
 
+// LangfuseConfig contains Langfuse observability settings.
+// Secret paths refer to GCP Secret Manager resource names used on VMs.
+type LangfuseConfig struct {
+	PublicKeySecret string `mapstructure:"public_key_secret"` // GCP Secret Manager path for Langfuse public key
+	SecretKeySecret string `mapstructure:"secret_key_secret"` // GCP Secret Manager path for Langfuse secret key
+	BaseURL         string `mapstructure:"base_url"`          // Langfuse API base URL (default: https://cloud.langfuse.com)
+}
+
 // MonorepoConfig contains monorepo-specific settings for pnpm workspaces
 type MonorepoConfig struct {
 	Enabled     bool                `mapstructure:"enabled"`      // Set by agentium init when pnpm-workspace.yaml is detected
@@ -85,6 +93,7 @@ type Config struct {
 	Delegation DelegationConfigYAML  `mapstructure:"delegation"`
 	PhaseLoop  PhaseLoopConfig       `mapstructure:"phase_loop"`
 	Phases     []PhaseStepConfigYAML `mapstructure:"phases"`
+	Langfuse   LangfuseConfig        `mapstructure:"langfuse"`
 	Monorepo   MonorepoConfig        `mapstructure:"monorepo"`
 }
 
