@@ -34,6 +34,9 @@ func TestNoOpTracer(t *testing.T) {
 	if err := tracer.Flush(context.Background()); err != nil {
 		t.Errorf("NoOpTracer.Flush() returned error: %v", err)
 	}
+	if err := tracer.Stop(context.Background()); err != nil {
+		t.Errorf("NoOpTracer.Stop() returned error: %v", err)
+	}
 }
 
 func TestNoOpTracerInterface(t *testing.T) {
@@ -131,14 +134,9 @@ func TestLangfuseTracerSendsBatches(t *testing.T) {
 		TotalOutputTokens: 350,
 	})
 
-	// Flush to send remaining events
+	// Stop flushes remaining events and shuts down the background goroutine
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := tracer.Flush(ctx); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
-
-	// Stop the background goroutine
 	if err := tracer.Stop(ctx); err != nil {
 		t.Fatalf("Stop failed: %v", err)
 	}

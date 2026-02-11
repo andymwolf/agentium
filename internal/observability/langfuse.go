@@ -28,7 +28,10 @@ const (
 	maxBatchSize = 50
 
 	// eventBufferSize is the channel buffer size for incoming events.
-	eventBufferSize = 256
+	eventBufferSize = 1024
+
+	// retryDelay is the delay between send retries.
+	retryDelay = 500 * time.Millisecond
 )
 
 // LangfuseConfig holds Langfuse connection parameters.
@@ -48,8 +51,9 @@ type LangfuseTracer struct {
 	events     chan ingestionEvent
 	logger     *log.Logger
 
-	wg     sync.WaitGroup
-	stopCh chan struct{}
+	wg      sync.WaitGroup
+	stopCh  chan struct{}
+	flushMu sync.Mutex // protects concurrent drain operations
 }
 
 // NewLangfuseTracer creates a new LangfuseTracer and starts its background
@@ -109,8 +113,10 @@ func (t *LangfuseTracer) StartPhase(trace TraceContext, phase string, opts SpanO
 	spanID := uuid.New().String()
 
 	metadata := map[string]interface{}{
-		"iteration":      opts.Iteration,
 		"max_iterations": opts.MaxIterations,
+	}
+	if opts.Iteration > 0 {
+		metadata["iteration"] = opts.Iteration
 	}
 	for k, v := range opts.Metadata {
 		metadata[k] = v
@@ -206,8 +212,11 @@ func (t *LangfuseTracer) CompleteTrace(trace TraceContext, opts CompleteOptions)
 }
 
 // Flush sends all buffered events to Langfuse and waits for completion.
+// Safe to call concurrently with the background flush loop.
 func (t *LangfuseTracer) Flush(ctx context.Context) error {
-	// Drain the channel and send remaining events
+	t.flushMu.Lock()
+	defer t.flushMu.Unlock()
+
 	var batch []ingestionEvent
 	for {
 		select {
@@ -216,7 +225,7 @@ func (t *LangfuseTracer) Flush(ctx context.Context) error {
 		default:
 			// Channel drained
 			if len(batch) > 0 {
-				if err := t.sendBatch(ctx, batch); err != nil {
+				if err := t.sendBatchWithRetry(ctx, batch); err != nil {
 					return fmt.Errorf("langfuse flush: %w", err)
 				}
 			}
@@ -248,6 +257,8 @@ func (t *LangfuseTracer) flushLoop() {
 	for {
 		select {
 		case <-t.stopCh:
+			// Final drain before exiting to minimize data loss
+			t.drainAndSend()
 			return
 		case <-ticker.C:
 			t.drainAndSend()
@@ -256,27 +267,45 @@ func (t *LangfuseTracer) flushLoop() {
 }
 
 // drainAndSend collects all buffered events and sends them.
+// Uses a mutex to prevent racing with concurrent Flush() calls.
 func (t *LangfuseTracer) drainAndSend() {
+	t.flushMu.Lock()
+	defer t.flushMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var batch []ingestionEvent
 	for {
 		select {
 		case evt := <-t.events:
 			batch = append(batch, evt)
 			if len(batch) >= maxBatchSize {
-				if err := t.sendBatch(context.Background(), batch); err != nil {
+				if err := t.sendBatchWithRetry(ctx, batch); err != nil {
 					t.logger.Printf("Warning: Langfuse batch send failed: %v", err)
 				}
 				batch = nil
 			}
 		default:
 			if len(batch) > 0 {
-				if err := t.sendBatch(context.Background(), batch); err != nil {
+				if err := t.sendBatchWithRetry(ctx, batch); err != nil {
 					t.logger.Printf("Warning: Langfuse batch send failed: %v", err)
 				}
 			}
 			return
 		}
 	}
+}
+
+// sendBatchWithRetry sends a batch with a single retry on failure.
+func (t *LangfuseTracer) sendBatchWithRetry(ctx context.Context, batch []ingestionEvent) error {
+	err := t.sendBatch(ctx, batch)
+	if err == nil {
+		return nil
+	}
+	t.logger.Printf("Warning: Langfuse batch send failed, retrying: %v", err)
+	time.Sleep(retryDelay)
+	return t.sendBatch(ctx, batch)
 }
 
 // sendBatch sends a batch of events to the Langfuse ingestion API.
@@ -315,6 +344,7 @@ func (t *LangfuseTracer) sendBatch(ctx context.Context, batch []ingestionEvent) 
 func (t *LangfuseTracer) Stop(ctx context.Context) error {
 	close(t.stopCh)
 	t.wg.Wait()
+	// After goroutine exits, drain any stragglers enqueued after the final drain
 	return t.Flush(ctx)
 }
 

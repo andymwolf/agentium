@@ -21,6 +21,7 @@ type Tracer interface {
 	EndPhase(span SpanContext, status string, durationMs int64)
 	CompleteTrace(trace TraceContext, opts CompleteOptions)
 	Flush(ctx context.Context) error
+	Stop(ctx context.Context) error
 }
 
 // TraceContext holds the context for an active trace (task level).

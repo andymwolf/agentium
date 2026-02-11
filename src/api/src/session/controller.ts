@@ -18,6 +18,7 @@ import type { LangfuseTracer } from '../observability/tracer.js';
 export interface SessionControllerOptions {
   adapter: AgentAdapter;
   tracer?: LangfuseTracer;
+  modelName?: string;
 }
 
 /**
@@ -29,10 +30,12 @@ export interface SessionControllerOptions {
 export class SessionController {
   private adapter: AgentAdapter;
   private tracer?: LangfuseTracer;
+  private modelName: string;
 
   constructor(options: SessionControllerOptions) {
     this.adapter = options.adapter;
     this.tracer = options.tracer;
+    this.modelName = options.modelName || 'unknown';
   }
 
   /**
@@ -60,45 +63,54 @@ export class SessionController {
     // Execute each phase
     const phaseResults: PhaseResult[] = [];
     let previousPhaseOutput: string | undefined;
+    let status: 'completed' | 'failed' = 'failed'; // default if exception thrown
 
-    for (const phase of phases) {
-      const result = await executePhase(phase, context, {
-        adapter: this.adapter,
-        previousPhaseOutput,
-        tracer: this.tracer,
-        traceContext,
-      });
+    try {
+      for (const phase of phases) {
+        const result = await executePhase(phase, context, {
+          adapter: this.adapter,
+          previousPhaseOutput,
+          tracer: this.tracer,
+          traceContext,
+          modelName: this.modelName,
+        });
 
-      phaseResults.push(result);
+        phaseResults.push(result);
 
-      // Update context with phase output for next phase
-      if (result.worker.output) {
-        context.phase_outputs[phase.name] = result.worker.output;
-        previousPhaseOutput = result.worker.output;
+        // Update context with phase output for next phase
+        if (result.worker.output) {
+          context.phase_outputs[phase.name] = result.worker.output;
+          previousPhaseOutput = result.worker.output;
+        }
+
+        // Update accumulated state after implementation phase
+        if (phase.name === 'IMPLEMENT' && result.status === 'completed') {
+          // In a real implementation, this would query the repository state
+          // For now, we simulate the state update
+          context.changed_files = this.extractChangedFiles(result.worker.output);
+          context.git_diff = this.extractGitDiff(result.worker.output);
+        }
+
+        // If phase failed, we still continue to collect results but might want to
+        // stop execution based on configuration (future enhancement)
       }
 
-      // Update accumulated state after implementation phase
-      if (phase.name === 'IMPLEMENT' && result.status === 'completed') {
-        // In a real implementation, this would query the repository state
-        // For now, we simulate the state update
-        context.changed_files = this.extractChangedFiles(result.worker.output);
-        context.git_diff = this.extractGitDiff(result.worker.output);
+      // Determine overall session status
+      status = this.determineSessionStatus(phaseResults);
+    } finally {
+      // Always complete and flush the trace, even on error paths
+      if (traceContext) {
+        try {
+          this.tracer?.completeTrace(traceContext, {
+            status,
+            totalTokens: this.aggregateTokens(phaseResults),
+          });
+          await this.tracer?.flush();
+        } catch (flushError) {
+          // Observability failures should not break the session
+          console.error('Failed to flush Langfuse trace:', flushError);
+        }
       }
-
-      // If phase failed, we still continue to collect results but might want to
-      // stop execution based on configuration (future enhancement)
-    }
-
-    // Determine overall session status
-    const status = this.determineSessionStatus(phaseResults);
-
-    // Complete Langfuse trace
-    if (traceContext) {
-      this.tracer?.completeTrace(traceContext, {
-        status,
-        totalTokens: this.aggregateTokens(phaseResults),
-      });
-      await this.tracer?.flush();
     }
 
     return {

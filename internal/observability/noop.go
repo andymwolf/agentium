@@ -23,3 +23,5 @@ func (n *NoOpTracer) EndPhase(_ SpanContext, _ string, _ int64) {}
 func (n *NoOpTracer) CompleteTrace(_ TraceContext, _ CompleteOptions) {}
 
 func (n *NoOpTracer) Flush(_ context.Context) error { return nil }
+
+func (n *NoOpTracer) Stop(_ context.Context) error { return nil }

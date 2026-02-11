@@ -24,6 +24,7 @@ export interface PhaseExecutionOptions {
   previousPhaseOutput?: string;
   tracer?: LangfuseTracer;
   traceContext?: TraceContext;
+  modelName?: string;
 }
 
 /**
@@ -40,7 +41,7 @@ export async function executePhase(
   options: PhaseExecutionOptions
 ): Promise<PhaseResult> {
   const startTime = Date.now();
-  const { adapter, previousPhaseOutput, tracer, traceContext } = options;
+  const { adapter, previousPhaseOutput, tracer, traceContext, modelName } = options;
 
   // Start Langfuse span for this phase
   let spanContext: SpanContext | undefined;
@@ -60,7 +61,7 @@ export async function executePhase(
   if (tracer && spanContext && workerResult.token_metrics) {
     tracer.recordGeneration(spanContext, {
       name: 'Worker',
-      model: '',
+      model: modelName || 'unknown',
       input: '',
       output: workerResult.output || '',
       tokenMetrics: workerResult.token_metrics,
@@ -87,7 +88,7 @@ export async function executePhase(
     } else if (reviewerResult.token_metrics) {
       tracer.recordGeneration(spanContext, {
         name: 'Reviewer',
-        model: '',
+        model: modelName || 'unknown',
         input: '',
         output: reviewerResult.feedback || '',
         tokenMetrics: reviewerResult.token_metrics,
@@ -116,7 +117,7 @@ export async function executePhase(
     } else if (judgeResult.token_metrics) {
       tracer.recordGeneration(spanContext, {
         name: 'Judge',
-        model: '',
+        model: modelName || 'unknown',
         input: '',
         output: judgeResult.reasoning || '',
         tokenMetrics: judgeResult.token_metrics,

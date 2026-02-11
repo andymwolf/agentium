@@ -544,7 +544,7 @@ func (c *Controller) initTracer(logger *log.Logger) {
 
 	c.tracer = lt
 	c.AddShutdownHook(func(ctx context.Context) error {
-		return lt.Stop(ctx)
+		return c.tracer.Stop(ctx)
 	})
 	logger.Printf("Langfuse: tracer initialized (base_url=%s)", lt.BaseURL())
 }
