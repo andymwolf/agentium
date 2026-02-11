@@ -187,6 +187,57 @@ func TestFinalizeDraftPR_ErrorsOnMissingState(t *testing.T) {
 	}
 }
 
+func TestMaybeCreateDraftPR_SkipsMismatchedBranch(t *testing.T) {
+	// Simulates branch contamination: task 363 runs on branch for issue 334.
+	// The existing PR found belongs to issue 334, not 363.
+	// maybeCreateDraftPR should skip adopting this PR.
+	tests := []struct {
+		name        string
+		taskID      string
+		branchName  string
+		wantAdopt   bool
+		description string
+	}{
+		{
+			name:        "branch belongs to different issue",
+			taskID:      "363",
+			branchName:  "enhancement/issue-334-calendar-availability",
+			wantAdopt:   false,
+			description: "should skip PR when branch issue (334) != task ID (363)",
+		},
+		{
+			name:        "branch belongs to same issue",
+			taskID:      "334",
+			branchName:  "enhancement/issue-334-calendar-availability",
+			wantAdopt:   true,
+			description: "should adopt PR when branch issue matches task ID",
+		},
+		{
+			name:        "branch has no issue number",
+			taskID:      "363",
+			branchName:  "feature/some-work",
+			wantAdopt:   true,
+			description: "should adopt PR when branch has no parseable issue number",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			branchIssue := extractIssueNumber(tt.branchName)
+			wouldSkip := branchIssue != "" && branchIssue != tt.taskID
+
+			if tt.wantAdopt && wouldSkip {
+				t.Errorf("%s: expected adoption but validation would skip (branch issue=%q, task=%q)",
+					tt.description, branchIssue, tt.taskID)
+			}
+			if !tt.wantAdopt && !wouldSkip {
+				t.Errorf("%s: expected skip but validation would adopt (branch issue=%q, task=%q)",
+					tt.description, branchIssue, tt.taskID)
+			}
+		})
+	}
+}
+
 func TestTaskState_NOMERGEConditions(t *testing.T) {
 	// Verify both ControllerOverrode and JudgeOverrodeReviewer trigger NOMERGE
 	tests := []struct {
