@@ -1380,28 +1380,31 @@ func (c *Controller) phaseJudgeCriteria(phase TaskPhase) string {
 
 // startPhaseContainerPool creates and starts long-lived containers for the
 // given phase. Each role (worker, reviewer, judge) gets its own container
-// that persists for the duration of the phase.
+// with the correct adapter image, environment, and auth mounts based on
+// model routing configuration.
 func (c *Controller) startPhaseContainerPool(ctx context.Context, phase TaskPhase) {
 	pool := NewContainerPool(c.workDir, c.containerMemLimit, c.config.ID, string(phase), c.execCommand, c.logger)
 
-	// Resolve agent adapters for each role
-	activeAgent := c.resolveAgentForPhase(phase)
-	image := activeAgent.ContainerImage()
-	authMounts := c.buildAuthMounts(activeAgent)
-
-	// Build base env for Worker
+	// Base session for building env
 	session := &agent.Session{
 		ID:             c.config.ID,
 		Repository:     c.config.Repository,
 		GitHubToken:    c.gitHubToken,
 		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
 	}
-	env := activeAgent.BuildEnv(session, 0)
 
-	// Start containers for all three roles
+	// Resolve per-role adapters using the same compound key fallback chains
+	// as reviewer.go and judge.go
 	roles := []ContainerRole{RoleWorkerContainer, RoleReviewerContainer, RoleJudgeContainer}
 	for _, role := range roles {
-		if _, err := pool.Start(ctx, role, image, env, authMounts); err != nil {
+		roleAgent := c.resolveAgentForRole(phase, role)
+
+		c.ensureGHCRAuth(ctx, roleAgent.ContainerImage())
+
+		env := roleAgent.BuildEnv(session, 0)
+		authMounts := c.buildAuthMounts(roleAgent)
+
+		if _, err := pool.Start(ctx, role, roleAgent.ContainerImage(), env, authMounts); err != nil {
 			c.logWarning("Failed to start pooled container for role %s: %v (falling back to one-shot)", role, err)
 			pool.StopAll(ctx)
 			return
@@ -1422,15 +1425,36 @@ func (c *Controller) stopPhaseContainerPool(ctx context.Context) {
 	c.logInfo("Container pool stopped")
 }
 
-// resolveAgentForPhase returns the agent adapter to use for the given phase,
-// considering model routing configuration.
-func (c *Controller) resolveAgentForPhase(phase TaskPhase) agent.Agent {
-	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
-		modelCfg := c.modelRouter.ModelForPhase(string(phase))
-		if modelCfg.Adapter != "" {
-			if a, ok := c.adapters[modelCfg.Adapter]; ok {
-				return a
-			}
+// resolveAgentForRole returns the agent adapter to use for a given phase and
+// container role, using the same compound key fallback chains as reviewer.go
+// and judge.go:
+//   - Worker:   {PHASE} → default
+//   - Reviewer: {PHASE}_REVIEW → REVIEW → default
+//   - Judge:    {PHASE}_JUDGE  → JUDGE  → default
+func (c *Controller) resolveAgentForRole(phase TaskPhase, role ContainerRole) agent.Agent {
+	if c.modelRouter == nil || !c.modelRouter.IsConfigured() {
+		return c.agent
+	}
+
+	phaseStr := string(phase)
+	var modelCfg = c.modelRouter.ModelForPhase(phaseStr) // Worker default
+
+	switch role {
+	case RoleReviewerContainer:
+		modelCfg = c.modelRouter.ModelForPhase(fmt.Sprintf("%s_REVIEW", phaseStr))
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase("REVIEW")
+		}
+	case RoleJudgeContainer:
+		modelCfg = c.modelRouter.ModelForPhase(fmt.Sprintf("%s_JUDGE", phaseStr))
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase("JUDGE")
+		}
+	}
+
+	if modelCfg.Adapter != "" {
+		if a, ok := c.adapters[modelCfg.Adapter]; ok {
+			return a
 		}
 	}
 	return c.agent

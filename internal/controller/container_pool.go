@@ -119,7 +119,11 @@ func (p *ContainerPool) Start(ctx context.Context, role ContainerRole, image str
 		Healthy: true,
 	}
 
-	p.logger.Printf("[pool] Started container %s (role=%s, phase=%s, id=%s)", name, role, p.phase, containerID[:12])
+	shortID := containerID
+	if len(shortID) > 12 {
+		shortID = shortID[:12]
+	}
+	p.logger.Printf("[pool] Started container %s (role=%s, phase=%s, id=%s)", name, role, p.phase, shortID)
 	return containerID, nil
 }
 

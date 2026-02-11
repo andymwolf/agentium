@@ -16,6 +16,23 @@ import (
 	"github.com/andywolf/agentium/internal/memory"
 )
 
+// ensureGHCRAuth authenticates with GitHub Container Registry if needed.
+// This is a no-op if already authenticated, no token is available, or the image
+// is not hosted on ghcr.io. Safe to call multiple times per session.
+func (c *Controller) ensureGHCRAuth(ctx context.Context, image string) {
+	if c.dockerAuthed || c.gitHubToken == "" || !strings.Contains(image, "ghcr.io") {
+		return
+	}
+	loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
+		"-u", "x-access-token", "--password-stdin")
+	loginCmd.Stdin = strings.NewReader(c.gitHubToken)
+	if out, err := loginCmd.CombinedOutput(); err != nil {
+		c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
+	} else {
+		c.dockerAuthed = true
+	}
+}
+
 // containerRunParams holds the parameters for running an agent container.
 type containerRunParams struct {
 	Agent       agent.Agent
@@ -30,17 +47,7 @@ type containerRunParams struct {
 // It handles GHCR authentication, Docker argument construction, process execution,
 // output parsing, and memory signal processing.
 func (c *Controller) runAgentContainer(ctx context.Context, params containerRunParams) (*agent.IterationResult, error) {
-	// Authenticate with GHCR if needed (once per session)
-	if !c.dockerAuthed && strings.Contains(params.Agent.ContainerImage(), "ghcr.io") && c.gitHubToken != "" {
-		loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
-			"-u", "x-access-token", "--password-stdin")
-		loginCmd.Stdin = strings.NewReader(c.gitHubToken)
-		if out, err := loginCmd.CombinedOutput(); err != nil {
-			c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
-		} else {
-			c.dockerAuthed = true
-		}
-	}
+	c.ensureGHCRAuth(ctx, params.Agent.ContainerImage())
 
 	// Build Docker arguments
 	args := []string{
@@ -64,32 +71,8 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Mount OAuth credentials only for the adapter being used.
-	// We always use workspace-based auth (write credentials to workspace temp file)
-	// for both local and cloud modes. This eliminates cloud-init timing issues and
-	// Docker directory creation problems that occurred with /etc/agentium mounts.
-	switch params.Agent.Name() {
-	case "claude-code":
-		if c.config.ClaudeAuth.AuthMode == "oauth" {
-			authPath, err := c.writeInteractiveAuthFile("claude-auth.json", c.config.ClaudeAuth.AuthJSONBase64)
-			if err != nil {
-				c.logWarning("Failed to write Claude auth file: %v", err)
-			} else if authPath != "" {
-				args = append(args, "-v", authPath+":/home/agentium/.claude/.credentials.json:ro")
-			}
-		} else if c.config.ClaudeAuth.AuthMode != "" {
-			c.logInfo("Claude auth mode is %q, not mounting OAuth credentials", c.config.ClaudeAuth.AuthMode)
-		}
-	case "codex":
-		if c.config.CodexAuth.AuthJSONBase64 != "" {
-			authPath, err := c.writeInteractiveAuthFile("codex-auth.json", c.config.CodexAuth.AuthJSONBase64)
-			if err != nil {
-				c.logWarning("Failed to write Codex auth file: %v", err)
-			} else if authPath != "" {
-				args = append(args, "-v", authPath+":/home/agentium/.codex/auth.json:ro")
-			}
-		}
-	}
+	// Mount OAuth credentials for the active adapter
+	args = append(args, c.buildAuthMounts(params.Agent)...)
 
 	args = append(args, params.Agent.ContainerImage())
 	args = append(args, params.Command...)
@@ -112,35 +95,7 @@ func (c *Controller) runAgentContainer(ctx context.Context, params containerRunP
 		return nil, fmt.Errorf("%s parse output: %w", params.LogTag, parseErr)
 	}
 
-	// Log token consumption to GCP Cloud Logging
-	c.logTokenConsumption(result, params.Agent.Name(), params.Session)
-
-	// Log structured events at DEBUG level
-	if len(result.Events) > 0 {
-		c.logAgentEvents(result.Events)
-		// Emit security audit events at INFO level
-		if c.cloudLogger != nil {
-			c.emitAuditEvents(result.Events, params.Agent.Name())
-		}
-	}
-
-	// Process memory signals using the adapter's parsed text content
-	if c.memoryStore != nil {
-		signalSource := result.RawTextContent + "\n" + string(stderrBytes)
-		signals := memory.ParseSignals(signalSource)
-		if len(signals) > 0 {
-			taskID := taskKey(c.activeTaskType, c.activeTask)
-			pruned := c.memoryStore.Update(signals, c.iteration, taskID)
-			if pruned > 0 {
-				c.logWarning("Memory store pruned %d oldest entries (max_entries=%d)", pruned, c.config.Memory.MaxEntries)
-			}
-			if err := c.memoryStore.Save(); err != nil {
-				c.logWarning("failed to save memory store: %v", err)
-			} else {
-				c.logInfo("Memory updated: %d new signals, %d total entries", len(signals), len(c.memoryStore.Entries()))
-			}
-		}
-	}
+	c.postProcessResult(result, stderrBytes, params.Agent.Name(), params.Session)
 
 	return result, nil
 }
@@ -221,18 +176,27 @@ func (c *Controller) runAgentContainerPooled(ctx context.Context, role Container
 		}
 	}
 
+	c.postProcessResult(result, stderrBytes, params.Agent.Name(), params.Session)
+
+	return result, nil
+}
+
+// postProcessResult handles shared post-execution logic for both one-shot and
+// pooled container paths: token consumption logging, structured event emission,
+// and memory signal processing.
+func (c *Controller) postProcessResult(result *agent.IterationResult, stderrBytes []byte, agentName string, session *agent.Session) {
 	// Log token consumption to GCP Cloud Logging
-	c.logTokenConsumption(result, params.Agent.Name(), params.Session)
+	c.logTokenConsumption(result, agentName, session)
 
 	// Log structured events
 	if len(result.Events) > 0 {
 		c.logAgentEvents(result.Events)
 		if c.cloudLogger != nil {
-			c.emitAuditEvents(result.Events, params.Agent.Name())
+			c.emitAuditEvents(result.Events, agentName)
 		}
 	}
 
-	// Process memory signals
+	// Process memory signals using the adapter's parsed text content
 	if c.memoryStore != nil {
 		signalSource := result.RawTextContent + "\n" + string(stderrBytes)
 		signals := memory.ParseSignals(signalSource)
@@ -249,8 +213,6 @@ func (c *Controller) runAgentContainerPooled(ctx context.Context, role Container
 			}
 		}
 	}
-
-	return result, nil
 }
 
 // executeAndCollect starts the command, reads stdout and stderr concurrently,
@@ -342,16 +304,9 @@ func (c *Controller) prePullAgentImages(ctx context.Context) {
 
 	// Authenticate with GHCR if any images require it
 	for image := range images {
-		if strings.Contains(image, "ghcr.io") && c.gitHubToken != "" && !c.dockerAuthed {
-			loginCmd := exec.CommandContext(ctx, "docker", "login", "ghcr.io",
-				"-u", "x-access-token", "--password-stdin")
-			loginCmd.Stdin = strings.NewReader(c.gitHubToken)
-			if out, err := loginCmd.CombinedOutput(); err != nil {
-				c.logWarning("docker login to ghcr.io failed: %v (%s)", err, string(out))
-			} else {
-				c.dockerAuthed = true
-			}
-			break // Only need to auth once
+		c.ensureGHCRAuth(ctx, image)
+		if c.dockerAuthed {
+			break
 		}
 	}
 

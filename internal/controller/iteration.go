@@ -203,6 +203,12 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 // runIterationPooled executes a worker iteration using the container pool.
 // On iteration 1, uses the full prompt. On iteration 2+, uses continuation mode
 // if the agent supports it (only incremental feedback, --continue flag).
+//
+// Note: adapter fallback (retrying with a different adapter on execution failure)
+// is not replicated in the pooled path. The pooled container is started with a
+// specific adapter image at phase start, so mid-iteration adapter switching is
+// not possible. On pooled exec failure, the pool is marked unhealthy and the
+// next iteration falls back to one-shot execution, which does support fallback.
 func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.Agent, session *agent.Session, params containerRunParams) (*agent.IterationResult, error) {
 	taskID := taskKey(c.activeTaskType, c.activeTask)
 	state := c.taskStates[taskID]
@@ -226,7 +232,10 @@ func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.A
 func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent.Agent, session *agent.Session, state *TaskState) (*agent.IterationResult, error) {
 	c.logInfo("Using continuation mode for Worker (phase iteration %d)", state.PhaseIteration)
 
-	cc := activeAgent.(agent.ContinuationCapable)
+	cc, ok := activeAgent.(agent.ContinuationCapable)
+	if !ok {
+		return nil, fmt.Errorf("agent %s does not implement ContinuationCapable", activeAgent.Name())
+	}
 	command := cc.BuildContinueCommand(session, c.iteration)
 
 	// Build incremental feedback as the stdin prompt
