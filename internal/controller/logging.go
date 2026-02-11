@@ -94,6 +94,9 @@ func (c *Controller) initTracer(ctx context.Context, logger *log.Logger) {
 		pubPath := c.config.Langfuse.PublicKeySecret
 		secPath := c.config.Langfuse.SecretKeySecret
 		if pubPath == "" || secPath == "" {
+			if pubPath != secPath {
+				logger.Printf("Langfuse: incomplete config — both public_key_secret and secret_key_secret are required")
+			}
 			return // No env vars and no secret paths configured
 		}
 

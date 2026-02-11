@@ -97,11 +97,7 @@ func TestInitTracer(t *testing.T) {
 
 		c := &Controller{
 			config: SessionConfig{
-				Langfuse: struct {
-					PublicKeySecret string `json:"public_key_secret,omitempty"`
-					SecretKeySecret string `json:"secret_key_secret,omitempty"`
-					BaseURL         string `json:"base_url,omitempty"`
-				}{
+				Langfuse: LangfuseSessionConfig{
 					PublicKeySecret: "projects/p/secrets/langfuse-public",
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 					BaseURL:         "https://custom.langfuse.com",
@@ -149,11 +145,7 @@ func TestInitTracer(t *testing.T) {
 
 		c := &Controller{
 			config: SessionConfig{
-				Langfuse: struct {
-					PublicKeySecret string `json:"public_key_secret,omitempty"`
-					SecretKeySecret string `json:"secret_key_secret,omitempty"`
-					BaseURL         string `json:"base_url,omitempty"`
-				}{
+				Langfuse: LangfuseSessionConfig{
 					PublicKeySecret: "projects/p/secrets/langfuse-public",
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 				},
@@ -182,11 +174,7 @@ func TestInitTracer(t *testing.T) {
 
 		c := &Controller{
 			config: SessionConfig{
-				Langfuse: struct {
-					PublicKeySecret string `json:"public_key_secret,omitempty"`
-					SecretKeySecret string `json:"secret_key_secret,omitempty"`
-					BaseURL         string `json:"base_url,omitempty"`
-				}{
+				Langfuse: LangfuseSessionConfig{
 					PublicKeySecret: "projects/p/secrets/langfuse-public",
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 				},
@@ -242,11 +230,7 @@ func TestInitTracer(t *testing.T) {
 
 		c := &Controller{
 			config: SessionConfig{
-				Langfuse: struct {
-					PublicKeySecret string `json:"public_key_secret,omitempty"`
-					SecretKeySecret string `json:"secret_key_secret,omitempty"`
-					BaseURL         string `json:"base_url,omitempty"`
-				}{
+				Langfuse: LangfuseSessionConfig{
 					PublicKeySecret: "projects/p/secrets/langfuse-public",
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 				},

@@ -167,11 +167,7 @@ type SessionConfig struct {
 	Phases     []PhaseStepConfig     `json:"phases,omitempty"`
 	Verbose    bool                  `json:"verbose,omitempty"`
 	AutoMerge  bool                  `json:"auto_merge,omitempty"`
-	Langfuse   struct {
-		PublicKeySecret string `json:"public_key_secret,omitempty"`
-		SecretKeySecret string `json:"secret_key_secret,omitempty"`
-		BaseURL         string `json:"base_url,omitempty"`
-	} `json:"langfuse,omitempty"`
+	Langfuse LangfuseSessionConfig `json:"langfuse,omitempty"`
 	Monorepo *MonorepoSessionConfig `json:"monorepo,omitempty"`
 }
 
@@ -194,6 +190,13 @@ type StepPromptConfig struct {
 // JudgePromptConfig contains override criteria for a judge step.
 type JudgePromptConfig struct {
 	Criteria string `json:"criteria"`
+}
+
+// LangfuseSessionConfig contains Langfuse observability settings for the session.
+type LangfuseSessionConfig struct {
+	PublicKeySecret string `json:"public_key_secret,omitempty"`
+	SecretKeySecret string `json:"secret_key_secret,omitempty"`
+	BaseURL         string `json:"base_url,omitempty"`
 }
 
 // MonorepoSessionConfig contains monorepo-specific settings for the session.
