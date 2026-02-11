@@ -157,14 +157,24 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	c.logInfo("Running judge for phase %s (iteration %d/%d): adapter=%s model=%s",
 		params.CompletedPhase, params.Iteration, params.MaxIterations, activeAgent.Name(), modelName)
 
-	result, err := c.runAgentContainer(ctx, containerRunParams{
+	judgeParams := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
 		Env:         env,
 		Command:     command,
 		LogTag:      "Judge",
 		StdinPrompt: stdinPrompt,
-	})
+	}
+
+	// Use pooled execution if container pool is active
+	var result *agent.IterationResult
+	var err error
+	if c.containerPool != nil && c.containerPool.IsHealthy(RoleJudgeContainer) {
+		c.logInfo("Using pooled execution for Judge")
+		result, err = c.runAgentContainerPooled(ctx, RoleJudgeContainer, judgeParams)
+	} else {
+		result, err = c.runAgentContainer(ctx, judgeParams)
+	}
 	if err != nil {
 		c.logError("Judge container failed for phase %s: %v", params.CompletedPhase, err)
 		return JudgeResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)

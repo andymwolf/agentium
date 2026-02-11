@@ -878,4 +878,130 @@ func TestAdapter_GetStdinPrompt(t *testing.T) {
 	t.Run("implements PlanModeCapable interface", func(t *testing.T) {
 		var _ agent.PlanModeCapable = a
 	})
+
+	t.Run("implements ContinuationCapable interface", func(t *testing.T) {
+		var _ agent.ContinuationCapable = a
+	})
+}
+
+func TestAdapter_SupportsContinuation(t *testing.T) {
+	a := New()
+	if !a.SupportsContinuation() {
+		t.Error("SupportsContinuation() should return true")
+	}
+}
+
+func TestAdapter_BuildContinueCommand(t *testing.T) {
+	a := New()
+
+	t.Run("non-interactive implement mode", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "IMPLEMENT",
+			},
+		}
+
+		cmd := a.BuildContinueCommand(session, 2)
+
+		// Should have: --print, --verbose, --output-format, stream-json, --dangerously-skip-permissions, --continue
+		if len(cmd) != 6 {
+			t.Fatalf("BuildContinueCommand() returned %d args, want 6: %v", len(cmd), cmd)
+		}
+
+		// Verify --continue is present
+		hasFlag := false
+		for _, arg := range cmd {
+			if arg == "--continue" {
+				hasFlag = true
+			}
+		}
+		if !hasFlag {
+			t.Error("BuildContinueCommand() should include --continue flag")
+		}
+
+		// Verify no --system-prompt or --append-system-prompt
+		for _, arg := range cmd {
+			if arg == "--system-prompt" {
+				t.Error("BuildContinueCommand() should not include --system-prompt")
+			}
+			if arg == "--append-system-prompt" {
+				t.Error("BuildContinueCommand() should not include --append-system-prompt")
+			}
+		}
+	})
+
+	t.Run("plan mode includes --continue", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase: "PLAN",
+			},
+		}
+
+		cmd := a.BuildContinueCommand(session, 2)
+
+		hasFlag := false
+		hasPlanMode := false
+		for i, arg := range cmd {
+			if arg == "--continue" {
+				hasFlag = true
+			}
+			if arg == "--permission-mode" && i+1 < len(cmd) && cmd[i+1] == "plan" {
+				hasPlanMode = true
+			}
+		}
+		if !hasFlag {
+			t.Error("BuildContinueCommand() should include --continue in PLAN mode")
+		}
+		if !hasPlanMode {
+			t.Error("BuildContinueCommand() should include --permission-mode plan in PLAN mode")
+		}
+
+		// Verify no --dangerously-skip-permissions in plan mode
+		for _, arg := range cmd {
+			if arg == "--dangerously-skip-permissions" {
+				t.Error("BuildContinueCommand() should not include --dangerously-skip-permissions in PLAN mode")
+			}
+		}
+	})
+
+	t.Run("with model override", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Interactive: false,
+			IterationContext: &agent.IterationContext{
+				Phase:         "IMPLEMENT",
+				ModelOverride: "claude-sonnet-4-5-20250929",
+			},
+		}
+
+		cmd := a.BuildContinueCommand(session, 2)
+
+		hasModel := false
+		for i, arg := range cmd {
+			if arg == "--model" && i+1 < len(cmd) && cmd[i+1] == "claude-sonnet-4-5-20250929" {
+				hasModel = true
+			}
+		}
+		if !hasModel {
+			t.Error("BuildContinueCommand() should include --model flag with override")
+		}
+	})
+
+	t.Run("interactive mode falls back to BuildCommand", func(t *testing.T) {
+		session := &agent.Session{
+			Repository:  "github.com/org/repo",
+			Interactive: true,
+		}
+
+		cmd := a.BuildContinueCommand(session, 2)
+		origCmd := a.BuildCommand(session, 2)
+
+		if len(cmd) != len(origCmd) {
+			t.Errorf("Interactive BuildContinueCommand() should match BuildCommand(): got %d args, want %d", len(cmd), len(origCmd))
+		}
+	})
 }

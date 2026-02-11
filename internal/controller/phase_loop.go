@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/observability"
@@ -515,6 +516,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
 
+		// Start long-lived containers for this phase if container reuse is enabled
+		if c.config.ContainerReuse {
+			c.startPhaseContainerPool(ctx, currentPhase)
+		}
+
 		// Start Langfuse span for this phase
 		activePhaseStart = time.Now()
 		activeSpanCtx = c.tracer.StartPhase(traceCtx, string(currentPhase), observability.SpanOptions{
@@ -981,6 +987,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			}
 		}
 
+		// Stop long-lived containers for this phase
+		c.stopPhaseContainerPool(ctx)
+
 		// End phase span in Langfuse
 		phaseStatus := "completed"
 		if !advanced {
@@ -1367,4 +1376,62 @@ func (c *Controller) phaseJudgeCriteria(phase TaskPhase) string {
 		return stepCfg.Judge.Criteria
 	}
 	return ""
+}
+
+// startPhaseContainerPool creates and starts long-lived containers for the
+// given phase. Each role (worker, reviewer, judge) gets its own container
+// that persists for the duration of the phase.
+func (c *Controller) startPhaseContainerPool(ctx context.Context, phase TaskPhase) {
+	pool := NewContainerPool(c.workDir, c.containerMemLimit, c.config.ID, string(phase), c.execCommand, c.logger)
+
+	// Resolve agent adapters for each role
+	activeAgent := c.resolveAgentForPhase(phase)
+	image := activeAgent.ContainerImage()
+	authMounts := c.buildAuthMounts(activeAgent)
+
+	// Build base env for Worker
+	session := &agent.Session{
+		ID:             c.config.ID,
+		Repository:     c.config.Repository,
+		GitHubToken:    c.gitHubToken,
+		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
+	}
+	env := activeAgent.BuildEnv(session, 0)
+
+	// Start containers for all three roles
+	roles := []ContainerRole{RoleWorkerContainer, RoleReviewerContainer, RoleJudgeContainer}
+	for _, role := range roles {
+		if _, err := pool.Start(ctx, role, image, env, authMounts); err != nil {
+			c.logWarning("Failed to start pooled container for role %s: %v (falling back to one-shot)", role, err)
+			pool.StopAll(ctx)
+			return
+		}
+	}
+
+	c.containerPool = pool
+	c.logInfo("Container pool started for phase %s (3 containers)", phase)
+}
+
+// stopPhaseContainerPool stops and removes all containers in the current pool.
+func (c *Controller) stopPhaseContainerPool(ctx context.Context) {
+	if c.containerPool == nil {
+		return
+	}
+	c.containerPool.StopAll(ctx)
+	c.containerPool = nil
+	c.logInfo("Container pool stopped")
+}
+
+// resolveAgentForPhase returns the agent adapter to use for the given phase,
+// considering model routing configuration.
+func (c *Controller) resolveAgentForPhase(phase TaskPhase) agent.Agent {
+	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
+		modelCfg := c.modelRouter.ModelForPhase(string(phase))
+		if modelCfg.Adapter != "" {
+			if a, ok := c.adapters[modelCfg.Adapter]; ok {
+				return a
+			}
+		}
+	}
+	return c.agent
 }
