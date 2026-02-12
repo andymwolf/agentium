@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/andymwolf/agentium/compare/v0.8.0...v0.8.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* redesign continuation prompt for phase iteration 2+ ([#492](https://github.com/andymwolf/agentium/issues/492)) ([6580735](https://github.com/andymwolf/agentium/commit/6580735fab55393012f6a7cd8d4c435fb122d0eb)), closes [#491](https://github.com/andymwolf/agentium/issues/491)
+* resolve CodeQL scanning alerts for clear-text-logging and url-sanitization ([768a105](https://github.com/andymwolf/agentium/commit/768a105950e809043fd4f079690fdb673b6afdb5)), closes [#488](https://github.com/andymwolf/agentium/issues/488)
+
 ## [0.8.0](https://github.com/andymwolf/agentium/compare/v0.7.1...v0.8.0) (2026-02-12)
 
 
