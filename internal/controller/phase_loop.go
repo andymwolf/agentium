@@ -1404,7 +1404,7 @@ func (c *Controller) startPhaseContainerPool(ctx context.Context, phase TaskPhas
 		env := roleAgent.BuildEnv(session, 0)
 		authMounts := c.buildAuthMounts(roleAgent)
 
-		if _, err := pool.Start(ctx, role, roleAgent.ContainerImage(), env, authMounts); err != nil {
+		if _, err := pool.Start(ctx, role, roleAgent.ContainerImage(), roleAgent.ContainerEntrypoint(), env, authMounts); err != nil {
 			c.logWarning("Failed to start pooled container for role %s: %v (falling back to one-shot)", role, err)
 			pool.StopAll(ctx)
 			return

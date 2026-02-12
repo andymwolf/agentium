@@ -71,7 +71,7 @@ func TestContainerPool_Start(t *testing.T) {
 		poolMockCmdRunner(responses), newTestPoolLogger())
 
 	id, err := pool.Start(context.Background(), RoleWorkerContainer, "test-image:latest",
-		map[string]string{"FOO": "bar"}, nil)
+		[]string{"/runtime-scripts/agent-wrapper.sh", "claude"}, map[string]string{"FOO": "bar"}, nil)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestContainerPool_IsHealthy(t *testing.T) {
 		t.Error("IsHealthy should be false before Start")
 	}
 
-	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", nil, nil)
+	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", []string{"agent"}, nil, nil)
 	if err != nil {
 		t.Fatalf("Start error: %v", err)
 	}
@@ -130,11 +130,11 @@ func TestContainerPool_StopAll(t *testing.T) {
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
 		poolMockCmdRunner(responses), newTestPoolLogger())
 
-	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", nil, nil)
+	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", []string{"agent"}, nil, nil)
 	if err != nil {
 		t.Fatalf("Start error: %v", err)
 	}
-	_, err = pool.Start(context.Background(), RoleReviewerContainer, "img", nil, nil)
+	_, err = pool.Start(context.Background(), RoleReviewerContainer, "img", []string{"agent"}, nil, nil)
 	if err != nil {
 		t.Fatalf("Start error: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestContainerPool_StartWithMemLimit(t *testing.T) {
 		poolMockCmdRunner(responses), newTestPoolLogger())
 
 	id, err := pool.Start(context.Background(), RoleWorkerContainer, "img",
-		map[string]string{"KEY": "val"}, []string{"-v", "/tmp/claude/auth:/home/agentium/.claude/.credentials.json:ro"})
+		[]string{"agent"}, map[string]string{"KEY": "val"}, []string{"-v", "/tmp/claude/auth:/home/agentium/.claude/.credentials.json:ro"})
 	if err != nil {
 		t.Fatalf("Start error: %v", err)
 	}

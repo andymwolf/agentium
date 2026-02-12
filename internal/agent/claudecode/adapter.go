@@ -35,6 +35,11 @@ func (a *Adapter) ContainerImage() string {
 	return a.image
 }
 
+// ContainerEntrypoint returns the entrypoint for docker exec in pooled containers.
+func (a *Adapter) ContainerEntrypoint() []string {
+	return []string{"/runtime-scripts/agent-wrapper.sh", "claude"}
+}
+
 // SupportsPlanMode indicates Claude Code can enforce plan-only mode.
 func (a *Adapter) SupportsPlanMode() bool {
 	return true

@@ -77,6 +77,11 @@ type Agent interface {
 	// ContainerImage returns the Docker image for this agent
 	ContainerImage() string
 
+	// ContainerEntrypoint returns the entrypoint command for docker exec.
+	// This is needed because pooled containers override the entrypoint to
+	// "sleep infinity", so docker exec must explicitly specify the executable.
+	ContainerEntrypoint() []string
+
 	// BuildEnv constructs environment variables for the agent container
 	BuildEnv(session *Session, iteration int) map[string]string
 
