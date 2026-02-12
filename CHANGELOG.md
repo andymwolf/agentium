@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.0](https://github.com/andymwolf/agentium/compare/v0.6.0...v0.7.0) (2026-02-12)
+
+
+### Features
+
+* accept full step config via API ([#457](https://github.com/andymwolf/agentium/issues/457)) ([4bb5aa1](https://github.com/andymwolf/agentium/commit/4bb5aa1d0421d16c5fb9178d9dd20e7357528ef1))
+* add --container-reuse CLI flag ([#462](https://github.com/andymwolf/agentium/issues/462)) ([bf3689c](https://github.com/andymwolf/agentium/commit/bf3689c63e8efce884b859d1e7b0a7398295d775))
+* API-based sub-issue detection, queue ordering fix, tracker→parent rename ([#452](https://github.com/andymwolf/agentium/issues/452)) ([cf49e5d](https://github.com/andymwolf/agentium/commit/cf49e5db761ffb38117b782a51bc5bbf952f60a5))
+* fetch issue comments for agent context ([#448](https://github.com/andymwolf/agentium/issues/448)) ([95950d5](https://github.com/andymwolf/agentium/commit/95950d5b9a7b30b62365530e2a0db8d662f961f0))
+* load Langfuse keys from GCP Secret Manager ([#458](https://github.com/andymwolf/agentium/issues/458)) ([a23fef3](https://github.com/andymwolf/agentium/commit/a23fef325b31e5cb408f7e77cffae9e32f6bae83))
+* long-lived phase containers to reduce container churn and token waste ([#460](https://github.com/andymwolf/agentium/issues/460)) ([110cac3](https://github.com/andymwolf/agentium/commit/110cac3e584420143d534e89d983400bf7021565))
+* remove session-level max iterations; improve run output ([0f2739d](https://github.com/andymwolf/agentium/commit/0f2739d8aa7c588874dad86c85c8c37da33383a4))
+
+
+### Bug Fixes
+
+* add Langfuse Secret Manager config and diagnostic logging ([15810f9](https://github.com/andymwolf/agentium/commit/15810f93ee0af83a1bd825c0a70803fc3aaa690b))
+* add Langfuse Secret Manager config and diagnostic logging ([e43febe](https://github.com/andymwolf/agentium/commit/e43febe4aef9bd8e6f8bed63d4ee2e427ea706ed)), closes [#467](https://github.com/andymwolf/agentium/issues/467)
+* correct BigQuery table partitioning and schema for Cloud Logging ([#464](https://github.com/andymwolf/agentium/issues/464)) ([0091d52](https://github.com/andymwolf/agentium/commit/0091d528b71bea791c2a92d51f7590077668dbd2)), closes [#463](https://github.com/andymwolf/agentium/issues/463)
+* make buildReviewPrompt phase-aware so PLAN phase skips code review ([#466](https://github.com/andymwolf/agentium/issues/466)) ([79b1185](https://github.com/andymwolf/agentium/commit/79b1185b9e9dba82b3ef8cdef23b6a773c9652f5)), closes [#465](https://github.com/andymwolf/agentium/issues/465)
+* prepend container entrypoint in pooled docker exec ([#470](https://github.com/andymwolf/agentium/issues/470)) ([ac25675](https://github.com/andymwolf/agentium/commit/ac256755b10bd45a7c8825423c0db674d0a57cc2))
+* prevent branch contamination and PR mismatch between tasks ([#454](https://github.com/andymwolf/agentium/issues/454)) ([e76f799](https://github.com/andymwolf/agentium/commit/e76f799f2631ec9e601ada91d9d2434ab70ca730)), closes [#453](https://github.com/andymwolf/agentium/issues/453)
+
 ## [0.6.0](https://github.com/andymwolf/agentium/compare/v0.5.0...v0.6.0) (2026-02-11)
 
 
