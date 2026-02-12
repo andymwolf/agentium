@@ -74,6 +74,10 @@ func (p *ContainerPool) containerName(role ContainerRole) string {
 // which will be prepended to commands in Exec since the container's own entrypoint
 // is overridden to "sleep".
 func (p *ContainerPool) Start(ctx context.Context, role ContainerRole, image string, entrypoint []string, env map[string]string, authMounts []string) (string, error) {
+	if len(entrypoint) == 0 {
+		return "", fmt.Errorf("entrypoint must not be empty for pooled containers (role=%s)", role)
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
