@@ -103,6 +103,7 @@ func TestInitTracer(t *testing.T) {
 					BaseURL:         "https://custom.langfuse.com",
 				},
 			},
+			logger: logger,
 			secretManager: &mockSecretFetcher{
 				secrets: map[string]string{
 					"projects/p/secrets/langfuse-public": "  pk-lf-test  \n",
@@ -119,7 +120,7 @@ func TestInitTracer(t *testing.T) {
 		t.Setenv("LANGFUSE_BASE_URL", "")
 		t.Setenv("LANGFUSE_ENABLED", "")
 
-		c.initTracer(context.Background(), logger)
+		c.initTracer(context.Background())
 
 		// Verify tracer was initialized (not NoOp)
 		if _, ok := c.tracer.(*observability.NoOpTracer); ok {
@@ -150,6 +151,7 @@ func TestInitTracer(t *testing.T) {
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 				},
 			},
+			logger:        logger,
 			secretManager: fetcher,
 			tracer:        &observability.NoOpTracer{},
 			shutdownCh:    make(chan struct{}),
@@ -160,7 +162,7 @@ func TestInitTracer(t *testing.T) {
 		t.Setenv("LANGFUSE_BASE_URL", "")
 		t.Setenv("LANGFUSE_ENABLED", "")
 
-		c.initTracer(context.Background(), logger)
+		c.initTracer(context.Background())
 
 		// Verify tracer was initialized from env vars
 		if _, ok := c.tracer.(*observability.NoOpTracer); ok {
@@ -191,7 +193,7 @@ func TestInitTracer(t *testing.T) {
 		t.Setenv("LANGFUSE_SECRET_KEY", "")
 		t.Setenv("LANGFUSE_ENABLED", "")
 
-		c.initTracer(context.Background(), logger)
+		c.initTracer(context.Background())
 
 		// Verify tracer stayed as NoOp
 		if _, ok := c.tracer.(*observability.NoOpTracer); !ok {
@@ -209,6 +211,7 @@ func TestInitTracer(t *testing.T) {
 
 		c := &Controller{
 			config:     SessionConfig{},
+			logger:     logger,
 			tracer:     &observability.NoOpTracer{},
 			shutdownCh: make(chan struct{}),
 		}
@@ -217,7 +220,7 @@ func TestInitTracer(t *testing.T) {
 		t.Setenv("LANGFUSE_SECRET_KEY", "")
 		t.Setenv("LANGFUSE_ENABLED", "")
 
-		c.initTracer(context.Background(), logger)
+		c.initTracer(context.Background())
 
 		if _, ok := c.tracer.(*observability.NoOpTracer); !ok {
 			t.Fatal("expected NoOpTracer when nothing is configured")
@@ -235,6 +238,7 @@ func TestInitTracer(t *testing.T) {
 					SecretKeySecret: "projects/p/secrets/langfuse-secret",
 				},
 			},
+			logger: logger,
 			secretManager: &mockSecretFetcher{
 				secrets: map[string]string{
 					"projects/p/secrets/langfuse-public": "pk-lf-test",
@@ -249,7 +253,7 @@ func TestInitTracer(t *testing.T) {
 		t.Setenv("LANGFUSE_SECRET_KEY", "")
 		t.Setenv("LANGFUSE_ENABLED", "false")
 
-		c.initTracer(context.Background(), logger)
+		c.initTracer(context.Background())
 
 		if _, ok := c.tracer.(*observability.NoOpTracer); !ok {
 			t.Fatal("expected NoOpTracer when LANGFUSE_ENABLED=false")

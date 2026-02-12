@@ -129,8 +129,9 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 	}
 
 	// Fallback to gcloud CLI
+	secretName := parseSecretName(secretPath)
 	cmd := c.execCommand(ctx, "gcloud", "secrets", "versions", "access", "latest",
-		"--secret", filepath.Base(secretPath),
+		"--secret", secretName,
 	)
 
 	output, err := cmd.Output()
@@ -139,6 +140,21 @@ func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string
 	}
 
 	return string(output), nil
+}
+
+// parseSecretName extracts the secret name from a GCP Secret Manager path.
+// Supported formats:
+//   - "projects/PROJECT/secrets/SECRET_NAME/versions/VERSION" → "SECRET_NAME"
+//   - "projects/PROJECT/secrets/SECRET_NAME" → "SECRET_NAME"
+//   - "SECRET_NAME" → "SECRET_NAME" (plain name, returned as-is)
+func parseSecretName(secretPath string) string {
+	parts := strings.Split(secretPath, "/")
+	// Full path: projects/P/secrets/NAME[/versions/V] — secret name is at index 3
+	if len(parts) >= 4 && parts[0] == "projects" && parts[2] == "secrets" {
+		return parts[3]
+	}
+	// Plain secret name (no slashes or unrecognized format)
+	return secretPath
 }
 
 func (c *Controller) loadPrompts() error {

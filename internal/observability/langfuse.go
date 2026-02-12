@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -335,7 +336,9 @@ func (t *LangfuseTracer) sendBatch(ctx context.Context, batch []ingestionEvent) 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("langfuse API returned %d", resp.StatusCode)
+		// Read response body (capped) for diagnostics
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("langfuse API returned %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil

@@ -42,10 +42,13 @@ type ContainerPool struct {
 	phase      string
 	cmdRunner  func(ctx context.Context, name string, args ...string) *exec.Cmd
 	logger     *log.Logger
+	warnFn     func(string, ...interface{}) // optional cloud-aware warning logger
 }
 
 // NewContainerPool creates a new ContainerPool for managing phase containers.
-func NewContainerPool(workDir string, memLimit uint64, sessionID, phase string, cmdRunner func(ctx context.Context, name string, args ...string) *exec.Cmd, logger *log.Logger) *ContainerPool {
+// warnFn is an optional cloud-aware warning logger (e.g., c.logWarning).
+// When nil, warnings fall back to p.logger.Printf.
+func NewContainerPool(workDir string, memLimit uint64, sessionID, phase string, cmdRunner func(ctx context.Context, name string, args ...string) *exec.Cmd, logger *log.Logger, warnFn func(string, ...interface{})) *ContainerPool {
 	return &ContainerPool{
 		containers: make(map[ContainerRole]*ManagedContainer),
 		workDir:    workDir,
@@ -54,6 +57,17 @@ func NewContainerPool(workDir string, memLimit uint64, sessionID, phase string, 
 		phase:      phase,
 		cmdRunner:  cmdRunner,
 		logger:     logger,
+		warnFn:     warnFn,
+	}
+}
+
+// warn logs a warning message through the cloud-aware logger if available,
+// otherwise falls back to the local logger.
+func (p *ContainerPool) warn(format string, args ...interface{}) {
+	if p.warnFn != nil {
+		p.warnFn(format, args...)
+	} else {
+		p.logger.Printf("Warning: "+format, args...)
 	}
 }
 
@@ -206,7 +220,7 @@ func (p *ContainerPool) StopAll(ctx context.Context) {
 		name := p.containerName(role)
 		cmd := p.cmdRunner(ctx, "docker", "rm", "-f", mc.ID)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			p.logger.Printf("[pool] Warning: failed to remove container %s: %v (%s)", name, err, strings.TrimSpace(string(out)))
+			p.warn("[pool] failed to remove container %s: %v (%s)", name, err, strings.TrimSpace(string(out)))
 		} else {
 			p.logger.Printf("[pool] Removed container %s (execs=%d)", name, mc.ExecCount)
 		}
@@ -240,6 +254,6 @@ func (p *ContainerPool) MarkUnhealthy(role ContainerRole) {
 
 	if mc, ok := p.containers[role]; ok {
 		mc.Healthy = false
-		p.logger.Printf("[pool] Marked container for role %s as unhealthy", role)
+		p.warn("[pool] Marked container for role %s as unhealthy", role)
 	}
 }

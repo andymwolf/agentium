@@ -81,7 +81,7 @@ func TestContainerPool_Start(t *testing.T) {
 	}
 
 	pool := NewContainerPool("/workspace", 0, "test-session-id", "IMPLEMENT",
-		poolMockCmdRunner(responses), newTestPoolLogger())
+		poolMockCmdRunner(responses), newTestPoolLogger(), nil)
 
 	id, err := pool.Start(context.Background(), RoleWorkerContainer, "test-image:latest",
 		[]string{"/runtime-scripts/agent-wrapper.sh", "claude"}, map[string]string{"FOO": "bar"}, nil)
@@ -111,7 +111,7 @@ func TestContainerPool_IsHealthy(t *testing.T) {
 	}
 
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
-		poolMockCmdRunner(responses), newTestPoolLogger())
+		poolMockCmdRunner(responses), newTestPoolLogger(), nil)
 
 	// Not started yet
 	if pool.IsHealthy(RoleWorkerContainer) {
@@ -141,7 +141,7 @@ func TestContainerPool_StopAll(t *testing.T) {
 	}
 
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
-		poolMockCmdRunner(responses), newTestPoolLogger())
+		poolMockCmdRunner(responses), newTestPoolLogger(), nil)
 
 	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", []string{"agent"}, nil, nil)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestContainerPool_StopAll(t *testing.T) {
 
 func TestContainerPool_containerName(t *testing.T) {
 	pool := NewContainerPool("/workspace", 0, "abcdefghijklmnop", "IMPLEMENT",
-		nil, newTestPoolLogger())
+		nil, newTestPoolLogger(), nil)
 
 	name := pool.containerName(RoleWorkerContainer)
 	if !strings.HasPrefix(name, "agentium-") {
@@ -184,7 +184,7 @@ func TestContainerPool_containerName(t *testing.T) {
 
 func TestContainerPool_Exec_NoContainer(t *testing.T) {
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
-		nil, newTestPoolLogger())
+		nil, newTestPoolLogger(), nil)
 
 	_, _, _, err := pool.Exec(context.Background(), RoleWorkerContainer, []string{"echo"}, "", nil)
 	if err == nil {
@@ -199,7 +199,7 @@ func TestContainerPool_StartWithMemLimit(t *testing.T) {
 
 	memLimit := uint64(4 * 1024 * 1024 * 1024) // 4GB
 	pool := NewContainerPool("/workspace", memLimit, "sess", "PLAN",
-		poolMockCmdRunner(responses), newTestPoolLogger())
+		poolMockCmdRunner(responses), newTestPoolLogger(), nil)
 
 	id, err := pool.Start(context.Background(), RoleWorkerContainer, "img",
 		[]string{"agent"}, map[string]string{"KEY": "val"}, []string{"-v", "/tmp/claude/auth:/home/agentium/.claude/.credentials.json:ro"})
@@ -213,7 +213,7 @@ func TestContainerPool_StartWithMemLimit(t *testing.T) {
 
 func TestContainerPool_Start_EmptyEntrypoint(t *testing.T) {
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
-		poolMockCmdRunner(nil), newTestPoolLogger())
+		poolMockCmdRunner(nil), newTestPoolLogger(), nil)
 
 	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", nil, nil, nil)
 	if err == nil {
@@ -237,7 +237,7 @@ func TestContainerPool_Exec_PrependsEntrypoint(t *testing.T) {
 
 	var calls []capturedCall
 	pool := NewContainerPool("/workspace", 0, "sess", "PLAN",
-		poolCapturingCmdRunner(responses, &calls), newTestPoolLogger())
+		poolCapturingCmdRunner(responses, &calls), newTestPoolLogger(), nil)
 
 	entrypoint := []string{"/runtime-scripts/agent-wrapper.sh", "claude"}
 	_, err := pool.Start(context.Background(), RoleWorkerContainer, "img", entrypoint, nil, nil)
