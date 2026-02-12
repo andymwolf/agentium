@@ -26,11 +26,13 @@ func TestBuildReviewPrompt(t *testing.T) {
 		"github.com/org/repo",
 		"#42",
 		"modify auth.go",
-		"git diff main..HEAD",
-		"Security issues",
+		"Review the **plan**",
+		"Do NOT run",
+		"Issue alignment",
 	}
 	notContains := []string{
 		"DEPENDENCY CONTEXT",
+		"git diff main..HEAD",
 	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {
@@ -364,5 +366,84 @@ func TestBuildReviewPrompt_FallbackToPreviousFeedback(t *testing.T) {
 	}
 	if containsString(prompt, "Worker's Response to Previous Feedback") {
 		t.Error("should not contain worker responses section when none provided")
+	}
+}
+
+func TestBuildReviewPrompt_PlanPhaseNoCodeReview(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "10",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase: PhasePlan,
+		PhaseOutput:    "Plan: modify auth.go and add tests",
+		Iteration:      1,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	notContains := []string{
+		"Run `git diff",
+		"Open and read key modified files",
+		"Verify that the changes match",
+	}
+	for _, substr := range notContains {
+		if containsString(prompt, substr) {
+			t.Errorf("PLAN review prompt should NOT contain %q", substr)
+		}
+	}
+
+	contains := []string{
+		"Review the **plan**",
+		"Do NOT run",
+		"Issue alignment",
+		"Feasibility",
+		"Completeness",
+		"Scope",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("PLAN review prompt should contain %q", substr)
+		}
+	}
+}
+
+func TestBuildReviewPrompt_ImplementPhaseHasCodeReview(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "11",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "Implemented the feature",
+		Iteration:      1,
+		MaxIterations:  3,
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	contains := []string{
+		"git diff main..HEAD",
+		"Open and read key modified files",
+		"Verify that the changes match",
+		"Security issues",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("IMPLEMENT review prompt should contain %q", substr)
+		}
+	}
+
+	notContains := []string{
+		"Review the **plan**",
+		"Do NOT run",
+	}
+	for _, substr := range notContains {
+		if containsString(prompt, substr) {
+			t.Errorf("IMPLEMENT review prompt should NOT contain %q", substr)
+		}
 	}
 }
