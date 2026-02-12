@@ -76,7 +76,6 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	// Inject memory context if store is available
 	if c.memoryStore != nil {
-		// Build context scoped to the current task
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
@@ -86,14 +85,11 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	c.logInfo("Delegating phase %s: adapter=%s subtask=%s", phase, activeAgent.Name(), subTaskID)
 
-	// Resolve phase-scoped iteration for the delegated container
-	phaseIter := 1
-	taskID := taskKey(c.activeTaskType, c.activeTask)
-	if state, ok := c.taskStates[taskID]; ok {
-		phaseIter = state.PhaseIteration
-	}
-
-	// Build environment and command using phase iteration
+	// Build environment and command using phase-scoped iteration.
+	// Note: IterationContext.Iteration above is intentionally the session-global
+	// counter (used for internal tracking), while AGENTIUM_ITERATION env var
+	// set by BuildEnv uses the phase-scoped counter that resets each phase.
+	phaseIter := c.phaseIteration()
 	env := activeAgent.BuildEnv(session, phaseIter)
 	command := activeAgent.BuildCommand(session, phaseIter)
 

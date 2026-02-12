@@ -9,6 +9,18 @@ import (
 	"github.com/andywolf/agentium/internal/handoff"
 )
 
+// phaseIteration returns the 1-indexed, phase-scoped iteration counter for
+// the active task. Agent containers see this value as AGENTIUM_ITERATION
+// (resets at each phase transition), while c.iteration remains the session-global
+// counter used for memory, logging, and event tracking.
+func (c *Controller) phaseIteration() int {
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	if state, ok := c.taskStates[taskID]; ok {
+		return state.PhaseIteration
+	}
+	return 1
+}
+
 // runIteration executes a single agent iteration, building the session context
 // and running the agent container. Handles phase-aware prompts, handoff injection,
 // memory context, model routing, and adapter fallback.
@@ -139,16 +151,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 	}
 
-	// Resolve phase-scoped iteration for agent containers.
-	// Containers see a 1-indexed counter that resets each phase, while
-	// c.iteration (session-global) is preserved for memory, logging, events.
-	phaseIter := 1
-	taskID := taskKey(c.activeTaskType, c.activeTask)
-	if state, ok := c.taskStates[taskID]; ok {
-		phaseIter = state.PhaseIteration
-	}
-
-	// Build environment and command using phase iteration
+	// Build environment and command using phase-scoped iteration
+	phaseIter := c.phaseIteration()
 	env := activeAgent.BuildEnv(session, phaseIter)
 	command := activeAgent.BuildCommand(session, phaseIter)
 
@@ -230,11 +234,7 @@ func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.A
 	}
 
 	// Iteration 1 or non-continuation-capable: use full prompt via pooled exec
-	phaseIter := 1
-	if state != nil {
-		phaseIter = state.PhaseIteration
-	}
-	c.logInfo("Using pooled execution for Worker (phase iteration %d)", phaseIter)
+	c.logInfo("Using pooled execution for Worker (phase iteration %d)", c.phaseIteration())
 	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
 }
 

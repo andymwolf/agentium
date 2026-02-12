@@ -3,6 +3,7 @@ package handoff
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -241,27 +242,18 @@ func TestBuildImplementInput_UsesIssueRef(t *testing.T) {
 	}
 
 	// The JSON should contain issue number and title but NOT the body
-	if !containsSubstring(input, `"title": "Test Issue"`) {
+	if !strings.Contains(input, `"title": "Test Issue"`) {
 		t.Errorf("expected issue title in output, got:\n%s", input)
 	}
-	if !containsSubstring(input, `"number": 42`) {
+	if !strings.Contains(input, `"number": 42`) {
 		t.Errorf("expected issue number in output, got:\n%s", input)
 	}
-	if containsSubstring(input, "This body should not appear") {
+	if strings.Contains(input, "This body should not appear") {
 		t.Errorf("expected issue body to be excluded from implement input, got:\n%s", input)
 	}
-	if !containsSubstring(input, `"repository": "owner/repo"`) {
+	if !strings.Contains(input, `"repository": "owner/repo"`) {
 		t.Errorf("expected repository in output, got:\n%s", input)
 	}
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestParser(t *testing.T) {
