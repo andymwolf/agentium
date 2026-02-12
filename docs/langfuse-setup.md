@@ -35,7 +35,7 @@ Sign up at [cloud.langfuse.com](https://cloud.langfuse.com) and create a new pro
 
 > **Note:** The public key starts with `pk-lf-` and the secret key starts with `sk-lf-`. Keep the secret key secure.
 
-### 3. Set Environment Variables
+### 3a. Set Environment Variables (Local Dev)
 
 For local development or testing:
 
@@ -49,6 +49,48 @@ For self-hosted Langfuse instances, also set the base URL:
 ```bash
 export LANGFUSE_BASE_URL="https://langfuse.your-company.com"
 ```
+
+> **Note:** Environment variables set on your local machine are **not** available on GCP VMs. For VM sessions, use GCP Secret Manager (see below).
+
+### 3b. Configure GCP Secret Manager (VM Sessions)
+
+For production VM sessions, store Langfuse keys in GCP Secret Manager so the controller can fetch them at startup.
+
+1. **Create the secrets** (one-time setup):
+
+```bash
+echo -n "pk-lf-your-public-key" | gcloud secrets create langfuse-public-key \
+  --project=YOUR_GCP_PROJECT --data-file=-
+
+echo -n "sk-lf-your-secret-key" | gcloud secrets create langfuse-secret-key \
+  --project=YOUR_GCP_PROJECT --data-file=-
+```
+
+2. **Grant access** to the VM service account (if not already granted):
+
+```bash
+gcloud secrets add-iam-policy-binding langfuse-public-key \
+  --project=YOUR_GCP_PROJECT \
+  --member="serviceAccount:YOUR_SA@YOUR_GCP_PROJECT.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding langfuse-secret-key \
+  --project=YOUR_GCP_PROJECT \
+  --member="serviceAccount:YOUR_SA@YOUR_GCP_PROJECT.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+> **Tip:** If your service account already has `roles/secretmanager.secretAccessor` at the project level (e.g., for `github-app-key`), no additional IAM bindings are needed.
+
+3. **Add the paths to `.agentium.yaml`**:
+
+```yaml
+langfuse:
+  public_key_secret: "projects/YOUR_GCP_PROJECT/secrets/langfuse-public-key/versions/latest"
+  secret_key_secret: "projects/YOUR_GCP_PROJECT/secrets/langfuse-secret-key/versions/latest"
+```
+
+The controller will fetch these secrets at startup and initialize the Langfuse tracer automatically.
 
 ### 4. Run a Session
 
@@ -145,10 +187,13 @@ When a Reviewer or Judge is skipped, an event is recorded:
 
 ### No traces appearing
 
-1. Verify env vars are set: `echo $LANGFUSE_PUBLIC_KEY`
+1. Verify env vars are set: `echo $LANGFUSE_PUBLIC_KEY` (local dev only)
 2. Check controller logs for `Langfuse: tracer initialized` message
-3. Ensure `LANGFUSE_ENABLED` is not set to `false`
-4. Verify network access to `cloud.langfuse.com` from the VM
+3. If logs show `Langfuse: not configured`, add the `langfuse:` section to `.agentium.yaml` with Secret Manager paths (see [3b](#3b-configure-gcp-secret-manager-vm-sessions))
+4. Ensure `LANGFUSE_ENABLED` is not set to `false`
+5. Verify network access to `cloud.langfuse.com` from the VM
+
+> **Common pitfall:** Local environment variables (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`) are not available on GCP VMs. For VM sessions, you must configure Secret Manager paths in `.agentium.yaml`.
 
 ### Traces appear but missing generations
 
