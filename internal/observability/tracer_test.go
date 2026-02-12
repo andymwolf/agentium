@@ -1,12 +1,14 @@
 package observability
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -298,6 +300,221 @@ func TestLangfuseTracerSpanContext(t *testing.T) {
 	}
 	if span.SpanID == "" {
 		t.Error("expected non-empty SpanID")
+	}
+}
+
+// newCapturingLogger returns a logger that writes to a buffer for assertions.
+func newCapturingLogger() (*log.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return log.New(&buf, "", 0), &buf
+}
+
+func TestLangfuseTracerResponseParsing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[{"id":"a","status":201},{"id":"b","status":201}],"errors":[]}`))
+	}))
+	defer server.Close()
+
+	logger, buf := newCapturingLogger()
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, logger)
+
+	tracer.StartTrace("task-1", TraceOptions{Workflow: "test"})
+
+	ctx := context.Background()
+	if err := tracer.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	_ = tracer.Stop(ctx)
+
+	output := buf.String()
+	if !strings.Contains(output, "batch sent") {
+		t.Errorf("expected summary log, got: %s", output)
+	}
+	if !strings.Contains(output, "accepted=2") {
+		t.Errorf("expected accepted=2 in log, got: %s", output)
+	}
+	if !strings.Contains(output, "rejected=0") {
+		t.Errorf("expected rejected=0 in log, got: %s", output)
+	}
+}
+
+func TestLangfuseTracerPartialRejection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMultiStatus)
+		_, _ = w.Write([]byte(`{"successes":[{"id":"a","status":201}],"errors":[{"id":"b","status":400,"message":"invalid field"}]}`))
+	}))
+	defer server.Close()
+
+	logger, buf := newCapturingLogger()
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, logger)
+
+	tracer.StartTrace("task-1", TraceOptions{Workflow: "test"})
+	tracer.StartTrace("task-2", TraceOptions{Workflow: "test"})
+
+	ctx := context.Background()
+	if err := tracer.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	_ = tracer.Stop(ctx)
+
+	output := buf.String()
+	if !strings.Contains(output, "event b rejected") {
+		t.Errorf("expected per-event rejection log, got: %s", output)
+	}
+	if !strings.Contains(output, "invalid field") {
+		t.Errorf("expected error message in log, got: %s", output)
+	}
+	if !strings.Contains(output, "accepted=1") {
+		t.Errorf("expected accepted=1 in log, got: %s", output)
+	}
+	if !strings.Contains(output, "rejected=1") {
+		t.Errorf("expected rejected=1 in log, got: %s", output)
+	}
+}
+
+func TestLangfuseTracerAllEventsRejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[],"errors":[{"id":"a","status":400,"message":"bad format"},{"id":"b","status":422,"message":"unknown type"}]}`))
+	}))
+	defer server.Close()
+
+	logger, buf := newCapturingLogger()
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, logger)
+
+	tracer.StartTrace("task-1", TraceOptions{Workflow: "test"})
+	tracer.StartTrace("task-2", TraceOptions{Workflow: "test"})
+
+	ctx := context.Background()
+	if err := tracer.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	_ = tracer.Stop(ctx)
+
+	output := buf.String()
+	if !strings.Contains(output, "event a rejected") {
+		t.Errorf("expected rejection for event a, got: %s", output)
+	}
+	if !strings.Contains(output, "event b rejected") {
+		t.Errorf("expected rejection for event b, got: %s", output)
+	}
+	if !strings.Contains(output, "accepted=0") {
+		t.Errorf("expected accepted=0 in log, got: %s", output)
+	}
+	if !strings.Contains(output, "rejected=2") {
+		t.Errorf("expected rejected=2 in log, got: %s", output)
+	}
+}
+
+func TestLangfuseTracerMalformedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not json at all`))
+	}))
+	defer server.Close()
+
+	logger, buf := newCapturingLogger()
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, logger)
+
+	tracer.StartTrace("task-1", TraceOptions{Workflow: "test"})
+
+	ctx := context.Background()
+	// Should not return an error — malformed response is logged but not fatal.
+	if err := tracer.Flush(ctx); err != nil {
+		t.Fatalf("Flush should not fail on malformed response, got: %v", err)
+	}
+	_ = tracer.Stop(ctx)
+
+	output := buf.String()
+	if !strings.Contains(output, "could not parse response") {
+		t.Errorf("expected parse warning in log, got: %s", output)
+	}
+}
+
+func TestLangfuseTracerPing(t *testing.T) {
+	var mu sync.Mutex
+	var receivedPayload ingestionPayload
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		_ = json.Unmarshal(body, &receivedPayload)
+		mu.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[{"id":"ping","status":201}],"errors":[]}`))
+	}))
+	defer server.Close()
+
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, newTestLogger())
+	defer func() { _ = tracer.Stop(context.Background()) }()
+
+	if err := tracer.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping failed: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(receivedPayload.Batch) != 1 {
+		t.Fatalf("expected 1 event in ping batch, got %d", len(receivedPayload.Batch))
+	}
+
+	evt := receivedPayload.Batch[0]
+	if evt.Type != "trace-create" {
+		t.Errorf("expected trace-create event, got %s", evt.Type)
+	}
+	name, _ := evt.Body["name"].(string)
+	if name != "agentium-connectivity-test" {
+		t.Errorf("expected name 'agentium-connectivity-test', got %q", name)
+	}
+	id, _ := evt.Body["id"].(string)
+	if !strings.HasPrefix(id, "agentium-ping-") {
+		t.Errorf("expected id prefix 'agentium-ping-', got %q", id)
+	}
+}
+
+func TestLangfuseTracerPingAuthFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	defer server.Close()
+
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "bad-key",
+		SecretKey: "bad-secret",
+		BaseURL:   server.URL,
+	}, newTestLogger())
+	defer func() { _ = tracer.Stop(context.Background()) }()
+
+	err := tracer.Ping(context.Background())
+	if err == nil {
+		t.Fatal("expected Ping to return error for 401 response")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("expected error to mention 401, got: %v", err)
 	}
 }
 
