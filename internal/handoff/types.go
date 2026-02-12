@@ -31,8 +31,7 @@ type IssueContext struct {
 
 // PlanInput is the curated input for the PLAN phase.
 type PlanInput struct {
-	Issue        IssueContext `json:"issue"`
-	PreviousPlan *PlanOutput  `json:"previous_plan,omitempty"` // Present during ITERATE cycles
+	Issue IssueContext `json:"issue"`
 }
 
 // ImplementationStep describes a single step in the implementation plan.

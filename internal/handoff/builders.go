@@ -56,16 +56,9 @@ func (b *Builder) buildPlanInput(taskID string) (*PlanInput, error) {
 		return nil, fmt.Errorf("no issue context found for task %s", taskID)
 	}
 
-	input := &PlanInput{
+	return &PlanInput{
 		Issue: *issue,
-	}
-
-	// Include previous plan if available (for ITERATE cycles)
-	if prevPlan := b.store.GetPlanOutput(taskID); prevPlan != nil {
-		input.PreviousPlan = prevPlan
-	}
-
-	return input, nil
+	}, nil
 }
 
 // buildImplementInput constructs input for the IMPLEMENT phase.
