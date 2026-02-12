@@ -101,16 +101,16 @@ func (c *Controller) initTracer(ctx context.Context) {
 			return // No env vars and no secret paths configured
 		}
 
-		c.logInfo("Langfuse: fetching keys from Secret Manager (public=%s, secret=%s)", pubPath, secPath)
+		c.logInfo("Langfuse: fetching keys from Secret Manager")
 		var err error
 		publicKey, err = c.fetchSecret(ctx, pubPath)
 		if err != nil {
-			c.logWarning("Langfuse: failed to fetch public key from %s: %v", pubPath, err)
+			c.logWarning("Langfuse: failed to fetch public key from Secret Manager: %v", err)
 			return
 		}
 		secretKey, err = c.fetchSecret(ctx, secPath)
 		if err != nil {
-			c.logWarning("Langfuse: failed to fetch secret key from %s: %v", secPath, err)
+			c.logWarning("Langfuse: failed to fetch secret key from Secret Manager: %v", err)
 			return
 		}
 		publicKey = strings.TrimSpace(publicKey)
