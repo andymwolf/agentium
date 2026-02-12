@@ -59,4 +59,4 @@ controller:
 # langfuse:
 #   public_key_secret: "projects/my-gcp-project/secrets/langfuse-public-key/versions/latest"
 #   secret_key_secret: "projects/my-gcp-project/secrets/langfuse-secret-key/versions/latest"
-#   base_url: "https://cloud.langfuse.com"  # Only needed for self-hosted instances
+#   base_url: "https://us.cloud.langfuse.com"  # Region-specific: us.cloud.langfuse.com (US), cloud.langfuse.com (EU)
