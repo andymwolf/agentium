@@ -44,3 +44,19 @@ claude:
 # Controller settings (optional)
 controller:
   image: "ghcr.io/andymwolf/agentium-controller:latest"
+
+# Langfuse observability (optional)
+# Enables structured tracing of the phase loop (Worker/Reviewer/Judge) in Langfuse.
+#
+# Option A: Environment variables (local dev)
+#   export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+#   export LANGFUSE_SECRET_KEY="sk-lf-..."
+#
+# Option B: GCP Secret Manager (VM sessions)
+#   Store keys in Secret Manager and reference them below.
+#   See docs/langfuse-setup.md for setup instructions.
+#
+# langfuse:
+#   public_key_secret: "projects/my-gcp-project/secrets/langfuse-public-key/versions/latest"
+#   secret_key_secret: "projects/my-gcp-project/secrets/langfuse-secret-key/versions/latest"
+#   base_url: "https://cloud.langfuse.com"  # Only needed for self-hosted instances
