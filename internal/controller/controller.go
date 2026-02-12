@@ -312,6 +312,7 @@ type Controller struct {
 	// Parent issue -> sub-issue expansion
 	parentSubIssues map[string][]string // parent issue ID -> sub-issue IDs
 	subIssueCache   map[string][]string // issueID → cached open sub-issue IDs
+	blockedByCache  map[string][]string // issueID → cached open blocking issue IDs
 
 	// Shutdown management
 	shutdownHooks []ShutdownHook
@@ -409,6 +410,7 @@ func New(config SessionConfig) (*Controller, error) {
 		shutdownCh:      make(chan struct{}),
 		parentSubIssues: make(map[string][]string),
 		subIssueCache:   make(map[string][]string),
+		blockedByCache:  make(map[string][]string),
 		tracer:          &observability.NoOpTracer{},
 	}
 
@@ -671,6 +673,21 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 					state.Phase = PhaseNothingToDo
 				}
 			}
+			continue
+		}
+
+		// Second check: is this issue blocked by open issues (GitHub native blockedBy)?
+		blockingIDs, blockedByErr := c.detectBlockingIssues(ctx, nextTask.ID)
+		if blockedByErr != nil {
+			return fmt.Errorf("cannot continue without GitHub API: %w", blockedByErr)
+		}
+		if len(blockingIDs) > 0 {
+			taskID := taskKey("issue", nextTask.ID)
+			c.logInfo("Issue #%s is blocked by open issues: %v", nextTask.ID, blockingIDs)
+			if state, ok := c.taskStates[taskID]; ok {
+				state.Phase = PhaseBlocked
+			}
+			c.propagateBlocked(nextTask.ID)
 			continue
 		}
 
