@@ -80,6 +80,6 @@ ORDER BY day DESC;
 
 ## Notes
 
-- The BigQuery table (`agentium_session`) is auto-created by Cloud Logging when the first matching log entry arrives. Views will return errors until then.
+- The BigQuery table (`agentium_session`) is pre-created by Terraform so that views can reference it immediately. Cloud Logging extends the schema with additional columns (`insertId`, `resource`, `receiveTimestamp`, etc.) on the first matching log entry.
 - Cloud Logging exports labels as a `NULLABLE RECORD` where each label key becomes a named column (e.g., `labels.session_id`). Views reference these fields directly via dot-notation.
 - Token counts are stored as strings in labels and converted via `SAFE_CAST` to `INT64`.
