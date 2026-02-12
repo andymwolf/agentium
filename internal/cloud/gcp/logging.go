@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -118,6 +119,10 @@ func NewCloudLogger(ctx context.Context, cfg CloudLoggerConfig, opts ...option.C
 	client, err := logging.NewClient(ctx, cfg.ProjectID, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logging client: %w", err)
+	}
+
+	client.OnError = func(err error) {
+		log.Printf("[cloud-logging] async delivery error: %v", err)
 	}
 
 	// Ping with retry to wait for IAM propagation. GCP IAM bindings can take

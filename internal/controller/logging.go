@@ -72,6 +72,9 @@ func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentNam
 		result.InputTokens, result.OutputTokens, result.InputTokens+result.OutputTokens)
 
 	c.cloudLogger.LogWithLabels(gcp.SeverityInfo, msg, labels)
+
+	c.logger.Printf("Cloud Logging: token_usage written (task=%s phase=%s tokens=%d)",
+		taskID, phase, result.InputTokens+result.OutputTokens)
 }
 
 // initTracer initializes the Langfuse observability tracer.

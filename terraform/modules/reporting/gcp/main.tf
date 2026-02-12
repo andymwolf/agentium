@@ -62,54 +62,10 @@ resource "google_bigquery_table" "log_entries" {
   }
 
   schema = jsonencode([
+    { name = "timestamp", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "logName", type = "STRING", mode = "NULLABLE" },
     {
-      name = "timestamp"
-      type = "TIMESTAMP"
-      mode = "NULLABLE"
-    },
-    {
-      name = "severity"
-      type = "STRING"
-      mode = "NULLABLE"
-    },
-    {
-      name = "jsonPayload"
-      type = "RECORD"
-      mode = "NULLABLE"
-      fields = [
-        { name = "timestamp", type = "STRING", mode = "NULLABLE" },
-        { name = "severity", type = "STRING", mode = "NULLABLE" },
-        { name = "message", type = "STRING", mode = "NULLABLE" },
-        { name = "session_id", type = "STRING", mode = "NULLABLE" },
-        { name = "iteration", type = "INTEGER", mode = "NULLABLE" },
-        {
-          name = "labels"
-          type = "RECORD"
-          mode = "NULLABLE"
-          fields = [
-            { name = "session_id", type = "STRING", mode = "NULLABLE" },
-            { name = "repository", type = "STRING", mode = "NULLABLE" },
-            { name = "log_type", type = "STRING", mode = "NULLABLE" },
-            { name = "task_id", type = "STRING", mode = "NULLABLE" },
-            { name = "phase", type = "STRING", mode = "NULLABLE" },
-            { name = "agent", type = "STRING", mode = "NULLABLE" },
-            { name = "model", type = "STRING", mode = "NULLABLE" },
-            { name = "input_tokens", type = "STRING", mode = "NULLABLE" },
-            { name = "output_tokens", type = "STRING", mode = "NULLABLE" },
-            { name = "total_tokens", type = "STRING", mode = "NULLABLE" }
-          ]
-        }
-      ]
-    },
-    {
-      name = "logName"
-      type = "STRING"
-      mode = "NULLABLE"
-    },
-    {
-      name = "labels"
-      type = "RECORD"
-      mode = "NULLABLE"
+      name = "labels", type = "RECORD", mode = "NULLABLE"
       fields = [
         { name = "session_id", type = "STRING", mode = "NULLABLE" },
         { name = "repository", type = "STRING", mode = "NULLABLE" },
@@ -124,6 +80,10 @@ resource "google_bigquery_table" "log_entries" {
       ]
     }
   ])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 
   depends_on = [google_bigquery_dataset.token_usage]
 }
