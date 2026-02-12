@@ -1383,7 +1383,7 @@ func (c *Controller) phaseJudgeCriteria(phase TaskPhase) string {
 // with the correct adapter image, environment, and auth mounts based on
 // model routing configuration.
 func (c *Controller) startPhaseContainerPool(ctx context.Context, phase TaskPhase) {
-	pool := NewContainerPool(c.workDir, c.containerMemLimit, c.config.ID, string(phase), c.execCommand, c.logger)
+	pool := NewContainerPool(c.workDir, c.containerMemLimit, c.config.ID, string(phase), c.execCommand, c.logger, c.logWarning)
 
 	// Base session for building env
 	session := &agent.Session{

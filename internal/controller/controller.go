@@ -361,12 +361,15 @@ func New(config SessionConfig) (*Controller, error) {
 	var cloudLogger *gcp.CloudLogger
 	var metadataUpdater gcp.MetadataUpdater
 
+	// Collect init warnings to log through cloud-aware logger after construction
+	var initWarnings []string
+
 	if !config.Interactive {
 		// Initialize Secret Manager client
 		secretManager, err = gcp.NewSecretManagerClient(context.Background())
 		if err != nil {
-			// Log warning but don't fail - allow fallback to gcloud CLI
-			logger.Printf("Warning: failed to initialize Secret Manager client: %v", err)
+			// Defer warning — will be logged through c.logWarning() after Controller is built
+			initWarnings = append(initWarnings, fmt.Sprintf("failed to initialize Secret Manager client: %v", err))
 		}
 
 		// Initialize Cloud Logging (non-fatal if unavailable)
@@ -375,6 +378,7 @@ func New(config SessionConfig) (*Controller, error) {
 			Repository: config.Repository,
 		})
 		if err != nil {
+			// Chicken-and-egg: Cloud Logging itself failed, stdout-only is fine
 			logger.Printf("Warning: Cloud Logging unavailable, using local logs only: %v", err)
 		} else {
 			cloudLogger = cloudLoggerInstance
@@ -384,7 +388,7 @@ func New(config SessionConfig) (*Controller, error) {
 		if gcp.IsRunningOnGCP() {
 			metadataUpdaterInstance, err := gcp.NewComputeMetadataUpdater(context.Background())
 			if err != nil {
-				logger.Printf("Warning: metadata updater unavailable, session status will not be reported: %v", err)
+				initWarnings = append(initWarnings, fmt.Sprintf("metadata updater unavailable, session status will not be reported: %v", err))
 			} else {
 				metadataUpdater = metadataUpdaterInstance
 			}
@@ -406,6 +410,11 @@ func New(config SessionConfig) (*Controller, error) {
 		parentSubIssues: make(map[string][]string),
 		subIssueCache:   make(map[string][]string),
 		tracer:          &observability.NoOpTracer{},
+	}
+
+	// Log deferred init warnings through cloud-aware logger
+	for _, w := range initWarnings {
+		c.logWarning("%s", w)
 	}
 
 	// Build phaseConfigs map from Phases slice for O(1) lookup
@@ -563,7 +572,7 @@ func (c *Controller) initSession(ctx context.Context) error {
 	}
 
 	// Initialize Langfuse tracer (env vars or Secret Manager)
-	c.initTracer(ctx, c.logger)
+	c.initTracer(ctx)
 
 	// Pre-pull agent container images to avoid first-iteration latency
 	c.prePullAgentImages(ctx)

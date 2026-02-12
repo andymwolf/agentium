@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -79,9 +78,9 @@ func (c *Controller) logTokenConsumption(result *agent.IterationResult, agentNam
 // It checks environment variables first (backward compat for local dev),
 // then falls back to fetching keys from GCP Secret Manager using config paths.
 // If neither source provides keys, the default NoOpTracer is kept.
-func (c *Controller) initTracer(ctx context.Context, logger *log.Logger) {
+func (c *Controller) initTracer(ctx context.Context) {
 	if os.Getenv("LANGFUSE_ENABLED") == "false" {
-		logger.Printf("Langfuse: disabled via LANGFUSE_ENABLED=false")
+		c.logInfo("Langfuse: disabled via LANGFUSE_ENABLED=false")
 		return
 	}
 
@@ -95,26 +94,30 @@ func (c *Controller) initTracer(ctx context.Context, logger *log.Logger) {
 		secPath := c.config.Langfuse.SecretKeySecret
 		if pubPath == "" || secPath == "" {
 			if pubPath != secPath {
-				logger.Printf("Langfuse: incomplete config — both public_key_secret and secret_key_secret are required")
+				c.logWarning("Langfuse: incomplete config — both public_key_secret and secret_key_secret are required")
 			} else {
-				logger.Printf("Langfuse: not configured (no env vars or secret paths set, tracing disabled)")
+				c.logInfo("Langfuse: not configured (no env vars or secret paths set, tracing disabled)")
 			}
 			return // No env vars and no secret paths configured
 		}
 
+		c.logInfo("Langfuse: fetching keys from Secret Manager (public=%s, secret=%s)", pubPath, secPath)
 		var err error
 		publicKey, err = c.fetchSecret(ctx, pubPath)
 		if err != nil {
-			logger.Printf("Langfuse: failed to fetch public key from %s: %v", pubPath, err)
+			c.logWarning("Langfuse: failed to fetch public key from %s: %v", pubPath, err)
 			return
 		}
 		secretKey, err = c.fetchSecret(ctx, secPath)
 		if err != nil {
-			logger.Printf("Langfuse: failed to fetch secret key from %s: %v", secPath, err)
+			c.logWarning("Langfuse: failed to fetch secret key from %s: %v", secPath, err)
 			return
 		}
 		publicKey = strings.TrimSpace(publicKey)
 		secretKey = strings.TrimSpace(secretKey)
+		c.logInfo("Langfuse: keys fetched from Secret Manager")
+	} else {
+		c.logInfo("Langfuse: using keys from environment variables")
 	}
 
 	if publicKey == "" || secretKey == "" {
@@ -131,11 +134,11 @@ func (c *Controller) initTracer(ctx context.Context, logger *log.Logger) {
 		PublicKey: publicKey,
 		SecretKey: secretKey,
 		BaseURL:   baseURL,
-	}, logger)
+	}, c.logger)
 
 	c.tracer = lt
 	c.AddShutdownHook(func(ctx context.Context) error {
 		return c.tracer.Stop(ctx)
 	})
-	logger.Printf("Langfuse: tracer initialized (base_url=%s)", lt.BaseURL())
+	c.logInfo("Langfuse: tracer initialized (base_url=%s)", lt.BaseURL())
 }
