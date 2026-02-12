@@ -378,11 +378,14 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseImplement,
 			wantContains: []string{
-				"## Feedback from Previous Iteration",
-				"### Reviewer Analysis (Context)",
+				"code changes were reviewed",
+				"## The reviewer also noted:",
 				"Address the test coverage gap",
+				"AGENTIUM_HANDOFF",
+			},
+			wantNotContain: []string{
+				"## Feedback from Previous Iteration",
 				"**How to use this feedback:**",
-				"targeted, surgical fixes",
 			},
 		},
 		{
@@ -400,9 +403,12 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseImplement,
 			wantContains: []string{
-				"## Feedback from Previous Iteration",
-				"### Judge Directives (REQUIRED)",
+				"code changes were reviewed",
+				"## Here's what you need to fix:",
 				"Add unit tests for edge cases",
+			},
+			wantNotContain: []string{
+				"## Feedback from Previous Iteration",
 			},
 		},
 		{
@@ -421,10 +427,13 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseImplement,
 			wantContains: []string{
-				"### Reviewer Analysis (Context)",
+				"## The reviewer also noted:",
 				"Detailed analysis of the implementation",
-				"### Judge Directives (REQUIRED)",
+				"## Here's what you need to fix:",
 				"Fix the validation logic",
+			},
+			wantNotContain: []string{
+				"## Feedback from Previous Iteration",
 			},
 		},
 		{
@@ -446,7 +455,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			wantNotContain: []string{"Feedback for issue 99"},
 		},
 		{
-			name:        "PLAN phase includes handoff reminder",
+			name:        "PLAN phase includes handoff template and narrative",
 			memoryStore: true,
 			entries: []struct {
 				Type           memory.SignalType
@@ -460,17 +469,17 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhasePlan,
 			wantContains: []string{
-				"### Required Actions",
+				"plan was reviewed",
 				"AGENTIUM_HANDOFF",
 				"revised plan",
 				"Add API endpoints to plan",
 			},
 			wantNotContain: []string{
-				"make code changes",
+				"requesting fixes",
 			},
 		},
 		{
-			name:        "IMPLEMENT phase includes handoff reminder with code change instruction",
+			name:        "IMPLEMENT phase includes handoff template with code change narrative",
 			memoryStore: true,
 			entries: []struct {
 				Type           memory.SignalType
@@ -484,9 +493,9 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseImplement,
 			wantContains: []string{
-				"### Required Actions",
+				"code changes were reviewed",
+				"requesting fixes",
 				"AGENTIUM_HANDOFF",
-				"make code changes",
 				"Fix the test failures",
 			},
 			wantNotContain: []string{
@@ -494,7 +503,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 		},
 		{
-			name:        "DOCS phase includes handoff reminder",
+			name:        "DOCS phase includes handoff template and narrative",
 			memoryStore: true,
 			entries: []struct {
 				Type           memory.SignalType
@@ -508,13 +517,13 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseDocs,
 			wantContains: []string{
-				"### Required Actions",
+				"documentation updates were reviewed",
 				"AGENTIUM_HANDOFF",
-				"documentation",
+				"docs_updated",
 			},
 		},
 		{
-			name:        "VERIFY phase includes handoff reminder",
+			name:        "VERIFY phase includes handoff template and narrative",
 			memoryStore: true,
 			entries: []struct {
 				Type           memory.SignalType
@@ -528,9 +537,9 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			taskID:         "issue:42",
 			phase:          PhaseVerify,
 			wantContains: []string{
-				"### Required Actions",
+				"verification attempt needs further work",
 				"AGENTIUM_HANDOFF",
-				"verification issues",
+				"checks_passed",
 			},
 		},
 	}
@@ -613,11 +622,12 @@ func TestBuildIterateFeedbackSectionWithPlan(t *testing.T) {
 	got := c.buildIterateFeedbackSection("issue:42", 2, "", PhasePlan)
 
 	wantContains := []string{
-		"### Required Actions",
+		"plan was reviewed",
 		"AGENTIUM_HANDOFF",
 		"Your current plan",
 		"Implement user auth",
 		"Add login endpoint",
+		"Submit your revised plan",
 	}
 	for _, substr := range wantContains {
 		if !containsString(got, substr) {
