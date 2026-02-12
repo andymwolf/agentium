@@ -531,6 +531,80 @@ func TestApplyDefaults(t *testing.T) {
 	}
 }
 
+func boolPtr(b bool) *bool { return &b }
+
+func TestApplyDefaults_ContainerReuse(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   Config
+		wantNil  bool
+		wantBool bool
+	}{
+		{
+			name: "default propagates when session not set",
+			config: Config{
+				Cloud:    CloudConfig{Provider: "gcp"},
+				Defaults: DefaultsConfig{ContainerReuse: true},
+			},
+			wantNil:  false,
+			wantBool: true,
+		},
+		{
+			name: "session explicit false not overridden by default true",
+			config: Config{
+				Cloud:    CloudConfig{Provider: "gcp"},
+				Defaults: DefaultsConfig{ContainerReuse: true},
+				Session:  SessionConfig{ContainerReuse: boolPtr(false)},
+			},
+			wantNil:  false,
+			wantBool: false,
+		},
+		{
+			name: "session explicit true preserved",
+			config: Config{
+				Cloud:   CloudConfig{Provider: "gcp"},
+				Session: SessionConfig{ContainerReuse: boolPtr(true)},
+			},
+			wantNil:  false,
+			wantBool: true,
+		},
+		{
+			name: "no default and no session leaves nil",
+			config: Config{
+				Cloud: CloudConfig{Provider: "gcp"},
+			},
+			wantNil: true,
+		},
+		{
+			name: "default false and session not set leaves nil",
+			config: Config{
+				Cloud:    CloudConfig{Provider: "gcp"},
+				Defaults: DefaultsConfig{ContainerReuse: false},
+			},
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			applyDefaults(&tt.config)
+
+			if tt.wantNil {
+				if tt.config.Session.ContainerReuse != nil {
+					t.Errorf("Session.ContainerReuse = %v, want nil", *tt.config.Session.ContainerReuse)
+				}
+				return
+			}
+			if tt.config.Session.ContainerReuse == nil {
+				t.Fatal("Session.ContainerReuse is nil, want non-nil")
+			}
+			if *tt.config.Session.ContainerReuse != tt.wantBool {
+				t.Errorf("Session.ContainerReuse = %v, want %v", *tt.config.Session.ContainerReuse, tt.wantBool)
+			}
+		})
+	}
+}
+
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
