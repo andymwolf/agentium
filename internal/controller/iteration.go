@@ -9,6 +9,18 @@ import (
 	"github.com/andywolf/agentium/internal/handoff"
 )
 
+// phaseIteration returns the 1-indexed, phase-scoped iteration counter for
+// the active task. Agent containers see this value as AGENTIUM_ITERATION
+// (resets at each phase transition), while c.iteration remains the session-global
+// counter used for memory, logging, and event tracking.
+func (c *Controller) phaseIteration() int {
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	if state, ok := c.taskStates[taskID]; ok {
+		return state.PhaseIteration
+	}
+	return 1
+}
+
 // runIteration executes a single agent iteration, building the session context
 // and running the agent container. Handles phase-aware prompts, handoff injection,
 // memory context, model routing, and adapter fallback.
@@ -139,15 +151,16 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 	}
 
-	// Build environment and command
-	env := activeAgent.BuildEnv(session, c.iteration)
-	command := activeAgent.BuildCommand(session, c.iteration)
+	// Build environment and command using phase-scoped iteration
+	phaseIter := c.phaseIteration()
+	env := activeAgent.BuildEnv(session, phaseIter)
+	command := activeAgent.BuildCommand(session, phaseIter)
 
 	// Check if agent supports stdin-based prompt delivery (for non-interactive mode)
 	stdinPrompt := ""
 	if !c.config.Interactive {
 		if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
-			stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+			stdinPrompt = provider.GetStdinPrompt(session, phaseIter)
 		}
 	}
 
@@ -192,7 +205,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			}
 
 			fallbackAdapter := c.adapters[fallbackName]
-			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name())
+			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name(), phaseIter)
 			return c.runAgentContainer(ctx, fallbackParams)
 		}
 	}
@@ -221,7 +234,7 @@ func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.A
 	}
 
 	// Iteration 1 or non-continuation-capable: use full prompt via pooled exec
-	c.logInfo("Using pooled execution for Worker (iteration %d)", c.iteration)
+	c.logInfo("Using pooled execution for Worker (phase iteration %d)", c.phaseIteration())
 	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
 }
 
@@ -236,7 +249,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 	if !ok {
 		return nil, fmt.Errorf("agent %s does not implement ContinuationCapable", activeAgent.Name())
 	}
-	command := cc.BuildContinueCommand(session, c.iteration)
+	command := cc.BuildContinueCommand(session, state.PhaseIteration)
 
 	// Build incremental feedback as the stdin prompt
 	taskID := taskKey(c.activeTaskType, c.activeTask)
@@ -248,7 +261,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 	params := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
-		Env:         activeAgent.BuildEnv(session, c.iteration),
+		Env:         activeAgent.BuildEnv(session, state.PhaseIteration),
 		Command:     command,
 		LogTag:      "Agent (continue)",
 		StdinPrompt: feedbackSection,
@@ -259,7 +272,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 
 // buildFallbackParams constructs container run parameters for the fallback adapter.
 // It clones the session without model override so the fallback adapter uses its defaults.
-func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Session, originalAdapter string) containerRunParams {
+func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Session, originalAdapter string, phaseIter int) containerRunParams {
 	// Clone session without model override (use fallback adapter's default)
 	fallbackSession := *session
 	if fallbackSession.IterationContext != nil {
@@ -268,12 +281,12 @@ func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Ses
 		fallbackSession.IterationContext = &ctx
 	}
 
-	env := adapter.BuildEnv(&fallbackSession, c.iteration)
-	cmd := adapter.BuildCommand(&fallbackSession, c.iteration)
+	env := adapter.BuildEnv(&fallbackSession, phaseIter)
+	cmd := adapter.BuildCommand(&fallbackSession, phaseIter)
 
 	var stdinPrompt string
 	if provider, ok := adapter.(agent.StdinPromptProvider); ok {
-		stdinPrompt = provider.GetStdinPrompt(&fallbackSession, c.iteration)
+		stdinPrompt = provider.GetStdinPrompt(&fallbackSession, phaseIter)
 	}
 
 	return containerRunParams{

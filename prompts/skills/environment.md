@@ -12,7 +12,7 @@ Your execution environment:
 - **Git**: Configured with appropriate user identity and credential helper
 - **Session variables**:
   - `AGENTIUM_SESSION_ID`: Unique identifier for this session
-  - `AGENTIUM_ITERATION`: Current iteration number
+  - `AGENTIUM_ITERATION`: Current phase iteration (1-indexed, resets at each phase transition)
   - `AGENTIUM_REPOSITORY`: Target repository (owner/repo format)
 
 ## GIT AUTHENTICATION
@@ -35,7 +35,7 @@ If you encounter errors:
 
 ## ITERATION BEHAVIOR
 
-If this is not your first iteration (`AGENTIUM_ITERATION > 1`):
+If this is not your first iteration within the current phase (`AGENTIUM_ITERATION > 1`):
 - Run the pre-flight check (Step 3) to detect existing branches and PRs
 - If a branch or PR already exists for your assigned issue, check it out and continue
 - Do NOT create a new branch or PR if one already exists

@@ -76,7 +76,6 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	// Inject memory context if store is available
 	if c.memoryStore != nil {
-		// Build context scoped to the current task
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		memCtx := c.memoryStore.BuildContext(taskID)
 		if memCtx != "" {
@@ -86,14 +85,18 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	c.logInfo("Delegating phase %s: adapter=%s subtask=%s", phase, activeAgent.Name(), subTaskID)
 
-	// Build environment and command
-	env := activeAgent.BuildEnv(session, c.iteration)
-	command := activeAgent.BuildCommand(session, c.iteration)
+	// Build environment and command using phase-scoped iteration.
+	// Note: IterationContext.Iteration above is intentionally the session-global
+	// counter (used for internal tracking), while AGENTIUM_ITERATION env var
+	// set by BuildEnv uses the phase-scoped counter that resets each phase.
+	phaseIter := c.phaseIteration()
+	env := activeAgent.BuildEnv(session, phaseIter)
+	command := activeAgent.BuildCommand(session, phaseIter)
 
 	// Check if agent supports stdin-based prompt delivery
 	stdinPrompt := ""
 	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
-		stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+		stdinPrompt = provider.GetStdinPrompt(session, phaseIter)
 	}
 
 	return c.runAgentContainer(ctx, containerRunParams{

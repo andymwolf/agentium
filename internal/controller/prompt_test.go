@@ -316,6 +316,133 @@ func TestRenderWithParameters(t *testing.T) {
 	}
 }
 
+func TestBuildPromptForTask_ImplementWithPlan(t *testing.T) {
+	// When a handoff plan exists for the issue, IMPLEMENT phase should
+	// omit the issue body and comments, deferring to the phase input.
+	handoffDir := t.TempDir()
+	hStore, err := handoff.NewStore(handoffDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	taskID := "issue:42"
+	if err := hStore.StorePhaseOutput(taskID, handoff.PhasePlan, 1, &handoff.PlanOutput{
+		Summary:       "Implement login fix",
+		FilesToModify: []string{"auth.go"},
+		ImplementationSteps: []handoff.ImplementationStep{
+			{Order: 1, Description: "Fix auth handler"},
+		},
+		TestingApproach: "unit tests",
+	}); err != nil {
+		t.Fatalf("failed to store plan output: %v", err)
+	}
+
+	issueDetails := []issueDetail{
+		{Number: 42, Title: "Fix login bug", Body: "The login page crashes when you click submit", Comments: []issueComment{
+			{Body: "This is urgent", Author: issueCommentAuthor{Login: "user1"}},
+		}},
+	}
+	issueDetailsByNumber := map[string]*issueDetail{"42": &issueDetails[0]}
+
+	c := &Controller{
+		config:               SessionConfig{Repository: "org/repo"},
+		issueDetails:         issueDetails,
+		issueDetailsByNumber: issueDetailsByNumber,
+		workDir:              "/workspace",
+		handoffStore:         hStore,
+	}
+
+	got := c.buildPromptForTask("42", nil, PhaseImplement)
+
+	// Title should still be present
+	if !containsString(got, "Fix login bug") {
+		t.Errorf("expected title in output, got:\n%s", got)
+	}
+	// Body should be omitted
+	if containsString(got, "login page crashes") {
+		t.Errorf("expected issue body to be omitted when plan exists, got:\n%s", got)
+	}
+	// Comments should be omitted
+	if containsString(got, "This is urgent") {
+		t.Errorf("expected comments to be omitted when plan exists, got:\n%s", got)
+	}
+	// Should reference phase input
+	if !containsString(got, "Phase Input") {
+		t.Errorf("expected reference to Phase Input, got:\n%s", got)
+	}
+}
+
+func TestBuildPromptForTask_ImplementWithoutPlan(t *testing.T) {
+	// When no handoff plan exists, IMPLEMENT phase should include
+	// the full issue body and comments (fallback behavior).
+	issueDetails := []issueDetail{
+		{Number: 42, Title: "Fix login bug", Body: "The login page crashes when you click submit", Comments: []issueComment{
+			{Body: "This is urgent", Author: issueCommentAuthor{Login: "user1"}},
+		}},
+	}
+	issueDetailsByNumber := map[string]*issueDetail{"42": &issueDetails[0]}
+
+	c := &Controller{
+		config:               SessionConfig{Repository: "org/repo"},
+		issueDetails:         issueDetails,
+		issueDetailsByNumber: issueDetailsByNumber,
+		workDir:              "/workspace",
+		// No handoffStore — plan doesn't exist
+	}
+
+	got := c.buildPromptForTask("42", nil, PhaseImplement)
+
+	// Full body should be present
+	if !containsString(got, "login page crashes") {
+		t.Errorf("expected issue body when no plan exists, got:\n%s", got)
+	}
+	// Comments should be present
+	if !containsString(got, "This is urgent") {
+		t.Errorf("expected comments when no plan exists, got:\n%s", got)
+	}
+	// Should NOT reference phase input
+	if containsString(got, "Phase Input") {
+		t.Errorf("should not reference Phase Input when no plan exists, got:\n%s", got)
+	}
+}
+
+func TestBuildPromptForTask_PlanPhaseAlwaysIncludesBody(t *testing.T) {
+	// PLAN phase should always include the full body even when a plan exists
+	// (plan might exist from a previous ITERATE cycle).
+	handoffDir := t.TempDir()
+	hStore, err := handoff.NewStore(handoffDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+
+	taskID := "issue:42"
+	if err := hStore.StorePhaseOutput(taskID, handoff.PhasePlan, 1, &handoff.PlanOutput{
+		Summary: "Old plan",
+	}); err != nil {
+		t.Fatalf("failed to store plan output: %v", err)
+	}
+
+	issueDetails := []issueDetail{
+		{Number: 42, Title: "Fix login bug", Body: "The login page crashes"},
+	}
+	issueDetailsByNumber := map[string]*issueDetail{"42": &issueDetails[0]}
+
+	c := &Controller{
+		config:               SessionConfig{Repository: "org/repo"},
+		issueDetails:         issueDetails,
+		issueDetailsByNumber: issueDetailsByNumber,
+		workDir:              "/workspace",
+		handoffStore:         hStore,
+	}
+
+	got := c.buildPromptForTask("42", nil, PhasePlan)
+
+	// PLAN should still include the full body
+	if !containsString(got, "login page crashes") {
+		t.Errorf("PLAN phase should include issue body even when plan exists, got:\n%s", got)
+	}
+}
+
 func TestBuildIterateFeedbackSection(t *testing.T) {
 	tests := []struct {
 		name        string

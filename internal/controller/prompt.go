@@ -57,13 +57,20 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 	sb.WriteString(fmt.Sprintf("## Your Task: Issue #%s\n\n", issueNumber))
 	if issue != nil {
 		sb.WriteString(fmt.Sprintf("**Title:** %s\n\n", issue.Title))
-		if issue.Body != "" {
-			sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", issue.Body))
-		}
-		if len(issue.Comments) > 0 {
-			if formatted := formatExternalComments(issue.Comments); formatted != "" {
-				sb.WriteString("**Prior Discussion:**\n\n")
-				sb.WriteString(formatted)
+
+		// For IMPLEMENT with handoff plan: skip body/comments (plan replaces them)
+		if phase == PhaseImplement && c.hasPlanForTask(issueNumber) {
+			sb.WriteString("Refer to the **Phase Input** section below for the implementation plan and requirements.\n\n")
+		} else {
+			// Full context for PLAN, DOCS, VERIFY, or fallback when no plan exists
+			if issue.Body != "" {
+				sb.WriteString(fmt.Sprintf("**Description:**\n%s\n\n", issue.Body))
+			}
+			if len(issue.Comments) > 0 {
+				if formatted := formatExternalComments(issue.Comments); formatted != "" {
+					sb.WriteString("**Prior Discussion:**\n\n")
+					sb.WriteString(formatted)
+				}
 			}
 		}
 	}
@@ -168,6 +175,15 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 
 	// Apply template variable substitution
 	return c.renderWithParameters(sb.String())
+}
+
+// hasPlanForTask checks whether a handoff plan exists for the given issue.
+func (c *Controller) hasPlanForTask(issueNumber string) bool {
+	if !c.isHandoffEnabled() || c.handoffStore == nil {
+		return false
+	}
+	taskID := taskKey("issue", issueNumber)
+	return c.handoffStore.GetPlanOutput(taskID) != nil
 }
 
 // buildIssueContext creates a handoff.IssueContext from the active issue details.

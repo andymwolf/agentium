@@ -74,8 +74,12 @@ func (b *Builder) buildImplementInput(taskID string) (*ImplementInput, error) {
 	}
 
 	input := &ImplementInput{
-		Issue: *issue,
-		Plan:  *plan,
+		Issue: IssueRef{
+			Number:     issue.Number,
+			Title:      issue.Title,
+			Repository: issue.Repository,
+		},
+		Plan: *plan,
 	}
 
 	// Check for existing work from previous implementation attempts

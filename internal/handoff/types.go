@@ -55,9 +55,17 @@ type PlanOutput struct {
 // IMPLEMENT Phase
 // -----------------------------------------------------------------------------
 
+// IssueRef is a lightweight reference to an issue without the full body.
+// Used in IMPLEMENT phase where the plan replaces the raw issue content.
+type IssueRef struct {
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	Repository string `json:"repository"`
+}
+
 // ImplementInput is the curated input for the IMPLEMENT phase.
 type ImplementInput struct {
-	Issue        IssueContext  `json:"issue"`
+	Issue        IssueRef      `json:"issue"`
 	Plan         PlanOutput    `json:"plan"`
 	ExistingWork *ExistingWork `json:"existing_work,omitempty"`
 }
