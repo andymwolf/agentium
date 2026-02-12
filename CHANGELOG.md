@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/andymwolf/agentium/compare/v0.8.1...v0.9.0) (2026-02-12)
+
+
+### Features
+
+* phase-scoped context clearing and iteration tracking ([#498](https://github.com/andymwolf/agentium/issues/498)) ([eac3a64](https://github.com/andymwolf/agentium/commit/eac3a6419aa2b86820b0396df092a476d1d1ca38))
+
+
+### Bug Fixes
+
+* add Langfuse base_url to example config for US region ([#497](https://github.com/andymwolf/agentium/issues/497)) ([f137252](https://github.com/andymwolf/agentium/commit/f137252af651b393c2e4743384507f796b7ff1aa))
+* add Langfuse response parsing and diagnostic logging ([#495](https://github.com/andymwolf/agentium/issues/495)) ([9799f0a](https://github.com/andymwolf/agentium/commit/9799f0a91dc14830affdced6aff46680751fa446))
+* correct controller Dockerfile Go version and remove aider image build ([#502](https://github.com/andymwolf/agentium/issues/502)) ([8519a18](https://github.com/andymwolf/agentium/commit/8519a1831de896e185fa1995db6a828efc3a3247))
+* parse token usage from top-level result event fields ([#501](https://github.com/andymwolf/agentium/issues/501)) ([c177e68](https://github.com/andymwolf/agentium/commit/c177e68318418c2db8f383f7c1313eaf66387ada))
+* simplify BigQuery schema and add Cloud Logging error visibility ([#500](https://github.com/andymwolf/agentium/issues/500)) ([0596eaf](https://github.com/andymwolf/agentium/commit/0596eaf084f1061216b0f1738e282e1e3bf45d05))
+
 ## [0.8.1](https://github.com/andymwolf/agentium/compare/v0.8.0...v0.8.1) (2026-02-12)
 
 
