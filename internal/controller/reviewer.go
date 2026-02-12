@@ -214,8 +214,9 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	if params.CompletedPhase == PhasePlan {
 		// PLAN phase: no code changes exist — review the plan itself
 		sb.WriteString("Review the **plan** produced in this phase.\n\n")
-		sb.WriteString("**IMPORTANT:** Do NOT run `git diff` or look for modified files — there are none expected. ")
-		sb.WriteString("The PLAN phase produces a plan, not code.\n\n")
+		sb.WriteString("**IMPORTANT:** The plan is provided in the **Phase Output** section above — it is NOT written to a file on disk. ")
+		sb.WriteString("Do NOT run `git diff`, look for modified files, or search for plan files — there are none. ")
+		sb.WriteString("The PLAN phase produces a plan in the agent output, not code or files.\n\n")
 		sb.WriteString("Evaluate the plan on:\n")
 		sb.WriteString("- **Issue alignment:** Does the plan address what the issue asks for?\n")
 		sb.WriteString("- **Feasibility:** Is the approach technically sound?\n")
