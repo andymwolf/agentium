@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/andymwolf/agentium/compare/v0.7.1...v0.8.0) (2026-02-12)
+
+
+### Features
+
+* check GitHub native blockedBy relationships before processing issues ([#478](https://github.com/andymwolf/agentium/issues/478)) ([97cdb3e](https://github.com/andymwolf/agentium/commit/97cdb3e18a45e6b72eb3433c78126a013d496ee9)), closes [#477](https://github.com/andymwolf/agentium/issues/477)
+
+
+### Bug Fixes
+
+* add phase-specific handoff re-emit instructions to continuation feedback ([3aa017a](https://github.com/andymwolf/agentium/commit/3aa017af5f62cf49bf224376c3d9a43c0dfe4dc4)), closes [#485](https://github.com/andymwolf/agentium/issues/485)
+* continuation mode workers not re-emitting AGENTIUM_HANDOFF after feedback ([a3a14f7](https://github.com/andymwolf/agentium/commit/a3a14f7797a330f15fab35a5bc1f0d41d2ad0546))
+* harden reviewer against 'plan not on disk' confusion ([#474](https://github.com/andymwolf/agentium/issues/474)) ([c669de5](https://github.com/andymwolf/agentium/commit/c669de505c0a5d88a320a9e84de688c567b65542)), closes [#473](https://github.com/andymwolf/agentium/issues/473)
+* systematic logging for Langfuse diagnostics and gcloud secret parsing ([#476](https://github.com/andymwolf/agentium/issues/476)) ([b7a18a5](https://github.com/andymwolf/agentium/commit/b7a18a5446904071fbdb5183688e6bfad516240b))
+
 ## [0.7.1](https://github.com/andymwolf/agentium/compare/v0.7.0...v0.7.1) (2026-02-12)
 
 
