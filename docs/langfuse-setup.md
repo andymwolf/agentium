@@ -66,6 +66,8 @@ echo -n "sk-lf-your-secret-key" | gcloud secrets create langfuse-secret-key \
   --project=YOUR_GCP_PROJECT --data-file=-
 ```
 
+or, if updating a pre-existing secret use `versions add` in place of `create`
+
 2. **Grant access** to the VM service account (if not already granted):
 
 ```bash
