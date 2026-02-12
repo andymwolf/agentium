@@ -97,9 +97,6 @@ jobs:
           - name: claudecode
             context: .
             file: docker/claudecode/Dockerfile
-          - name: aider
-            context: .
-            file: docker/aider/Dockerfile
           - name: codex
             context: .
             file: docker/codex/Dockerfile
