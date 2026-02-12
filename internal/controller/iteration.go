@@ -139,15 +139,24 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		c.logInfo("Routing phase %s: adapter=%s model=%s", phase, activeAgent.Name(), modelCfg.Model)
 	}
 
-	// Build environment and command
-	env := activeAgent.BuildEnv(session, c.iteration)
-	command := activeAgent.BuildCommand(session, c.iteration)
+	// Resolve phase-scoped iteration for agent containers.
+	// Containers see a 1-indexed counter that resets each phase, while
+	// c.iteration (session-global) is preserved for memory, logging, events.
+	phaseIter := 1
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	if state, ok := c.taskStates[taskID]; ok {
+		phaseIter = state.PhaseIteration
+	}
+
+	// Build environment and command using phase iteration
+	env := activeAgent.BuildEnv(session, phaseIter)
+	command := activeAgent.BuildCommand(session, phaseIter)
 
 	// Check if agent supports stdin-based prompt delivery (for non-interactive mode)
 	stdinPrompt := ""
 	if !c.config.Interactive {
 		if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
-			stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+			stdinPrompt = provider.GetStdinPrompt(session, phaseIter)
 		}
 	}
 
@@ -192,7 +201,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			}
 
 			fallbackAdapter := c.adapters[fallbackName]
-			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name())
+			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name(), phaseIter)
 			return c.runAgentContainer(ctx, fallbackParams)
 		}
 	}
@@ -221,7 +230,11 @@ func (c *Controller) runIterationPooled(ctx context.Context, activeAgent agent.A
 	}
 
 	// Iteration 1 or non-continuation-capable: use full prompt via pooled exec
-	c.logInfo("Using pooled execution for Worker (iteration %d)", c.iteration)
+	phaseIter := 1
+	if state != nil {
+		phaseIter = state.PhaseIteration
+	}
+	c.logInfo("Using pooled execution for Worker (phase iteration %d)", phaseIter)
 	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
 }
 
@@ -236,7 +249,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 	if !ok {
 		return nil, fmt.Errorf("agent %s does not implement ContinuationCapable", activeAgent.Name())
 	}
-	command := cc.BuildContinueCommand(session, c.iteration)
+	command := cc.BuildContinueCommand(session, state.PhaseIteration)
 
 	// Build incremental feedback as the stdin prompt
 	taskID := taskKey(c.activeTaskType, c.activeTask)
@@ -248,7 +261,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 	params := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
-		Env:         activeAgent.BuildEnv(session, c.iteration),
+		Env:         activeAgent.BuildEnv(session, state.PhaseIteration),
 		Command:     command,
 		LogTag:      "Agent (continue)",
 		StdinPrompt: feedbackSection,
@@ -259,7 +272,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 
 // buildFallbackParams constructs container run parameters for the fallback adapter.
 // It clones the session without model override so the fallback adapter uses its defaults.
-func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Session, originalAdapter string) containerRunParams {
+func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Session, originalAdapter string, phaseIter int) containerRunParams {
 	// Clone session without model override (use fallback adapter's default)
 	fallbackSession := *session
 	if fallbackSession.IterationContext != nil {
@@ -268,12 +281,12 @@ func (c *Controller) buildFallbackParams(adapter agent.Agent, session *agent.Ses
 		fallbackSession.IterationContext = &ctx
 	}
 
-	env := adapter.BuildEnv(&fallbackSession, c.iteration)
-	cmd := adapter.BuildCommand(&fallbackSession, c.iteration)
+	env := adapter.BuildEnv(&fallbackSession, phaseIter)
+	cmd := adapter.BuildCommand(&fallbackSession, phaseIter)
 
 	var stdinPrompt string
 	if provider, ok := adapter.(agent.StdinPromptProvider); ok {
-		stdinPrompt = provider.GetStdinPrompt(&fallbackSession, c.iteration)
+		stdinPrompt = provider.GetStdinPrompt(&fallbackSession, phaseIter)
 	}
 
 	return containerRunParams{

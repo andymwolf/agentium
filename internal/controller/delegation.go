@@ -86,14 +86,21 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 
 	c.logInfo("Delegating phase %s: adapter=%s subtask=%s", phase, activeAgent.Name(), subTaskID)
 
-	// Build environment and command
-	env := activeAgent.BuildEnv(session, c.iteration)
-	command := activeAgent.BuildCommand(session, c.iteration)
+	// Resolve phase-scoped iteration for the delegated container
+	phaseIter := 1
+	taskID := taskKey(c.activeTaskType, c.activeTask)
+	if state, ok := c.taskStates[taskID]; ok {
+		phaseIter = state.PhaseIteration
+	}
+
+	// Build environment and command using phase iteration
+	env := activeAgent.BuildEnv(session, phaseIter)
+	command := activeAgent.BuildCommand(session, phaseIter)
 
 	// Check if agent supports stdin-based prompt delivery
 	stdinPrompt := ""
 	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
-		stdinPrompt = provider.GetStdinPrompt(session, c.iteration)
+		stdinPrompt = provider.GetStdinPrompt(session, phaseIter)
 	}
 
 	return c.runAgentContainer(ctx, containerRunParams{

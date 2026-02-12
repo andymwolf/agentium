@@ -208,6 +208,62 @@ func TestBuilder(t *testing.T) {
 	})
 }
 
+func TestBuildImplementInput_UsesIssueRef(t *testing.T) {
+	// Verify that buildImplementInput returns IssueRef (no body) instead of IssueContext.
+	tmpDir, _ := os.MkdirTemp("", "handoff-issueref-test")
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	store, _ := NewStore(tmpDir)
+	builder := NewBuilder(store)
+	taskID := "issue:ref-test"
+
+	// Set up issue with body
+	store.SetIssueContext(taskID, &IssueContext{
+		Number:     42,
+		Title:      "Test Issue",
+		Body:       "This body should not appear in implement input",
+		Repository: "owner/repo",
+	})
+
+	// Set up plan
+	_ = store.StorePhaseOutput(taskID, PhasePlan, 1, &PlanOutput{
+		Summary:         "Test plan",
+		FilesToModify:   []string{"file.go"},
+		TestingApproach: "unit tests",
+		ImplementationSteps: []ImplementationStep{
+			{Order: 1, Description: "Step 1"},
+		},
+	})
+
+	input, err := builder.BuildInputForPhase(taskID, PhaseImplement)
+	if err != nil {
+		t.Fatalf("BuildInputForPhase failed: %v", err)
+	}
+
+	// The JSON should contain issue number and title but NOT the body
+	if !containsSubstring(input, `"title": "Test Issue"`) {
+		t.Errorf("expected issue title in output, got:\n%s", input)
+	}
+	if !containsSubstring(input, `"number": 42`) {
+		t.Errorf("expected issue number in output, got:\n%s", input)
+	}
+	if containsSubstring(input, "This body should not appear") {
+		t.Errorf("expected issue body to be excluded from implement input, got:\n%s", input)
+	}
+	if !containsSubstring(input, `"repository": "owner/repo"`) {
+		t.Errorf("expected repository in output, got:\n%s", input)
+	}
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParser(t *testing.T) {
 	parser := NewParser()
 
