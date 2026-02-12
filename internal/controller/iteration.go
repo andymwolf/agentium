@@ -94,7 +94,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		state := c.taskStates[taskID]
 		if state != nil && state.PhaseIteration > 1 {
-			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch)
+			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch, state.Phase)
 			if feedbackSection != "" {
 				// Prepend to PhaseInput for maximum visibility
 				if session.IterationContext.PhaseInput != "" {
@@ -240,7 +240,7 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 
 	// Build incremental feedback as the stdin prompt
 	taskID := taskKey(c.activeTaskType, c.activeTask)
-	feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch)
+	feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch, state.Phase)
 	if feedbackSection == "" {
 		feedbackSection = fmt.Sprintf("Continue working on the current phase. This is iteration %d.", state.PhaseIteration)
 	}

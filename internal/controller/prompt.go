@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -194,12 +195,14 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 // that guides the worker on what must be addressed.
 //
 // The returned section contains:
+// - Phase-specific required actions (re-emit AGENTIUM_HANDOFF, make code changes, etc.)
+// - Current plan content (for PLAN phase, so the worker knows what to update)
 // - Guidance on how to interpret feedback types
 // - Judge directives (REQUIRED action items)
 // - Reviewer analysis (detailed context)
 //
 // Returns empty string if no feedback is available for the previous iteration.
-func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int, parentBranch string) string {
+func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int, parentBranch string, phase TaskPhase) string {
 	if c.memoryStore == nil {
 		return ""
 	}
@@ -212,6 +215,36 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 	var sb strings.Builder
 
 	sb.WriteString("## Feedback from Previous Iteration\n\n")
+
+	// Phase-specific required actions — tells the worker what it MUST produce
+	switch phase {
+	case PhasePlan:
+		sb.WriteString("### Required Actions\n\n")
+		sb.WriteString("You MUST emit an updated `AGENTIUM_HANDOFF` signal with your revised plan that addresses the feedback below.\n")
+		sb.WriteString("Do NOT skip the handoff signal — the reviewer evaluates your plan from the `AGENTIUM_HANDOFF` output, not from conversation text.\n\n")
+		// Include current plan so the worker can see what to update
+		if c.handoffStore != nil {
+			if planOutput := c.handoffStore.GetPlanOutput(taskID); planOutput != nil {
+				planJSON, err := json.Marshal(planOutput)
+				if err == nil {
+					sb.WriteString("**Your current plan (update this to address the feedback):**\n")
+					sb.WriteString("```json\n")
+					sb.WriteString(string(planJSON))
+					sb.WriteString("\n```\n\n")
+				}
+			}
+		}
+	case PhaseImplement:
+		sb.WriteString("### Required Actions\n\n")
+		sb.WriteString("You MUST make code changes to address the feedback below, commit them, push, and emit an updated `AGENTIUM_HANDOFF` signal.\n")
+		sb.WriteString("Do NOT re-emit the same handoff with unchanged commits — the reviewer will detect no progress and request another iteration.\n\n")
+	case PhaseDocs:
+		sb.WriteString("### Required Actions\n\n")
+		sb.WriteString("You MUST update the documentation to address the feedback below and emit an updated `AGENTIUM_HANDOFF` signal.\n\n")
+	case PhaseVerify:
+		sb.WriteString("### Required Actions\n\n")
+		sb.WriteString("You MUST address the verification issues described in the feedback below and emit an updated `AGENTIUM_HANDOFF` signal.\n\n")
+	}
 
 	// Guidance on how to interpret feedback
 	sb.WriteString("**How to use this feedback:**\n")

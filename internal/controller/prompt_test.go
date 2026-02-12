@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 )
 
@@ -327,6 +328,8 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 		}
 		phaseIteration int
 		taskID         string
+		phase          TaskPhase
+		handoffStore   *handoff.Store
 		wantEmpty      bool
 		wantContains   []string
 		wantNotContain []string
@@ -334,12 +337,14 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 		{
 			name:        "nil memory store returns empty",
 			memoryStore: false,
+			phase:       PhaseImplement,
 			wantEmpty:   true,
 		},
 		{
 			name:           "first iteration returns empty",
 			memoryStore:    true,
 			phaseIteration: 1,
+			phase:          PhaseImplement,
 			wantEmpty:      true,
 		},
 		{
@@ -355,6 +360,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 			phaseIteration: 3, // Looking for iteration 2, but only iteration 1 exists
 			taskID:         "issue:42",
+			phase:          PhaseImplement,
 			wantEmpty:      true,
 		},
 		{
@@ -370,6 +376,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 			phaseIteration: 2,
 			taskID:         "issue:42",
+			phase:          PhaseImplement,
 			wantContains: []string{
 				"## Feedback from Previous Iteration",
 				"### Reviewer Analysis (Context)",
@@ -391,6 +398,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 			phaseIteration: 2,
 			taskID:         "issue:42",
+			phase:          PhaseImplement,
 			wantContains: []string{
 				"## Feedback from Previous Iteration",
 				"### Judge Directives (REQUIRED)",
@@ -411,6 +419,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 			phaseIteration: 2,
 			taskID:         "issue:42",
+			phase:          PhaseImplement,
 			wantContains: []string{
 				"### Reviewer Analysis (Context)",
 				"Detailed analysis of the implementation",
@@ -432,15 +441,105 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			},
 			phaseIteration: 2,
 			taskID:         "issue:42",
+			phase:          PhaseImplement,
 			wantContains:   []string{"Feedback for issue 42"},
 			wantNotContain: []string{"Feedback for issue 99"},
+		},
+		{
+			name:        "PLAN phase includes handoff reminder",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "Add API endpoints to plan", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhasePlan,
+			wantContains: []string{
+				"### Required Actions",
+				"AGENTIUM_HANDOFF",
+				"revised plan",
+				"Add API endpoints to plan",
+			},
+			wantNotContain: []string{
+				"make code changes",
+			},
+		},
+		{
+			name:        "IMPLEMENT phase includes handoff reminder with code change instruction",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.JudgeDirective, Content: "Fix the test failures", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseImplement,
+			wantContains: []string{
+				"### Required Actions",
+				"AGENTIUM_HANDOFF",
+				"make code changes",
+				"Fix the test failures",
+			},
+			wantNotContain: []string{
+				"revised plan",
+			},
+		},
+		{
+			name:        "DOCS phase includes handoff reminder",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "Update README", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseDocs,
+			wantContains: []string{
+				"### Required Actions",
+				"AGENTIUM_HANDOFF",
+				"documentation",
+			},
+		},
+		{
+			name:        "VERIFY phase includes handoff reminder",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.EvalFeedback, Content: "CI still failing", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseVerify,
+			wantContains: []string{
+				"### Required Actions",
+				"AGENTIUM_HANDOFF",
+				"verification issues",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
-				logger: log.New(io.Discard, "", 0),
+				logger:       log.New(io.Discard, "", 0),
+				handoffStore: tt.handoffStore,
 			}
 
 			if tt.memoryStore {
@@ -457,7 +556,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 				c.memoryStore = store
 			}
 
-			got := c.buildIterateFeedbackSection(tt.taskID, tt.phaseIteration, "")
+			got := c.buildIterateFeedbackSection(tt.taskID, tt.phaseIteration, "", tt.phase)
 
 			if tt.wantEmpty {
 				if got != "" {
@@ -477,5 +576,52 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildIterateFeedbackSectionWithPlan(t *testing.T) {
+	// Test that PLAN phase includes current plan from handoff store
+	tempDir := t.TempDir()
+	memStore := memory.NewStore(tempDir, memory.Config{})
+	memStore.UpdateWithPhaseIteration([]memory.Signal{
+		{Type: memory.EvalFeedback, Content: "Add more detail to plan"},
+	}, 1, 1, "issue:42")
+
+	handoffDir := t.TempDir()
+	hStore, err := handoff.NewStore(handoffDir)
+	if err != nil {
+		t.Fatalf("failed to create handoff store: %v", err)
+	}
+	planOutput := &handoff.PlanOutput{
+		Summary:         "Implement user auth",
+		FilesToModify:   []string{"auth.go"},
+		TestingApproach: "Unit tests",
+		ImplementationSteps: []handoff.ImplementationStep{
+			{Order: 1, Description: "Add login endpoint"},
+		},
+	}
+	if err := hStore.StorePhaseOutput("issue:42", handoff.PhasePlan, 1, planOutput); err != nil {
+		t.Fatalf("failed to store plan output: %v", err)
+	}
+
+	c := &Controller{
+		logger:       log.New(io.Discard, "", 0),
+		memoryStore:  memStore,
+		handoffStore: hStore,
+	}
+
+	got := c.buildIterateFeedbackSection("issue:42", 2, "", PhasePlan)
+
+	wantContains := []string{
+		"### Required Actions",
+		"AGENTIUM_HANDOFF",
+		"Your current plan",
+		"Implement user auth",
+		"Add login endpoint",
+	}
+	for _, substr := range wantContains {
+		if !containsString(got, substr) {
+			t.Errorf("buildIterateFeedbackSection() with plan missing %q in:\n%s", substr, got)
+		}
 	}
 }
