@@ -37,6 +37,7 @@ type dockerTestAgent struct{}
 
 func (m *dockerTestAgent) Name() string                                       { return "docker-test" }
 func (m *dockerTestAgent) ContainerImage() string                             { return "test-image:latest" }
+func (m *dockerTestAgent) ContainerEntrypoint() []string                      { return []string{"test-agent"} }
 func (m *dockerTestAgent) BuildEnv(_ *agent.Session, _ int) map[string]string { return nil }
 func (m *dockerTestAgent) BuildCommand(_ *agent.Session, _ int) []string      { return nil }
 func (m *dockerTestAgent) BuildPrompt(_ *agent.Session, _ int) string         { return "" }

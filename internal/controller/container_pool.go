@@ -21,12 +21,13 @@ const (
 
 // ManagedContainer tracks a long-lived Docker container started for a phase.
 type ManagedContainer struct {
-	ID        string        // Docker container ID
-	Role      ContainerRole // worker, reviewer, or judge
-	Phase     string        // Phase this container belongs to
-	Image     string        // Docker image used
-	ExecCount int           // Number of exec calls made
-	Healthy   bool          // Whether the container is considered healthy
+	ID         string        // Docker container ID
+	Role       ContainerRole // worker, reviewer, or judge
+	Phase      string        // Phase this container belongs to
+	Image      string        // Docker image used
+	Entrypoint []string      // Original container entrypoint for docker exec
+	ExecCount  int           // Number of exec calls made
+	Healthy    bool          // Whether the container is considered healthy
 }
 
 // ContainerPool manages long-lived containers for a single phase.
@@ -68,8 +69,15 @@ func (p *ContainerPool) containerName(role ContainerRole) string {
 
 // Start creates a long-lived container for the given role using docker run -d
 // with an entrypoint of "sleep infinity". The container stays running until
-// StopAll is called or it is marked unhealthy.
-func (p *ContainerPool) Start(ctx context.Context, role ContainerRole, image string, env map[string]string, authMounts []string) (string, error) {
+// StopAll is called or it is marked unhealthy. The entrypoint parameter is the
+// original container entrypoint (e.g., ["/runtime-scripts/agent-wrapper.sh", "claude"])
+// which will be prepended to commands in Exec since the container's own entrypoint
+// is overridden to "sleep".
+func (p *ContainerPool) Start(ctx context.Context, role ContainerRole, image string, entrypoint []string, env map[string]string, authMounts []string) (string, error) {
+	if len(entrypoint) == 0 {
+		return "", fmt.Errorf("entrypoint must not be empty for pooled containers (role=%s)", role)
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -112,11 +120,12 @@ func (p *ContainerPool) Start(ctx context.Context, role ContainerRole, image str
 	}
 
 	p.containers[role] = &ManagedContainer{
-		ID:      containerID,
-		Role:    role,
-		Phase:   p.phase,
-		Image:   image,
-		Healthy: true,
+		ID:         containerID,
+		Role:       role,
+		Phase:      p.phase,
+		Image:      image,
+		Entrypoint: entrypoint,
+		Healthy:    true,
 	}
 
 	shortID := containerID
@@ -154,6 +163,7 @@ func (p *ContainerPool) Exec(ctx context.Context, role ContainerRole, command []
 	}
 
 	args = append(args, mc.ID)
+	args = append(args, mc.Entrypoint...)
 	args = append(args, command...)
 
 	cmd := p.cmdRunner(ctx, "docker", args...)

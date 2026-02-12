@@ -629,6 +629,7 @@ type mockAgent struct {
 
 func (m *mockAgent) Name() string                                                     { return m.name }
 func (m *mockAgent) ContainerImage() string                                           { return "test-image:latest" }
+func (m *mockAgent) ContainerEntrypoint() []string                                    { return []string{"test-agent"} }
 func (m *mockAgent) BuildEnv(session *agent.Session, iteration int) map[string]string { return nil }
 func (m *mockAgent) BuildCommand(session *agent.Session, iteration int) []string      { return nil }
 func (m *mockAgent) BuildPrompt(session *agent.Session, iteration int) string         { return "" }

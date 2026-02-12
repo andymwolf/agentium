@@ -37,6 +37,11 @@ func (a *Adapter) ContainerImage() string {
 	return a.image
 }
 
+// ContainerEntrypoint returns the entrypoint for docker exec in pooled containers.
+func (a *Adapter) ContainerEntrypoint() []string {
+	return []string{"/runtime-scripts/agent-wrapper.sh", "aider"}
+}
+
 // BuildEnv constructs environment variables for the Aider container
 func (a *Adapter) BuildEnv(session *agent.Session, iteration int) map[string]string {
 	env := map[string]string{
