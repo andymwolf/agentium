@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/andymwolf/agentium/compare/v0.7.0...v0.7.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* correct gofmt alignment in fallback_test.go ([#471](https://github.com/andymwolf/agentium/issues/471)) ([dc1a87a](https://github.com/andymwolf/agentium/commit/dc1a87a0bf5986f4bd130c0d90c81d00ae1ea4e4))
+
 ## [0.7.0](https://github.com/andymwolf/agentium/compare/v0.6.0...v0.7.0) (2026-02-12)
 
 
