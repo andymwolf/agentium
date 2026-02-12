@@ -141,4 +141,10 @@ func (c *Controller) initTracer(ctx context.Context) {
 		return c.tracer.Stop(ctx)
 	})
 	c.logInfo("Langfuse: tracer initialized (base_url=%s)", lt.BaseURL())
+
+	if err := lt.Ping(ctx); err != nil {
+		c.logWarning("Langfuse: connectivity check failed: %v", err)
+	} else {
+		c.logInfo("Langfuse: connectivity verified")
+	}
 }

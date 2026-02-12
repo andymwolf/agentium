@@ -335,11 +335,25 @@ func (t *LangfuseTracer) sendBatch(ctx context.Context, batch []ingestionEvent) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
 	if resp.StatusCode >= 400 {
-		// Read response body (capped) for diagnostics
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("langfuse API returned %d: %s", resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("langfuse API returned %d: %s", resp.StatusCode, string(respBody))
 	}
+
+	// Parse the response to detect per-event rejections.
+	var result ingestionResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		t.logger.Printf("Warning: Langfuse: could not parse response body: %v", err)
+		return nil
+	}
+
+	for _, e := range result.Errors {
+		t.logger.Printf("Warning: Langfuse: event %s rejected (status=%d): %s", e.ID, e.Status, e.Message)
+	}
+
+	t.logger.Printf("Langfuse: batch sent (events=%d, accepted=%d, rejected=%d, status=%d)",
+		len(batch), len(result.Successes), len(result.Errors), resp.StatusCode)
 
 	return nil
 }
@@ -351,6 +365,57 @@ func (t *LangfuseTracer) Stop(ctx context.Context) error {
 	t.wg.Wait()
 	// After goroutine exits, drain any stragglers enqueued after the final drain
 	return t.Flush(ctx)
+}
+
+// Ping sends a minimal trace-create event to verify that the Langfuse API
+// is reachable and credentials are valid. The trace is named
+// "agentium-connectivity-test" so it is easy to identify in the Langfuse UI.
+func (t *LangfuseTracer) Ping(ctx context.Context) error {
+	event := ingestionEvent{
+		ID:        uuid.New().String(),
+		Type:      "trace-create",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Body: map[string]interface{}{
+			"id":   "agentium-ping-" + uuid.New().String(),
+			"name": "agentium-connectivity-test",
+		},
+	}
+
+	payload := ingestionPayload{Batch: []ingestionEvent{event}}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal ping: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.config.BaseURL+ingestionPath, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create ping request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", t.authHeader)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ping request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("langfuse ping returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result ingestionResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("ping: could not parse response: %w", err)
+	}
+
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("ping event rejected: %s", result.Errors[0].Message)
+	}
+
+	return nil
 }
 
 // BaseURL returns the configured Langfuse base URL.
@@ -369,4 +434,22 @@ type ingestionEvent struct {
 // ingestionPayload is the top-level payload for the Langfuse ingestion API.
 type ingestionPayload struct {
 	Batch []ingestionEvent `json:"batch"`
+}
+
+// ingestionResponse is the Langfuse ingestion API response body.
+type ingestionResponse struct {
+	Successes []ingestionSuccess `json:"successes"`
+	Errors    []ingestionError   `json:"errors"`
+}
+
+type ingestionSuccess struct {
+	ID     string `json:"id"`
+	Status int    `json:"status"`
+}
+
+type ingestionError struct {
+	ID      string `json:"id"`
+	Status  int    `json:"status"`
+	Message string `json:"message,omitempty"`
+	Error   any    `json:"error,omitempty"`
 }
