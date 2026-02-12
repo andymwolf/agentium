@@ -66,10 +66,12 @@ type rawContentBlock struct {
 
 // rawEvent is the top-level NDJSON line structure.
 type rawEvent struct {
-	Type    string          `json:"type"`
-	Subtype string          `json:"subtype,omitempty"`
-	Message json.RawMessage `json:"message,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
+	Type       string          `json:"type"`
+	Subtype    string          `json:"subtype,omitempty"`
+	Message    json.RawMessage `json:"message,omitempty"`
+	Result     json.RawMessage `json:"result,omitempty"`
+	Usage      *TokenUsage     `json:"usage,omitempty"`
+	StopReason string          `json:"stop_reason,omitempty"`
 }
 
 // rawMessage holds the message body with content blocks.
@@ -113,16 +115,25 @@ func ParseStreamJSON(data []byte) *ParseResult {
 			extractBlocks(evtType, msg.Content, result, &textParts)
 
 		case EventResult:
+			// Try parsing result as an object (older format: usage nested in result).
 			var res rawResult
-			if err := json.Unmarshal(evt.Result, &res); err != nil {
-				continue
+			if evt.Result != nil {
+				if err := json.Unmarshal(evt.Result, &res); err == nil {
+					extractBlocks(evtType, res.Content, result, &textParts)
+					if res.Usage != nil {
+						result.TotalTokens = res.Usage
+					}
+					if res.StopReason != "" {
+						result.StopReason = res.StopReason
+					}
+				}
 			}
-			extractBlocks(evtType, res.Content, result, &textParts)
-			if res.Usage != nil {
-				result.TotalTokens = res.Usage
+			// Current format: usage and stop_reason at the top level of the event.
+			if result.TotalTokens == nil && evt.Usage != nil {
+				result.TotalTokens = evt.Usage
 			}
-			if res.StopReason != "" {
-				result.StopReason = res.StopReason
+			if result.StopReason == "" && evt.StopReason != "" {
+				result.StopReason = evt.StopReason
 			}
 
 		case EventSystem:

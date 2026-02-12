@@ -151,6 +151,25 @@ func TestParseStreamJSON_ResultWithTokens(t *testing.T) {
 	}
 }
 
+func TestParseStreamJSON_ResultWithTopLevelUsage(t *testing.T) {
+	// Current Claude Code format: usage and stop_reason at the top level, result is a plain string.
+	input := `{"type":"result","subtype":"success","is_error":false,"result":"4","stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":5,"cache_creation_input_tokens":23101}}` + "\n"
+	result := ParseStreamJSON([]byte(input))
+
+	if result.TotalTokens == nil {
+		t.Fatal("expected non-nil TotalTokens")
+	}
+	if result.TotalTokens.InputTokens != 2 {
+		t.Errorf("InputTokens = %d, want %d", result.TotalTokens.InputTokens, 2)
+	}
+	if result.TotalTokens.OutputTokens != 5 {
+		t.Errorf("OutputTokens = %d, want %d", result.TotalTokens.OutputTokens, 5)
+	}
+	if result.StopReason != "end_turn" {
+		t.Errorf("StopReason = %q, want %q", result.StopReason, "end_turn")
+	}
+}
+
 func TestParseStreamJSON_MalformedLineSkipped(t *testing.T) {
 	input := "not valid json\n" +
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"valid"}]}}` + "\n" +
