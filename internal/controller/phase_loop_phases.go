@@ -53,11 +53,12 @@ func (c *Controller) handleDocsAutoAdvance(ctx context.Context, plc *phaseLoopCo
 }
 
 // handleVerifyPhase handles VERIFY phase logic (merge attempt or retry).
-//   - advanced=true means phase is done (break inner loop)
-//   - shouldContinue=true means continue to next iteration
-func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContext, iter int) (advanced, shouldContinue bool) {
+// Returns the same (advanced, blocked, shouldContinue) tuple as runReviewJudgePipeline
+// for consistent flow control at the call site. blocked is always false here since
+// VERIFY never blocks.
+func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContext, iter int) (advanced, blocked, shouldContinue bool) { //nolint:unparam // blocked is always false but kept for API consistency with runReviewJudgePipeline
 	if plc.currentPhase != PhaseVerify {
-		return false, false
+		return false, false, false
 	}
 	merged, remainingFailures := c.tryVerifyMerge(ctx, plc.taskID, plc.state)
 	if merged {
@@ -66,7 +67,7 @@ func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContex
 			"Merge successful — skipping review (auto-advance)")
 		c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (merge successful, iteration %d)", plc.currentPhase, iter))
 		plc.advanced = true
-		return true, false
+		return true, false, false
 	}
 	// Not merged — surface remaining failures so worker knows what to fix
 	retryMsg := "Merge not yet successful — iterating"
@@ -75,7 +76,7 @@ func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContex
 	}
 	c.logInfo("VERIFY: not yet merged, continuing to iteration %d/%d", iter+1, plc.maxIter)
 	c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController, retryMsg)
-	return false, true
+	return false, false, true
 }
 
 // handleComplexityAssessment runs the complexity assessor after PLAN iteration 1
