@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/prompts/phases"
 )
 
 // runDelegatedIteration executes a single iteration using the delegated sub-task config.
@@ -22,15 +23,8 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		}
 	}
 
-	// Build skills prompt
-	var skillsPrompt string
-	if c.skillSelector != nil {
-		if len(config.Skills) > 0 {
-			skillsPrompt = c.skillSelector.SelectByNames(config.Skills)
-		} else {
-			skillsPrompt = c.skillSelector.SelectForPhase(string(phase))
-		}
-	}
+	// Build skills prompt from static phase-role files
+	skillsPrompt := phases.Get(string(phase), "WORKER")
 
 	// Build model override
 	var modelOverride string

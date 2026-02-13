@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/prompts/phases"
 )
 
 // ReviewResult holds the raw feedback from a reviewer agent.
@@ -60,7 +61,7 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	reviewPhase := fmt.Sprintf("%s_REVIEW", params.CompletedPhase)
 	skillPhase := reviewPhase
 
-	// API-provided reviewer prompt takes precedence over built-in skills
+	// API-provided reviewer prompt takes precedence over built-in phases
 	var reviewerSkillsPrompt string
 	if reviewerPrompt := c.phaseReviewerPrompt(params.CompletedPhase); reviewerPrompt != "" {
 		reviewerSkillsPrompt = reviewerPrompt
@@ -69,8 +70,8 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 			SkillsPrompt: reviewerPrompt,
 		}
 		c.logInfo("Using API-provided reviewer prompt for phase %s", params.CompletedPhase)
-	} else if c.skillSelector != nil {
-		reviewerSkillsPrompt = c.skillSelector.SelectForPhase(skillPhase)
+	} else {
+		reviewerSkillsPrompt = phases.Get(string(params.CompletedPhase), "REVIEWER")
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: reviewerSkillsPrompt,

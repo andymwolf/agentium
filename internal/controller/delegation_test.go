@@ -5,7 +5,6 @@ import (
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/routing"
-	"github.com/andywolf/agentium/prompts/skills"
 )
 
 func TestDelegation_AdapterSelection_Default(t *testing.T) {
@@ -54,43 +53,6 @@ func TestDelegation_AdapterSelection_Override(t *testing.T) {
 	}
 	if subCfg.Agent != "override-agent" {
 		t.Errorf("agent = %q, want %q", subCfg.Agent, "override-agent")
-	}
-}
-
-func TestDelegation_SkillsSelection_CustomList(t *testing.T) {
-	testSkills := []skills.Skill{
-		{Entry: skills.SkillEntry{Name: "safety", Priority: 10}, Content: "SAFETY"},
-		{Entry: skills.SkillEntry{Name: "implement", Priority: 20, Phases: []string{"IMPLEMENT"}}, Content: "IMPLEMENT"},
-		{Entry: skills.SkillEntry{Name: "test", Priority: 30, Phases: []string{"TEST"}}, Content: "TEST"},
-	}
-	selector := skills.NewSelector(testSkills)
-
-	// Custom skills list: only "test"
-	cfg := SubTaskConfig{Skills: []string{"test"}}
-
-	// SelectByNames should return only matching skills
-	result := selector.SelectByNames(cfg.Skills)
-	if result != "TEST" {
-		t.Errorf("SelectByNames(%v) = %q, want %q", cfg.Skills, result, "TEST")
-	}
-}
-
-func TestDelegation_SkillsSelection_PhaseFallback(t *testing.T) {
-	testSkills := []skills.Skill{
-		{Entry: skills.SkillEntry{Name: "safety", Priority: 10}, Content: "SAFETY"},
-		{Entry: skills.SkillEntry{Name: "implement", Priority: 20, Phases: []string{"IMPLEMENT"}}, Content: "IMPLEMENT"},
-		{Entry: skills.SkillEntry{Name: "test", Priority: 30, Phases: []string{"TEST"}}, Content: "TEST"},
-	}
-	selector := skills.NewSelector(testSkills)
-
-	// Empty skills list should fall back to phase selection
-	cfg := SubTaskConfig{Skills: nil}
-	_ = cfg // config has no skills
-
-	// SelectForPhase should return phase-matching + universal skills
-	result := selector.SelectForPhase("IMPLEMENT")
-	if result != "SAFETY\n\nIMPLEMENT" {
-		t.Errorf("SelectForPhase(IMPLEMENT) = %q, want %q", result, "SAFETY\n\nIMPLEMENT")
 	}
 }
 

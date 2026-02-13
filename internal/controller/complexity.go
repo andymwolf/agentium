@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/prompts/phases"
 )
 
 // ComplexityResult holds the parsed complexity verdict and feedback.
@@ -71,11 +72,9 @@ func (c *Controller) runComplexityAssessor(ctx context.Context, params complexit
 	complexityPhase := "PLAN_COMPLEXITY"
 	skillPhase := complexityPhase
 
-	if c.skillSelector != nil {
-		session.IterationContext = &agent.IterationContext{
-			Phase:        skillPhase,
-			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),
-		}
+	session.IterationContext = &agent.IterationContext{
+		Phase:        skillPhase,
+		SkillsPrompt: phases.Get("PLAN", "WORKER"),
 	}
 
 	// Select adapter via compound key fallback chain
