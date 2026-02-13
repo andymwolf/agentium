@@ -23,3 +23,20 @@ You are reviewing **CI verification and merge work** produced by an agent during
 **CRITICAL:** Do NOT include preamble or process descriptions. Start directly with your feedback. Do not begin with "Let me review...", "I'll examine...", or similar phrases.
 
 Provide your review feedback below. Be specific about what to improve.
+
+### Verdict Recommendation
+
+After your feedback, you MUST emit exactly one verdict recommendation line:
+
+```
+AGENTIUM_EVAL: ITERATE <brief summary of what needs fixing>
+```
+or
+```
+AGENTIUM_EVAL: ADVANCE
+```
+
+Recommend **ITERATE** when CI checks failed and fixes are needed, or the merge was incorrect.
+Recommend **ADVANCE** when verification passed and merge was successful or correctly deferred.
+
+This is a recommendation — a separate judge makes the final decision.

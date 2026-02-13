@@ -36,3 +36,20 @@ You are reviewing **documentation changes** produced by an agent during the DOCS
 Provide your review feedback below. Be specific about what to improve.
 
 For documentation that looks good or was correctly skipped, say so briefly.
+
+### Verdict Recommendation
+
+After your feedback, you MUST emit exactly one verdict recommendation line:
+
+```
+AGENTIUM_EVAL: ITERATE <brief summary of what needs fixing>
+```
+or
+```
+AGENTIUM_EVAL: ADVANCE
+```
+
+Recommend **ITERATE** when documentation has meaningful issues (inaccurate content, over-documentation, missing necessary docs).
+Recommend **ADVANCE** when docs are correct or only have minor issues, or when the agent correctly determined no docs were needed.
+
+This is a recommendation — a separate judge makes the final decision.

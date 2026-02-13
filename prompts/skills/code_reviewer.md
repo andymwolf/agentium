@@ -35,3 +35,20 @@ You are reviewing **code changes** produced by an agent during the REVIEW phase.
 Provide your review feedback below. Be specific about what to improve.
 
 For critical architectural issues that require re-planning, clearly state: "Recommend REGRESS to PLAN phase: <reason>"
+
+### Verdict Recommendation
+
+After your feedback, you MUST emit exactly one verdict recommendation line:
+
+```
+AGENTIUM_EVAL: ITERATE <brief summary of what needs fixing>
+```
+or
+```
+AGENTIUM_EVAL: ADVANCE
+```
+
+Recommend **ITERATE** when you identified any critical issues, functional bugs, or meaningful improvements the worker should address.
+Recommend **ADVANCE** when the work is solid or only has minor cosmetic issues that aren't worth another iteration.
+
+This is a recommendation — a separate judge makes the final decision.

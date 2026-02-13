@@ -32,3 +32,20 @@ The plan is provided **inline in the phase output** included in your review prom
 **CRITICAL:** Do NOT include preamble or process descriptions. Start directly with your feedback. Do not begin with "Let me review...", "I'll examine...", or similar phrases.
 
 Provide your review feedback below. Be specific about what to improve.
+
+### Verdict Recommendation
+
+After your feedback, you MUST emit exactly one verdict recommendation line:
+
+```
+AGENTIUM_EVAL: ITERATE <brief summary of what needs fixing>
+```
+or
+```
+AGENTIUM_EVAL: ADVANCE
+```
+
+Recommend **ITERATE** when you identified meaningful issues with the plan (missing steps, wrong approach, scope problems).
+Recommend **ADVANCE** when the plan is solid or only has minor issues.
+
+This is a recommendation — a separate judge makes the final decision.
