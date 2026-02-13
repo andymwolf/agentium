@@ -9,17 +9,16 @@ import (
 )
 
 // handlePlanSkip checks for a pre-existing plan and populates plc with the plan
-// content if found. Returns true if the iteration should be skipped.
-func (c *Controller) handlePlanSkip(ctx context.Context, plc *phaseLoopContext, iter int) bool {
+// content if found, setting plc.skipIteration = true to skip the worker iteration.
+func (c *Controller) handlePlanSkip(ctx context.Context, plc *phaseLoopContext, iter int) {
 	if !c.shouldSkipPlanIteration(plc.currentPhase, iter) {
-		return false
+		return
 	}
 	planContent := c.extractExistingPlan()
 	c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", plc.currentPhase)
 	plc.phaseOutput = planContent
 	plc.skipIteration = true
 	c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController, "Pre-existing plan detected in issue body (skipped planning agent)")
-	return true
 }
 
 // runWorkerIteration executes one worker agent iteration, recording the generation

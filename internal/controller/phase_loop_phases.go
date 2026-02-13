@@ -53,10 +53,9 @@ func (c *Controller) handleDocsAutoAdvance(ctx context.Context, plc *phaseLoopCo
 }
 
 // handleVerifyPhase handles VERIFY phase logic (merge attempt or retry).
-// Returns (advanced, shouldContinue) where:
 //   - advanced=true means phase is done (break inner loop)
 //   - shouldContinue=true means continue to next iteration
-func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContext, iter int) (bool, bool) {
+func (c *Controller) handleVerifyPhase(ctx context.Context, plc *phaseLoopContext, iter int) (advanced, shouldContinue bool) {
 	if plc.currentPhase != PhaseVerify {
 		return false, false
 	}
@@ -93,14 +92,14 @@ func (c *Controller) handleComplexityAssessment(ctx context.Context, plc *phaseL
 	if complexityErr != nil {
 		c.logWarning("Complexity assessor error: %v (defaulting to COMPLEX)", complexityErr)
 		plc.state.WorkflowPath = WorkflowPathComplex
+		c.postPhaseComment(ctx, plc.currentPhase, iter, RoleComplexityAssessor,
+			fmt.Sprintf("Complexity assessment: **%s** (assessor error: %v)", plc.state.WorkflowPath, complexityErr))
 	} else {
 		plc.state.WorkflowPath = complexityResult.Verdict
 		c.logInfo("Workflow path set to %s: %s", plc.state.WorkflowPath, complexityResult.Feedback)
+		c.postPhaseComment(ctx, plc.currentPhase, iter, RoleComplexityAssessor,
+			fmt.Sprintf("Complexity assessment: **%s**\n\n%s", plc.state.WorkflowPath, complexityResult.Feedback))
 	}
-
-	// Post complexity verdict comment
-	c.postPhaseComment(ctx, plc.currentPhase, iter, RoleComplexityAssessor,
-		fmt.Sprintf("Complexity assessment: **%s**\n\n%s", plc.state.WorkflowPath, complexityResult.Feedback))
 
 	// For SIMPLE tasks, auto-advance from PLAN (skip reviewer/judge)
 	if plc.state.WorkflowPath == WorkflowPathSimple {

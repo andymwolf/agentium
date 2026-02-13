@@ -117,8 +117,7 @@ func (c *Controller) applyJudgePostProcessing(plc *phaseLoopContext, judgeResult
 }
 
 // handleVerdict processes the judge verdict and returns flow control signals.
-// Returns (advanced, blocked, shouldContinue).
-func (c *Controller) handleVerdict(ctx context.Context, plc *phaseLoopContext, judgeResult JudgeResult, reviewResult ReviewResult, iter int) (bool, bool, bool) {
+func (c *Controller) handleVerdict(ctx context.Context, plc *phaseLoopContext, judgeResult JudgeResult, reviewResult ReviewResult, iter int) (advanced, blocked, shouldContinue bool) {
 	switch judgeResult.Verdict {
 	case VerdictAdvance:
 		c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (iteration %d)", plc.currentPhase, iter))
@@ -169,8 +168,7 @@ func (c *Controller) handleVerdict(ctx context.Context, plc *phaseLoopContext, j
 }
 
 // runReviewJudgePipeline runs the reviewer and judge for the current iteration.
-// Returns (advanced, blocked, shouldContinue).
-func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopContext, iter int) (bool, bool, bool) {
+func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopContext, iter int) (advanced, blocked, shouldContinue bool) {
 	previousFeedback, workerHandoffSummary, workerFeedbackResponses := c.gatherFeedbackContext(plc, iter)
 
 	// Check if reviewer should be skipped
