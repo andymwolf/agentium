@@ -33,6 +33,7 @@ func TestBuildPromptForTask(t *testing.T) {
 				"Issue #42",
 				"Fix login bug",
 				"login page crashes",
+				"git fetch origin",
 				"Create a new branch",
 				"feature/issue-42", // Default prefix when no labels
 				"Create a pull request",
@@ -453,6 +454,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			PhaseIteration int
 			TaskID         string
 		}
+		taskState      *TaskState // Optional TaskState for fallback testing
 		phaseIteration int
 		taskID         string
 		phase          TaskPhase
@@ -462,7 +464,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 		wantNotContain []string
 	}{
 		{
-			name:        "nil memory store returns empty",
+			name:        "nil memory store and nil task state returns empty",
 			memoryStore: false,
 			phase:       PhaseImplement,
 			wantEmpty:   true,
@@ -669,6 +671,69 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 				"checks_passed",
 			},
 		},
+		{
+			name:        "feedback from TaskState fallback when memory store is nil",
+			memoryStore: false,
+			taskState: &TaskState{
+				LastJudgeFeedback:    "Fix the validation logic",
+				LastReviewerFeedback: "The input validation is missing edge cases",
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseImplement,
+			wantContains: []string{
+				"code changes were reviewed",
+				"## Here's what you need to fix:",
+				"Fix the validation logic",
+				"## The reviewer also noted:",
+				"input validation is missing edge cases",
+				"AGENTIUM_HANDOFF",
+			},
+		},
+		{
+			name:        "feedback from TaskState fallback when memory entries are empty",
+			memoryStore: true,
+			taskState: &TaskState{
+				LastJudgeFeedback:    "Add error handling",
+				LastReviewerFeedback: "Error paths are not tested",
+			},
+			// No entries added to memory store — empty for this taskID/iteration
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseImplement,
+			wantContains: []string{
+				"## Here's what you need to fix:",
+				"Add error handling",
+				"## The reviewer also noted:",
+				"Error paths are not tested",
+			},
+		},
+		{
+			name:        "memory store entries take precedence over TaskState",
+			memoryStore: true,
+			entries: []struct {
+				Type           memory.SignalType
+				Content        string
+				PhaseIteration int
+				TaskID         string
+			}{
+				{Type: memory.JudgeDirective, Content: "Memory store directive", PhaseIteration: 1, TaskID: "issue:42"},
+			},
+			taskState: &TaskState{
+				LastJudgeFeedback:    "TaskState directive (should not appear)",
+				LastReviewerFeedback: "TaskState reviewer (should not appear)",
+			},
+			phaseIteration: 2,
+			taskID:         "issue:42",
+			phase:          PhaseImplement,
+			wantContains: []string{
+				"Memory store directive",
+			},
+			wantNotContain: []string{
+				"TaskState directive",
+				"TaskState reviewer",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -676,6 +741,11 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			c := &Controller{
 				logger:       log.New(io.Discard, "", 0),
 				handoffStore: tt.handoffStore,
+				taskStates:   make(map[string]*TaskState),
+			}
+
+			if tt.taskState != nil && tt.taskID != "" {
+				c.taskStates[tt.taskID] = tt.taskState
 			}
 
 			if tt.memoryStore {

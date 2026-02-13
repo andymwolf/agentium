@@ -1,3 +1,11 @@
+### Step 0: Ensure Branch is Current
+
+Before starting implementation:
+1. Fetch latest changes: `git fetch origin`
+2. Merge main into your branch: `git merge origin/main`
+3. If there are merge conflicts, resolve them before proceeding
+4. Push the merge commit: `git push origin HEAD`
+
 ## Implementation Principles
 
 ### Subagent Strategy

@@ -133,24 +133,28 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 			sb.WriteString("### Instructions\n\n")
 			if parentBranch != "" {
 				sb.WriteString(fmt.Sprintf("**NOTE:** This issue depends on work from another issue. You must branch from: `%s`\n\n", parentBranch))
-				sb.WriteString(fmt.Sprintf("1. First, check out the parent branch: `git checkout %s`\n", parentBranch))
-				sb.WriteString(fmt.Sprintf("2. Create your new branch from it: `git checkout -b %s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
-				sb.WriteString("3. Implement the fix or feature\n")
-				sb.WriteString("4. Run tests to verify correctness\n")
-				sb.WriteString("5. Commit your changes with a descriptive message\n")
-				sb.WriteString("6. Push the branch\n")
-				sb.WriteString("7. Create a pull request targeting `main` (NOT the parent branch)\n\n")
+				sb.WriteString("1. Fetch latest changes: `git fetch origin`\n")
+				sb.WriteString(fmt.Sprintf("2. Check out the parent branch: `git checkout %s && git pull origin %s`\n", parentBranch, parentBranch))
+				sb.WriteString("3. Merge latest main: `git merge origin/main` (resolve any conflicts)\n")
+				sb.WriteString(fmt.Sprintf("4. Create your new branch from it: `git checkout -b %s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
+				sb.WriteString("5. Implement the fix or feature\n")
+				sb.WriteString("6. Run tests to verify correctness\n")
+				sb.WriteString("7. Commit your changes with a descriptive message\n")
+				sb.WriteString("8. Push the branch\n")
+				sb.WriteString("9. Create a pull request targeting `main` (NOT the parent branch)\n\n")
 				sb.WriteString("### IMPORTANT\n\n")
 				sb.WriteString("- Your PR must target `main`, not the parent branch\n")
 				sb.WriteString("- The PR diff will include parent changes until the parent PR is merged\n")
 				sb.WriteString("- After the parent PR merges, GitHub will auto-resolve the diff\n")
 			} else {
-				sb.WriteString(fmt.Sprintf("1. Create a new branch: `%s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
-				sb.WriteString("2. Implement the fix or feature\n")
-				sb.WriteString("3. Run tests to verify correctness\n")
-				sb.WriteString("4. Commit your changes with a descriptive message\n")
-				sb.WriteString("5. Push the branch\n")
-				sb.WriteString("6. Create a pull request linking to the issue\n\n")
+				sb.WriteString("1. Fetch latest changes: `git fetch origin`\n")
+				sb.WriteString("2. Check out and update main: `git checkout main && git pull origin main`\n")
+				sb.WriteString(fmt.Sprintf("3. Create a new branch: `git checkout -b %s/issue-%s-<short-description>`\n", branchPrefix, issueNumber))
+				sb.WriteString("4. Implement the fix or feature\n")
+				sb.WriteString("5. Run tests to verify correctness\n")
+				sb.WriteString("6. Commit your changes with a descriptive message\n")
+				sb.WriteString("7. Push the branch\n")
+				sb.WriteString("8. Create a pull request linking to the issue\n\n")
 			}
 		}
 		sb.WriteString("Use 'gh' CLI for GitHub operations and 'git' for version control.\n")
@@ -213,30 +217,28 @@ func (c *Controller) buildIssueContext() *handoff.IssueContext {
 //
 // Returns empty string if no feedback is available for the previous iteration.
 func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration int, parentBranch string, phase TaskPhase) string {
-	if c.memoryStore == nil {
-		return ""
+	// Primary path: memory store (stores structured feedback with phase iteration scoping)
+	if c.memoryStore != nil {
+		entries := c.memoryStore.GetPreviousIterationFeedback(taskID, phaseIteration)
+		if len(entries) > 0 {
+			return c.formatFeedbackEntries(entries, parentBranch, phase, taskID)
+		}
 	}
 
-	entries := c.memoryStore.GetPreviousIterationFeedback(taskID, phaseIteration)
-	if len(entries) == 0 {
+	// Fallback: TaskState fields (always set on VerdictIterate, survives memory failures)
+	state := c.taskStates[taskID]
+	if state == nil || (state.LastJudgeFeedback == "" && state.LastReviewerFeedback == "") {
 		return ""
 	}
+	return c.formatFeedbackFromState(state, parentBranch, phase, taskID)
+}
 
+// formatFeedbackEntries formats memory store entries into a feedback prompt section.
+func (c *Controller) formatFeedbackEntries(entries []memory.Entry, parentBranch string, phase TaskPhase, taskID string) string {
 	var sb strings.Builder
 
 	// Opening narrative — one sentence telling the agent what happened
-	switch phase {
-	case PhasePlan:
-		sb.WriteString("Your implementation plan was reviewed. The judge is requesting changes before it can advance to implementation.\n\n")
-	case PhaseImplement:
-		sb.WriteString("Your code changes were reviewed. The judge is requesting fixes before this phase can advance.\n\n")
-	case PhaseDocs:
-		sb.WriteString("Your documentation updates were reviewed. The judge is requesting changes.\n\n")
-	case PhaseVerify:
-		sb.WriteString("Your verification attempt needs further work.\n\n")
-	default:
-		sb.WriteString("Your previous iteration was reviewed and needs changes.\n\n")
-	}
+	c.writePhaseNarrative(&sb, phase)
 
 	// Separate reviewer feedback and judge directives
 	var reviewerFeedback, judgeDirectives []string
@@ -249,6 +251,51 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 		}
 	}
 
+	c.writeFeedbackBody(&sb, judgeDirectives, reviewerFeedback)
+	c.writePhaseCompletion(&sb, phase, parentBranch, taskID)
+
+	return sb.String()
+}
+
+// formatFeedbackFromState formats TaskState feedback fields into a feedback prompt section.
+// This serves as a defense-in-depth fallback when memory store entries are unavailable.
+func (c *Controller) formatFeedbackFromState(state *TaskState, parentBranch string, phase TaskPhase, taskID string) string {
+	var sb strings.Builder
+
+	c.writePhaseNarrative(&sb, phase)
+
+	var judgeDirectives, reviewerFeedback []string
+	if state.LastJudgeFeedback != "" {
+		judgeDirectives = append(judgeDirectives, state.LastJudgeFeedback)
+	}
+	if state.LastReviewerFeedback != "" {
+		reviewerFeedback = append(reviewerFeedback, state.LastReviewerFeedback)
+	}
+
+	c.writeFeedbackBody(&sb, judgeDirectives, reviewerFeedback)
+	c.writePhaseCompletion(&sb, phase, parentBranch, taskID)
+
+	return sb.String()
+}
+
+// writePhaseNarrative writes the opening sentence telling the agent what happened.
+func (c *Controller) writePhaseNarrative(sb *strings.Builder, phase TaskPhase) {
+	switch phase {
+	case PhasePlan:
+		sb.WriteString("Your implementation plan was reviewed. The judge is requesting changes before it can advance to implementation.\n\n")
+	case PhaseImplement:
+		sb.WriteString("Your code changes were reviewed. The judge is requesting fixes before this phase can advance.\n\n")
+	case PhaseDocs:
+		sb.WriteString("Your documentation updates were reviewed. The judge is requesting changes.\n\n")
+	case PhaseVerify:
+		sb.WriteString("Your verification attempt needs further work.\n\n")
+	default:
+		sb.WriteString("Your previous iteration was reviewed and needs changes.\n\n")
+	}
+}
+
+// writeFeedbackBody writes the judge directives and reviewer feedback sections.
+func (c *Controller) writeFeedbackBody(sb *strings.Builder, judgeDirectives, reviewerFeedback []string) {
 	// Judge directives first — the most important part, up front
 	if len(judgeDirectives) > 0 {
 		sb.WriteString("## Here's what you need to fix:\n\n")
@@ -266,8 +313,10 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 			sb.WriteString("\n\n")
 		}
 	}
+}
 
-	// Phase-specific completion section with handoff template
+// writePhaseCompletion writes the phase-specific completion section with handoff template.
+func (c *Controller) writePhaseCompletion(sb *strings.Builder, phase TaskPhase, parentBranch string, taskID string) {
 	switch phase {
 	case PhasePlan:
 		// Include current plan so the worker can see what to update
@@ -299,8 +348,10 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 		if parentBranch != "" {
 			diffBase = parentBranch
 		}
+		sb.WriteString("## Before making changes\n\n")
+		sb.WriteString("Ensure your branch is up-to-date: `git fetch origin && git merge origin/main`\n\n")
 		sb.WriteString("## Submit your changes\n\n")
-		sb.WriteString(fmt.Sprintf("Review your existing work (`git diff %s..HEAD`), make targeted fixes to address the feedback, then commit and push.\n\n", diffBase))
+		fmt.Fprintf(sb, "Review your existing work (`git diff %s..HEAD`), make targeted fixes to address the feedback, then commit and push.\n\n", diffBase)
 		sb.WriteString("When done, emit the handoff signal:\n\n")
 		sb.WriteString("```\nAGENTIUM_HANDOFF: {\n")
 		sb.WriteString("  \"branch_name\": \"...\",\n")
@@ -329,6 +380,4 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 
 	// Brief FEEDBACK_RESPONSE note — one line
 	sb.WriteString("For each reviewer point above, emit `AGENTIUM_MEMORY: FEEDBACK_RESPONSE [ADDRESSED|DECLINED|PARTIAL] <summary> - <response>` to log how you handled it.\n\n")
-
-	return sb.String()
 }

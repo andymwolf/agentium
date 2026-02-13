@@ -89,9 +89,9 @@ func TestBuildReviewPrompt_TruncatesLongOutput(t *testing.T) {
 		activeTask: "1",
 	}
 
-	// Create output longer than default 8000 chars
+	// Create output longer than default 16000 chars
 	longOutput := ""
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 2000; i++ {
 		longOutput += "0123456789"
 	}
 
