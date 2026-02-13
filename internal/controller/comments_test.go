@@ -14,26 +14,95 @@ func testLogger() *log.Logger {
 	return log.New(os.Stdout, "[test] ", log.LstdFlags)
 }
 
-func TestPostPhaseComment_OnlyForIssues(t *testing.T) {
-	// postPhaseComment should be a no-op for PR tasks
-	c := &Controller{
-		activeTaskType: "pr",
-		activeTask:     "57",
+func TestPostPhaseComment_PhaseRouting(t *testing.T) {
+	tests := []struct {
+		name           string
+		phase          TaskPhase
+		activeTaskType string
+	}{
+		{
+			name:           "PR tasks are skipped",
+			phase:          PhaseImplement,
+			activeTaskType: "pr",
+		},
+		{
+			name:           "PLAN phase routes to issue",
+			phase:          PhasePlan,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "IMPLEMENT phase routes by phase",
+			phase:          PhaseImplement,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "DOCS phase routes to issue",
+			phase:          PhaseDocs,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "VERIFY phase routes by phase",
+			phase:          PhaseVerify,
+			activeTaskType: "issue",
+		},
 	}
 
-	// Should not panic or crash - just return silently
-	c.postPhaseComment(context.Background(), PhaseImplement, 1, RoleWorker, "test summary")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTaskType: tt.activeTaskType,
+				activeTask:     "42",
+				taskStates:     map[string]*TaskState{},
+				logger:         testLogger(),
+			}
+
+			// Should not panic or crash - verifies phase-based routing doesn't crash
+			c.postPhaseComment(context.Background(), tt.phase, 1, RoleWorker, "test summary")
+		})
+	}
 }
 
-func TestPostJudgeComment_OnlyForIssues(t *testing.T) {
-	// postJudgeComment should be a no-op for PR tasks
-	c := &Controller{
-		activeTaskType: "pr",
-		activeTask:     "57",
+func TestPostJudgeComment_PhaseRouting(t *testing.T) {
+	tests := []struct {
+		name           string
+		phase          TaskPhase
+		activeTaskType string
+	}{
+		{
+			name:           "PR tasks are skipped",
+			phase:          PhaseImplement,
+			activeTaskType: "pr",
+		},
+		{
+			name:           "PLAN phase routes to issue",
+			phase:          PhasePlan,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "IMPLEMENT phase routes by phase",
+			phase:          PhaseImplement,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "VERIFY phase routes by phase",
+			phase:          PhaseVerify,
+			activeTaskType: "issue",
+		},
 	}
 
-	// Should not panic or crash - just return silently
-	c.postJudgeComment(context.Background(), PhaseImplement, 1, JudgeResult{Verdict: VerdictAdvance})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTaskType: tt.activeTaskType,
+				activeTask:     "42",
+				taskStates:     map[string]*TaskState{},
+				logger:         testLogger(),
+			}
+
+			// Should not panic or crash - verifies phase-based routing doesn't crash
+			c.postJudgeComment(context.Background(), tt.phase, 1, JudgeResult{Verdict: VerdictAdvance})
+		})
+	}
 }
 
 func TestJudgeResultFormatting(t *testing.T) {
@@ -79,42 +148,6 @@ func TestPostPRComment_EmptyPRNumber(t *testing.T) {
 
 	// Should not panic or crash - just return silently
 	c.postPRComment(context.Background(), "", "test comment")
-}
-
-func TestPostReviewerFeedback_OnlyForIssues(t *testing.T) {
-	// postReviewerFeedback should be a no-op for PR tasks
-	c := &Controller{
-		activeTaskType: "pr",
-		activeTask:     "57",
-		logger:         testLogger(),
-	}
-
-	// Should not panic or crash - just return silently
-	c.postReviewerFeedback(context.Background(), PhaseImplement, 1, "test feedback")
-}
-
-func TestPostPRJudgeVerdict_SkipsAdvance(t *testing.T) {
-	// postPRJudgeVerdict should be a no-op for ADVANCE verdict
-	c := &Controller{
-		activeTaskType: "issue",
-		activeTask:     "42",
-		logger:         testLogger(),
-	}
-
-	// Should not attempt to post for ADVANCE verdict
-	c.postPRJudgeVerdict(context.Background(), "123", PhaseImplement, 1, JudgeResult{Verdict: VerdictAdvance})
-}
-
-func TestPostPRJudgeVerdict_EmptyPRNumber(t *testing.T) {
-	// postPRJudgeVerdict should be a no-op when PR number is empty
-	c := &Controller{
-		activeTaskType: "issue",
-		activeTask:     "42",
-		logger:         testLogger(),
-	}
-
-	// Should not panic or crash - just return silently
-	c.postPRJudgeVerdict(context.Background(), "", PhaseImplement, 1, JudgeResult{Verdict: VerdictIterate, Feedback: "needs work"})
 }
 
 func TestGetPRNumberForTask(t *testing.T) {
@@ -286,31 +319,31 @@ func TestPostReviewFeedbackForPhase_Routing(t *testing.T) {
 		name           string
 		phase          TaskPhase
 		activeTaskType string
-		wantSkipped    bool // True if we expect the function to return early
 	}{
 		{
 			name:           "PR tasks are skipped",
 			phase:          PhaseImplement,
 			activeTaskType: "pr",
-			wantSkipped:    true,
 		},
 		{
-			name:           "PLAN phase for issue",
+			name:           "PLAN phase routes to issue",
 			phase:          PhasePlan,
 			activeTaskType: "issue",
-			wantSkipped:    false,
 		},
 		{
-			name:           "IMPLEMENT phase for issue",
+			name:           "IMPLEMENT phase routes by phase",
 			phase:          PhaseImplement,
 			activeTaskType: "issue",
-			wantSkipped:    false,
 		},
 		{
-			name:           "DOCS phase for issue",
+			name:           "DOCS phase routes to issue",
 			phase:          PhaseDocs,
 			activeTaskType: "issue",
-			wantSkipped:    false,
+		},
+		{
+			name:           "VERIFY phase routes by phase",
+			phase:          PhaseVerify,
+			activeTaskType: "issue",
 		},
 	}
 
@@ -323,8 +356,56 @@ func TestPostReviewFeedbackForPhase_Routing(t *testing.T) {
 				logger:         testLogger(),
 			}
 
-			// This should not panic - we're testing that it handles missing gh CLI gracefully
+			// Should not panic - verifies unified phase-based routing
 			c.postReviewFeedbackForPhase(context.Background(), tt.phase, 1, "test feedback")
+		})
+	}
+}
+
+func TestPostCommentForPhase_Routing(t *testing.T) {
+	tests := []struct {
+		name           string
+		phase          TaskPhase
+		activeTaskType string
+	}{
+		{
+			name:           "PR tasks are skipped",
+			phase:          PhaseImplement,
+			activeTaskType: "pr",
+		},
+		{
+			name:           "PLAN phase for issue",
+			phase:          PhasePlan,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "IMPLEMENT phase for issue (no PR)",
+			phase:          PhaseImplement,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "DOCS phase for issue",
+			phase:          PhaseDocs,
+			activeTaskType: "issue",
+		},
+		{
+			name:           "VERIFY phase for issue (no PR)",
+			phase:          PhaseVerify,
+			activeTaskType: "issue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTaskType: tt.activeTaskType,
+				activeTask:     "42",
+				taskStates:     map[string]*TaskState{},
+				logger:         testLogger(),
+			}
+
+			// Should not panic - verifies phase-based routing doesn't crash
+			c.postCommentForPhase(context.Background(), tt.phase, "test body")
 		})
 	}
 }

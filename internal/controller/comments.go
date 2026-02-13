@@ -34,24 +34,38 @@ func (c *Controller) appendSignature(body string) string {
 	return fmt.Sprintf("%s\n\n<!-- %s -->", body, c.instanceSignature())
 }
 
-// postPhaseComment posts a progress comment on the GitHub issue for the current task.
+// postCommentForPhase routes a comment to the correct GitHub target based on the current phase.
+// IMPLEMENT and VERIFY phases post to the PR (with fallback to the issue if no PR exists yet).
+// All other phases (PLAN, DOCS, etc.) post to the issue.
 // This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, role CommentRole, summary string) {
+func (c *Controller) postCommentForPhase(ctx context.Context, phase TaskPhase, body string) {
 	if c.activeTaskType != "issue" {
 		return
 	}
-
-	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, role, iteration, summary)
-	c.postIssueComment(ctx, body)
+	switch phase {
+	case PhaseImplement, PhaseVerify:
+		if prNumber := c.getPRNumberForTask(); prNumber != "" {
+			c.postPRComment(ctx, prNumber, body)
+			return
+		}
+		// Fallback to issue if no PR yet (e.g. first IMPLEMENT iteration)
+		c.postIssueComment(ctx, body)
+	default:
+		// PLAN, DOCS, and any other phase → issue
+		c.postIssueComment(ctx, body)
+	}
 }
 
-// postJudgeComment posts a judge verdict comment on the GitHub issue.
+// postPhaseComment posts a progress comment routed by phase.
+// This is best-effort: errors are logged but never cause the controller to crash.
+func (c *Controller) postPhaseComment(ctx context.Context, phase TaskPhase, iteration int, role CommentRole, summary string) {
+	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, role, iteration, summary)
+	c.postCommentForPhase(ctx, phase, body)
+}
+
+// postJudgeComment posts a judge verdict comment routed by phase.
 // This is best-effort: errors are logged but never cause the controller to crash.
 func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, iteration int, result JudgeResult) {
-	if c.activeTaskType != "issue" {
-		return
-	}
-
 	header := fmt.Sprintf("### Phase: %s — %s (iteration %d)", phase, RoleJudge, iteration)
 	var body string
 	switch result.Verdict {
@@ -63,7 +77,7 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, iter
 		body = fmt.Sprintf("%s\n\n**Verdict:** BLOCKED\n\n> %s", header, result.Feedback)
 	}
 
-	c.postIssueComment(ctx, body)
+	c.postCommentForPhase(ctx, phase, body)
 }
 
 // postIssueComment posts a comment on the active issue. Best-effort.
@@ -105,52 +119,6 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 	} else {
 		c.logInfo("Posted comment to PR #%s", prNumber)
 	}
-}
-
-// postReviewerFeedback posts reviewer feedback as a comment on the issue.
-// This is best-effort: errors are logged but never cause the controller to crash.
-func (c *Controller) postReviewerFeedback(ctx context.Context, phase TaskPhase, iteration int, feedback string) {
-	if c.activeTaskType != "issue" {
-		return
-	}
-
-	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, feedback)
-	c.postIssueComment(ctx, body)
-}
-
-// postPRReviewSummary posts a review summary comment on the associated PR.
-// This includes reviewer feedback and is posted during the IMPLEMENT phase.
-func (c *Controller) postPRReviewSummary(ctx context.Context, prNumber string, phase TaskPhase, iteration int, reviewFeedback string) {
-	if prNumber == "" {
-		return
-	}
-
-	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, reviewFeedback)
-	c.postPRComment(ctx, prNumber, body)
-}
-
-// postPRJudgeVerdict posts a judge verdict comment on the associated PR.
-// This is called when the verdict is ITERATE or BLOCKED to make it visible on the PR.
-func (c *Controller) postPRJudgeVerdict(ctx context.Context, prNumber string, phase TaskPhase, iteration int, result JudgeResult) {
-	if prNumber == "" {
-		return
-	}
-
-	// Only post for non-ADVANCE verdicts (ITERATE and BLOCKED need visibility)
-	if result.Verdict == VerdictAdvance {
-		return
-	}
-
-	header := fmt.Sprintf("### Phase: %s — %s (iteration %d)", phase, RoleJudge, iteration)
-	var body string
-	switch result.Verdict {
-	case VerdictIterate:
-		body = fmt.Sprintf("%s\n\n**Verdict:** ITERATE\n\n> %s", header, result.Feedback)
-	case VerdictBlocked:
-		body = fmt.Sprintf("%s\n\n**Verdict:** BLOCKED\n\n> %s", header, result.Feedback)
-	}
-
-	c.postPRComment(ctx, prNumber, body)
 }
 
 // postImplementationPlan posts the implementation plan as a comment on the GitHub issue.
@@ -220,31 +188,8 @@ Please review the changes carefully before merging.
 	c.postPRComment(ctx, prNumber, body)
 }
 
-// postReviewFeedbackForPhase posts reviewer feedback to the appropriate location based on phase.
-// - PLAN phase: Posts to the associated issue
-// - IMPLEMENT phase: Posts to the associated PR (if one exists)
-// - Other phases: Posts to the issue
+// postReviewFeedbackForPhase posts reviewer feedback routed by phase via postCommentForPhase.
 func (c *Controller) postReviewFeedbackForPhase(ctx context.Context, phase TaskPhase, iteration int, feedback string) {
-	if c.activeTaskType != "issue" {
-		return
-	}
-
-	switch phase {
-	case PhasePlan:
-		// Plan review feedback goes to the issue
-		c.postReviewerFeedback(ctx, phase, iteration, feedback)
-
-	case PhaseImplement:
-		// Implementation review feedback goes to the PR (if one exists)
-		if prNumber := c.getPRNumberForTask(); prNumber != "" {
-			c.postPRReviewSummary(ctx, prNumber, phase, iteration, feedback)
-		} else {
-			// Fallback to issue if no PR yet
-			c.postReviewerFeedback(ctx, phase, iteration, feedback)
-		}
-
-	default:
-		// Other phases post to the issue
-		c.postReviewerFeedback(ctx, phase, iteration, feedback)
-	}
+	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, feedback)
+	c.postCommentForPhase(ctx, phase, body)
 }
