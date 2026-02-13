@@ -1623,3 +1623,56 @@ func TestPhaseHelpers_NilPhaseConfigs(t *testing.T) {
 		t.Errorf("phaseJudgeCriteria with nil map = %q, want empty", got)
 	}
 }
+
+func TestExtractPlanMarkdown(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name:   "extracts content between markers",
+			output: "some exploration output\nAGENTIUM_PLAN_START\n# Implementation Plan\n\n## Summary\nAdd caching layer.\nAGENTIUM_PLAN_END\nAGENTIUM_HANDOFF: {}",
+			want:   "# Implementation Plan\n\n## Summary\nAdd caching layer.",
+		},
+		{
+			name:   "no markers returns empty",
+			output: "just some regular output with no plan markers",
+			want:   "",
+		},
+		{
+			name:   "start marker without end marker returns empty",
+			output: "output\nAGENTIUM_PLAN_START\n# Plan content without end marker",
+			want:   "",
+		},
+		{
+			name:   "end marker without start marker returns empty",
+			output: "AGENTIUM_PLAN_END\nsome output",
+			want:   "",
+		},
+		{
+			name:   "empty content between markers",
+			output: "AGENTIUM_PLAN_START\n\nAGENTIUM_PLAN_END",
+			want:   "",
+		},
+		{
+			name:   "content with code blocks",
+			output: "AGENTIUM_PLAN_START\n# Plan\n\n```go\nfunc main() {}\n```\nAGENTIUM_PLAN_END",
+			want:   "# Plan\n\n```go\nfunc main() {}\n```",
+		},
+		{
+			name:   "multiline rich plan",
+			output: "exploration...\nAGENTIUM_PLAN_START\n# Implementation Plan\n\n## Summary\nDo stuff.\n\n## Files to Modify\n- `file.go`\n\n## Steps\n1. First step\n2. Second step\nAGENTIUM_PLAN_END\nAGENTIUM_HANDOFF: {}",
+			want:   "# Implementation Plan\n\n## Summary\nDo stuff.\n\n## Files to Modify\n- `file.go`\n\n## Steps\n1. First step\n2. Second step",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractPlanMarkdown(tt.output)
+			if got != tt.want {
+				t.Errorf("extractPlanMarkdown() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

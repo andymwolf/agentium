@@ -172,7 +172,7 @@ Format: `AGENTIUM_MEMORY: TYPE content`
 
 You are in the **PLAN** phase. Your job is to analyze the issue and produce a structured implementation plan.
 
-**CRITICAL:** You MUST emit an `AGENTIUM_HANDOFF` signal (see "Completion" below) with your plan before the PLAN phase can advance. Do NOT use Claude Code plan mode, write plan files, or launch Plan subagents. Emit the `AGENTIUM_HANDOFF` signal directly in your output.
+**CRITICAL:** You MUST output your plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers AND emit a lightweight `AGENTIUM_HANDOFF` signal (see "Completion" below) before the PLAN phase can advance. Do NOT use Claude Code plan mode or launch Plan subagents. Output the plan directly in your output between the markers.
 
 ### Extract-First Strategy
 
@@ -208,13 +208,15 @@ Incorporate the **latest consensus** into your plan. If prior feedback highlight
 
 ### Output Format
 
-Your plan should include:
+Your plan is output as rich markdown between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers. It should include:
 
 - **Summary**: One-sentence description of what needs to be done
-- **Files to modify**: List of existing files that will be changed
-- **Files to create**: List of new files (if any)
-- **Implementation steps**: Numbered list of concrete steps
-- **Testing approach**: How the changes will be verified
+- **Files to Modify**: List of existing files that will be changed, with rationale
+- **Files to Create**: List of new files (if any)
+- **Implementation Steps**: Numbered, detailed steps with code patterns found during exploration
+- **Testing Approach**: How the changes will be verified
+
+Include enough detail that another agent could follow the plan step-by-step: file paths, function names, code patterns observed, and edge cases to handle.
 
 ### Rules
 
@@ -241,27 +243,52 @@ Your plan should include:
 
 ### Completion
 
-When your plan is ready, emit a structured handoff signal with your plan:
+When your plan is ready:
+
+1. **Output the plan between markers** — this is the rich, detailed plan that will be saved to `.agentium/plan.md` for the IMPLEMENT phase to follow:
 
 ```
-AGENTIUM_HANDOFF: {
-  "summary": "One-sentence description of what needs to be done",
-  "files_to_modify": ["path/to/file1.go", "path/to/file2.go"],
-  "files_to_create": ["path/to/new_file.go"],
-  "implementation_steps": [
-    {"order": 1, "description": "Step 1 description", "file": "path/to/file.go"},
-    {"order": 2, "description": "Step 2 description", "file": "path/to/file.go"}
-  ],
-  "testing_approach": "How the changes will be verified"
-}
+AGENTIUM_PLAN_START
+# Implementation Plan
+
+## Summary
+One-sentence description of what needs to be done.
+
+## Files to Modify
+- `path/to/file1.go` — Rationale for changes
+- `path/to/file2.go` — Rationale for changes
+
+## Files to Create
+- `path/to/new_file.go` — Purpose of new file
+
+## Implementation Steps
+
+### 1. First step (`path/to/file.go`)
+Detailed description including code patterns found, function signatures, etc.
+
+### 2. Second step (`path/to/file.go`)
+Detailed description...
+
+## Testing Approach
+How the changes will be verified.
+AGENTIUM_PLAN_END
 ```
 
-Then emit the status signal:
+2. **Emit a lightweight handoff signal** with metadata for the controller:
+
+```
+AGENTIUM_HANDOFF: {"plan_file": ".agentium/plan.md", "summary": "...", "files_to_modify": ["..."], "files_to_create": ["..."], "testing_approach": "..."}
+```
+
+3. **Emit the status signal:**
 ```
 AGENTIUM_STATUS: COMPLETE
 ```
 
-For backward compatibility, you may also emit:
-```
-AGENTIUM_MEMORY: DECISION <one-line summary of your approach>
-```
+### On ITERATE (Subsequent Iterations)
+
+If you receive feedback and are asked to revise your plan:
+1. Read `.agentium/plan.md` to see your current plan
+2. Address the feedback
+3. Output a revised plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers
+4. Emit the updated `AGENTIUM_HANDOFF` signal and `AGENTIUM_STATUS: COMPLETE`

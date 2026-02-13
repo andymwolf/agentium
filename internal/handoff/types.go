@@ -44,6 +44,7 @@ type ImplementationStep struct {
 
 // PlanOutput is the structured output from the PLAN phase.
 type PlanOutput struct {
+	PlanFile            string               `json:"plan_file,omitempty"`
 	Summary             string               `json:"summary"`
 	FilesToModify       []string             `json:"files_to_modify"`
 	FilesToCreate       []string             `json:"files_to_create"`
@@ -66,7 +67,7 @@ type IssueRef struct {
 // ImplementInput is the curated input for the IMPLEMENT phase.
 type ImplementInput struct {
 	Issue        IssueRef      `json:"issue"`
-	Plan         PlanOutput    `json:"plan"`
+	PlanFile     string        `json:"plan_file"`
 	ExistingWork *ExistingWork `json:"existing_work,omitempty"`
 }
 

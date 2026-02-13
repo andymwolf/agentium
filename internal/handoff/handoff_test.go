@@ -254,6 +254,13 @@ func TestBuildImplementInput_UsesIssueRef(t *testing.T) {
 	if !strings.Contains(input, `"repository": "owner/repo"`) {
 		t.Errorf("expected repository in output, got:\n%s", input)
 	}
+	// Should contain plan_file reference instead of embedded plan
+	if !strings.Contains(input, `"plan_file"`) {
+		t.Errorf("expected plan_file in implement input, got:\n%s", input)
+	}
+	if !strings.Contains(input, `.agentium/plan.md`) {
+		t.Errorf("expected .agentium/plan.md path in implement input, got:\n%s", input)
+	}
 }
 
 func TestParser(t *testing.T) {
@@ -444,6 +451,57 @@ func TestParser_VerifyOutput(t *testing.T) {
 	}
 	if len(verify.FailuresResolved) != 1 || verify.FailuresResolved[0] != "lint fix" {
 		t.Errorf("Expected FailuresResolved ['lint fix'], got %v", verify.FailuresResolved)
+	}
+}
+
+func TestParseAny_DetectsPlanByPlanFile(t *testing.T) {
+	parser := NewParser()
+
+	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan.md","summary":"Add caching","files_to_modify":["handler.go"],"files_to_create":[],"testing_approach":"unit tests"}`
+
+	phase, result, err := parser.ParseAny(output)
+	if err != nil {
+		t.Fatalf("ParseAny failed: %v", err)
+	}
+	if phase != PhasePlan {
+		t.Errorf("Expected PLAN phase, got %s", phase)
+	}
+
+	planOut := result.(*PlanOutput)
+	if planOut.PlanFile != ".agentium/plan.md" {
+		t.Errorf("Expected PlanFile '.agentium/plan.md', got %s", planOut.PlanFile)
+	}
+	if planOut.Summary != "Add caching" {
+		t.Errorf("Expected summary 'Add caching', got %s", planOut.Summary)
+	}
+}
+
+func TestParser_PlanFileOutput(t *testing.T) {
+	parser := NewParser()
+
+	// Test parsing a plan with plan_file field (file-based handoff format)
+	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan.md","summary":"Implement feature","files_to_modify":["api.go"],"files_to_create":["cache.go"],"testing_approach":"integration tests"}`
+
+	result, err := parser.ParseOutput(output, PhasePlan)
+	if err != nil {
+		t.Fatalf("ParseOutput failed: %v", err)
+	}
+
+	plan, ok := result.(*PlanOutput)
+	if !ok {
+		t.Fatalf("Expected *PlanOutput, got %T", result)
+	}
+	if plan.PlanFile != ".agentium/plan.md" {
+		t.Errorf("Expected PlanFile '.agentium/plan.md', got %s", plan.PlanFile)
+	}
+	if plan.Summary != "Implement feature" {
+		t.Errorf("Expected summary 'Implement feature', got %s", plan.Summary)
+	}
+	if len(plan.FilesToModify) != 1 || plan.FilesToModify[0] != "api.go" {
+		t.Errorf("Expected FilesToModify ['api.go'], got %v", plan.FilesToModify)
+	}
+	if len(plan.FilesToCreate) != 1 || plan.FilesToCreate[0] != "cache.go" {
+		t.Errorf("Expected FilesToCreate ['cache.go'], got %v", plan.FilesToCreate)
 	}
 }
 

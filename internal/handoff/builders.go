@@ -73,13 +73,19 @@ func (b *Builder) buildImplementInput(taskID string) (*ImplementInput, error) {
 		return nil, fmt.Errorf("no plan output found for task %s", taskID)
 	}
 
+	// Use the plan file path if available, otherwise fall back to a default path.
+	planFile := plan.PlanFile
+	if planFile == "" {
+		planFile = ".agentium/plan.md"
+	}
+
 	input := &ImplementInput{
 		Issue: IssueRef{
 			Number:     issue.Number,
 			Title:      issue.Title,
 			Repository: issue.Repository,
 		},
-		Plan: *plan,
+		PlanFile: planFile,
 	}
 
 	// Check for existing work from previous implementation attempts
@@ -145,6 +151,14 @@ func (b *Builder) BuildMarkdownContext(taskID string, phase Phase) (string, erro
 	input, err := b.BuildInputForPhase(taskID, phase)
 	if err != nil {
 		return "", err
+	}
+
+	// For IMPLEMENT phase with plan file, render a file reference instead of JSON blob.
+	if phase == PhaseImplement {
+		plan := b.store.GetPlanOutput(taskID)
+		if plan != nil && plan.PlanFile != "" {
+			return fmt.Sprintf("## Phase Input: %s\n\nYour implementation plan is at `%s` — read it before starting work.\n\n```json\n%s\n```\n\nUse this context to guide your work. When you complete this phase, emit an AGENTIUM_HANDOFF signal with your structured output.\n", phase, plan.PlanFile, input), nil
+		}
 	}
 
 	return fmt.Sprintf("## Phase Input: %s\n\nThe following structured data has been provided for this phase:\n\n```json\n%s\n```\n\nUse this context to guide your work. When you complete this phase, emit an AGENTIUM_HANDOFF signal with your structured output.\n", phase, input), nil

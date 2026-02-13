@@ -3,9 +3,18 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/observability"
+)
+
+// Plan marker constants for extracting rich plan content from worker output.
+const (
+	planMarkerStart = "AGENTIUM_PLAN_START"
+	planMarkerEnd   = "AGENTIUM_PLAN_END"
 )
 
 // handlePlanSkip checks for a pre-existing plan and populates plc with the plan
@@ -89,6 +98,21 @@ func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) {
 		}
 	}
 
+	// Write plan markdown file when PLAN phase produces marker-delimited plan content.
+	// The controller acts as write proxy since PLAN-WORKER runs in read-only mode.
+	if plc.currentPhase == PhasePlan {
+		if planMD := extractPlanMarkdown(plc.phaseOutput); planMD != "" {
+			planPath := filepath.Join(c.workDir, ".agentium", "plan.md")
+			if mkdirErr := os.MkdirAll(filepath.Dir(planPath), 0755); mkdirErr != nil {
+				c.logWarning("Failed to create .agentium directory for plan file: %v", mkdirErr)
+			} else if writeErr := os.WriteFile(planPath, []byte(planMD), 0644); writeErr != nil {
+				c.logWarning("Failed to write plan file: %v", writeErr)
+			} else {
+				c.logInfo("Wrote plan to %s (%d bytes)", planPath, len(planMD))
+			}
+		}
+	}
+
 	// When plan skip triggers and processHandoffOutput didn't store a PlanOutput
 	// (because the issue body doesn't contain AGENTIUM_HANDOFF), create a minimal
 	// PlanOutput from the issue body's structured plan sections.
@@ -108,4 +132,28 @@ func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) {
 			}
 		}
 	}
+}
+
+// extractPlanMarkdown extracts content between AGENTIUM_PLAN_START and
+// AGENTIUM_PLAN_END markers from worker output. Returns empty string if
+// markers are not found or content is empty.
+func extractPlanMarkdown(output string) string {
+	startIdx := strings.Index(output, planMarkerStart)
+	if startIdx == -1 {
+		return ""
+	}
+
+	// Move past the marker and any trailing whitespace/newline
+	contentStart := startIdx + len(planMarkerStart)
+	if contentStart < len(output) && output[contentStart] == '\n' {
+		contentStart++
+	}
+
+	endIdx := strings.Index(output[contentStart:], planMarkerEnd)
+	if endIdx == -1 {
+		return ""
+	}
+
+	content := strings.TrimSpace(output[contentStart : contentStart+endIdx])
+	return content
 }

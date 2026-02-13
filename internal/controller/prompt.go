@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -60,7 +59,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 
 		// For IMPLEMENT with handoff plan: skip body/comments (plan replaces them)
 		if phase == PhaseImplement && c.hasPlanForTask(issueNumber) {
-			sb.WriteString("Refer to the **Phase Input** section below for the implementation plan and requirements.\n\n")
+			sb.WriteString("Your implementation plan is at `.agentium/plan.md` — read it before starting work.\n\n")
 		} else {
 			// Full context for PLAN, DOCS, VERIFY, or fallback when no plan exists
 			if issue.Body != "" {
@@ -221,7 +220,7 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 	if c.memoryStore != nil {
 		entries := c.memoryStore.GetPreviousIterationFeedback(taskID, phaseIteration)
 		if len(entries) > 0 {
-			return c.formatFeedbackEntries(entries, parentBranch, phase, taskID)
+			return c.formatFeedbackEntries(entries, parentBranch, phase)
 		}
 	}
 
@@ -230,11 +229,11 @@ func (c *Controller) buildIterateFeedbackSection(taskID string, phaseIteration i
 	if state == nil || (state.LastJudgeFeedback == "" && state.LastReviewerFeedback == "") {
 		return ""
 	}
-	return c.formatFeedbackFromState(state, parentBranch, phase, taskID)
+	return c.formatFeedbackFromState(state, parentBranch, phase)
 }
 
 // formatFeedbackEntries formats memory store entries into a feedback prompt section.
-func (c *Controller) formatFeedbackEntries(entries []memory.Entry, parentBranch string, phase TaskPhase, taskID string) string {
+func (c *Controller) formatFeedbackEntries(entries []memory.Entry, parentBranch string, phase TaskPhase) string {
 	var sb strings.Builder
 
 	// Opening narrative — one sentence telling the agent what happened
@@ -252,14 +251,14 @@ func (c *Controller) formatFeedbackEntries(entries []memory.Entry, parentBranch 
 	}
 
 	c.writeFeedbackBody(&sb, judgeDirectives, reviewerFeedback)
-	c.writePhaseCompletion(&sb, phase, parentBranch, taskID)
+	c.writePhaseCompletion(&sb, phase, parentBranch)
 
 	return sb.String()
 }
 
 // formatFeedbackFromState formats TaskState feedback fields into a feedback prompt section.
 // This serves as a defense-in-depth fallback when memory store entries are unavailable.
-func (c *Controller) formatFeedbackFromState(state *TaskState, parentBranch string, phase TaskPhase, taskID string) string {
+func (c *Controller) formatFeedbackFromState(state *TaskState, parentBranch string, phase TaskPhase) string {
 	var sb strings.Builder
 
 	c.writePhaseNarrative(&sb, phase)
@@ -273,7 +272,7 @@ func (c *Controller) formatFeedbackFromState(state *TaskState, parentBranch stri
 	}
 
 	c.writeFeedbackBody(&sb, judgeDirectives, reviewerFeedback)
-	c.writePhaseCompletion(&sb, phase, parentBranch, taskID)
+	c.writePhaseCompletion(&sb, phase, parentBranch)
 
 	return sb.String()
 }
@@ -316,32 +315,17 @@ func (c *Controller) writeFeedbackBody(sb *strings.Builder, judgeDirectives, rev
 }
 
 // writePhaseCompletion writes the phase-specific completion section with handoff template.
-func (c *Controller) writePhaseCompletion(sb *strings.Builder, phase TaskPhase, parentBranch string, taskID string) {
+func (c *Controller) writePhaseCompletion(sb *strings.Builder, phase TaskPhase, parentBranch string) {
 	switch phase {
 	case PhasePlan:
-		// Include current plan so the worker can see what to update
-		if c.handoffStore != nil {
-			if planOutput := c.handoffStore.GetPlanOutput(taskID); planOutput != nil {
-				planJSON, err := json.Marshal(planOutput)
-				if err == nil {
-					sb.WriteString("## Your current plan\n\n")
-					sb.WriteString("Update this to address the feedback above:\n\n")
-					sb.WriteString("```json\n")
-					sb.WriteString(string(planJSON))
-					sb.WriteString("\n```\n\n")
-				}
-			}
-		}
+		// Direct the worker to read the plan file
+		sb.WriteString("## Your current plan\n\n")
+		sb.WriteString("Your current plan is at `.agentium/plan.md` — read it, then output a revised plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers.\n\n")
 
 		sb.WriteString("## Submit your revised plan\n\n")
-		sb.WriteString("When you've addressed the feedback, emit your updated plan. The reviewer evaluates your plan from this signal, not from conversation text.\n\n")
-		sb.WriteString("```\nAGENTIUM_HANDOFF: {\n")
-		sb.WriteString("  \"summary\": \"...\",\n")
-		sb.WriteString("  \"files_to_modify\": [\"...\"],\n")
-		sb.WriteString("  \"files_to_create\": [\"...\"],\n")
-		sb.WriteString("  \"implementation_steps\": [{\"order\": 1, \"description\": \"...\", \"file\": \"...\"}],\n")
-		sb.WriteString("  \"testing_approach\": \"...\"\n")
-		sb.WriteString("}\n```\n\n")
+		sb.WriteString("When you've addressed the feedback, output your revised plan between markers and emit a lightweight handoff signal:\n\n")
+		sb.WriteString("```\nAGENTIUM_PLAN_START\n# Implementation Plan\n...(your revised plan in markdown)...\nAGENTIUM_PLAN_END\n\n")
+		sb.WriteString("AGENTIUM_HANDOFF: {\"plan_file\": \".agentium/plan.md\", \"summary\": \"...\", \"files_to_modify\": [\"...\"], \"files_to_create\": [\"...\"], \"testing_approach\": \"...\"}\n```\n\n")
 
 	case PhaseImplement:
 		diffBase := "main"

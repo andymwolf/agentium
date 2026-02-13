@@ -180,7 +180,11 @@ func (p *Parser) ParseAny(output string) (Phase, interface{}, error) {
 	}
 
 	// Distinguish by unique fields - check most unique first
-	// PLAN: implementation_steps is unique
+	// PLAN: plan_file or implementation_steps is unique
+	if _, ok := raw["plan_file"]; ok {
+		out, err := p.parsePlanOutput(jsonStr)
+		return PhasePlan, out, err
+	}
 	if _, ok := raw["implementation_steps"]; ok {
 		out, err := p.parsePlanOutput(jsonStr)
 		return PhasePlan, out, err
