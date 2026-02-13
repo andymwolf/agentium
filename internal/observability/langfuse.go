@@ -152,6 +152,7 @@ func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput)
 			"parentObservationId": span.SpanID,
 			"name":                gen.Name,
 			"model":               gen.Model,
+			"input":               gen.Input,
 			"usage": map[string]interface{}{
 				"input":  gen.InputTokens,
 				"output": gen.OutputTokens,

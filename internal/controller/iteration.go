@@ -164,6 +164,13 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
+	// Capture prompt for Langfuse generation input
+	if stdinPrompt != "" {
+		c.lastPrompt = stdinPrompt
+	} else {
+		c.lastPrompt = prompt
+	}
+
 	params := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
@@ -257,6 +264,9 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 	if feedbackSection == "" {
 		feedbackSection = fmt.Sprintf("Continue working on the current phase. This is iteration %d.", state.PhaseIteration)
 	}
+
+	// Capture prompt for Langfuse generation input
+	c.lastPrompt = feedbackSection
 
 	params := containerRunParams{
 		Agent:       activeAgent,

@@ -13,8 +13,9 @@ import (
 type ReviewResult struct {
 	Feedback     string
 	Error        error
-	InputTokens  int // Input tokens consumed by the reviewer
-	OutputTokens int // Output tokens consumed by the reviewer
+	Prompt       string // Prompt text sent to the reviewer (for Langfuse generation input)
+	InputTokens  int    // Input tokens consumed by the reviewer
+	OutputTokens int    // Output tokens consumed by the reviewer
 }
 
 // reviewRunParams holds parameters for running a reviewer agent.
@@ -160,6 +161,7 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 
 	return ReviewResult{
 		Feedback:     feedback,
+		Prompt:       stdinPrompt,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
 	}, nil
