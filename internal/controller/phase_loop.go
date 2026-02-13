@@ -9,9 +9,35 @@ import (
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/handoff"
-	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/observability"
 )
+
+// phaseLoopContext bundles the mutable state threaded through runPhaseLoop,
+// eliminating the need to pass many local variables between extracted methods.
+type phaseLoopContext struct {
+	taskID string
+	state  *TaskState
+
+	// Langfuse tracing
+	traceCtx          observability.TraceContext
+	activeSpanCtx     observability.SpanContext
+	activePhaseStart  time.Time
+	hasActiveSpan     bool
+	totalInputTokens  int
+	totalOutputTokens int
+	traceStatus       string
+
+	// Per-phase state (reset each phase)
+	currentPhase  TaskPhase
+	maxIter       int
+	advanced      bool
+	noSignalCount int
+
+	// Per-iteration output (reset each iteration)
+	phaseOutput    string
+	commentContent string
+	skipIteration  bool
+}
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
 // TEST is merged into IMPLEMENT. REVIEW and PR_CREATION phases have been removed.
@@ -419,35 +445,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 	c.logInfo("Starting phase loop for issue #%s (initial phase: %s)", c.activeTask, state.Phase)
 
-	// Start Langfuse trace for this task
-	traceCtx := c.tracer.StartTrace(taskID, observability.TraceOptions{
-		Workflow:   "phase_loop",
-		Repository: c.config.Repository,
-		SessionID:  c.config.ID,
-	})
-	var totalInputTokens, totalOutputTokens int
-	traceStatus := "error" // default status if function exits unexpectedly
-
-	// Track active phase span for deferred cleanup on early returns
-	var activeSpanCtx observability.SpanContext
-	var activePhaseStart time.Time
-	var hasActiveSpan bool
-
-	endActiveSpan := func(status string) {
-		if hasActiveSpan {
-			c.tracer.EndPhase(activeSpanCtx, status, time.Since(activePhaseStart).Milliseconds())
-			hasActiveSpan = false
-		}
+	plc := &phaseLoopContext{
+		taskID: taskID,
+		state:  state,
 	}
 
-	defer func() {
-		endActiveSpan("interrupted")
-		c.tracer.CompleteTrace(traceCtx, observability.CompleteOptions{
-			Status:            traceStatus,
-			TotalInputTokens:  totalInputTokens,
-			TotalOutputTokens: totalOutputTokens,
-		})
-	}()
+	c.initPhaseLoopTrace(plc)
+	defer c.completePhaseLoopTrace(plc)
 
 	// Initialize handoff store with issue context if enabled
 	if c.isHandoffEnabled() {
@@ -462,26 +466,26 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
-			traceStatus = "cancelled"
+			plc.traceStatus = "cancelled"
 			return ctx.Err()
 		default:
 		}
 
-		currentPhase := state.Phase
+		plc.currentPhase = state.Phase
 
 		// Terminal phases end the loop - check BEFORE shouldTerminate() to ensure
 		// finalizeDraftPR() is called when PhaseComplete is reached. shouldTerminate()
 		// also returns true for terminal phases, so if we checked it first, we'd exit
 		// the loop without finalizing the PR. See issue #284.
-		if currentPhase == PhaseComplete || currentPhase == PhaseBlocked || currentPhase == PhaseNothingToDo {
+		if plc.currentPhase == PhaseComplete || plc.currentPhase == PhaseBlocked || plc.currentPhase == PhaseNothingToDo {
 			// Finalize draft PR when completing successfully
-			if currentPhase == PhaseComplete && state.PRNumber != "" {
+			if plc.currentPhase == PhaseComplete && state.PRNumber != "" {
 				if err := c.finalizeDraftPR(ctx, taskID); err != nil {
 					c.logWarning("Failed to finalize draft PR: %v", err)
 				}
 			}
-			c.logInfo("Phase loop: reached terminal phase %s", currentPhase)
-			traceStatus = string(currentPhase)
+			c.logInfo("Phase loop: reached terminal phase %s", plc.currentPhase)
+			plc.traceStatus = string(plc.currentPhase)
 			return nil
 		}
 
@@ -491,536 +495,124 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 		// finalizeDraftPR() can run.
 		if c.shouldTerminate() {
 			c.logInfo("Phase loop: global termination condition met")
-			traceStatus = "terminated"
+			plc.traceStatus = "terminated"
 			return nil
 		}
 
 		// VERIFY phase pre-checks: skip if no PR or if NOMERGE flag is set
-		if currentPhase == PhaseVerify {
-			if state.PRNumber == "" {
-				c.logWarning("VERIFY phase: no PR number available, skipping to COMPLETE")
-				state.Phase = PhaseComplete
-				continue
-			}
-			if state.ControllerOverrode || state.JudgeOverrodeReviewer {
-				c.logWarning("VERIFY phase: NOMERGE flag set, skipping auto-merge")
-				state.Phase = PhaseComplete
-				continue
-			}
-			// Mark PR as ready to trigger CI checks
+		if c.handleVerifyPreChecks(plc) {
+			continue
+		}
+
+		// Mark PR as ready to trigger CI checks (only for VERIFY, after pre-checks pass)
+		if plc.currentPhase == PhaseVerify {
 			if err := c.markPRReady(ctx, state.PRNumber); err != nil {
 				c.logWarning("VERIFY phase: failed to mark PR as ready: %v", err)
 			}
 		}
 
-		maxIter := c.phaseMaxIterations(currentPhase, state.WorkflowPath)
-		state.MaxPhaseIterations = maxIter
+		plc.maxIter = c.phaseMaxIterations(plc.currentPhase, state.WorkflowPath)
+		state.MaxPhaseIterations = plc.maxIter
 
-		c.logInfo("Phase loop: entering phase %s (max %d iterations)", currentPhase, maxIter)
+		c.logInfo("Phase loop: entering phase %s (max %d iterations)", plc.currentPhase, plc.maxIter)
 
 		// Start long-lived containers for this phase if container reuse is enabled
 		if c.config.ContainerReuse {
-			c.startPhaseContainerPool(ctx, currentPhase)
+			c.startPhaseContainerPool(ctx, plc.currentPhase)
 		}
 
-		// Start Langfuse span for this phase
-		activePhaseStart = time.Now()
-		activeSpanCtx = c.tracer.StartPhase(traceCtx, string(currentPhase), observability.SpanOptions{
-			MaxIterations: maxIter,
-		})
-		hasActiveSpan = true
+		c.startPhaseSpan(plc)
+
+		// Reset per-phase state
+		plc.advanced = false
+		plc.noSignalCount = 0
 
 		// Inner loop: iterate within the current phase
-		advanced := false
-		noSignalCount := 0
-		for iter := 1; iter <= maxIter; iter++ {
+		for iter := 1; iter <= plc.maxIter; iter++ {
 			select {
 			case <-ctx.Done():
-				traceStatus = "cancelled"
+				plc.traceStatus = "cancelled"
 				return ctx.Err()
 			default:
 			}
 
 			if c.shouldTerminate() {
-				traceStatus = "terminated"
+				plc.traceStatus = "terminated"
 				return nil
 			}
 
 			// Refresh GitHub token if needed before each phase iteration
-			// This handles long-running phases that might exceed token lifetime
 			if err := c.refreshGitHubTokenIfNeeded(); err != nil {
-				c.logError("Phase %s: failed to refresh GitHub token: %v", currentPhase, err)
+				c.logError("Phase %s: failed to refresh GitHub token: %v", plc.currentPhase, err)
 				state.Phase = PhaseBlocked
-				traceStatus = "blocked"
+				plc.traceStatus = "blocked"
 				return fmt.Errorf("failed to refresh GitHub token: %w", err)
 			}
 
 			state.PhaseIteration = iter
-			c.logInfo("Phase %s: iteration %d/%d", currentPhase, iter, maxIter)
+			c.logInfo("Phase %s: iteration %d/%d", plc.currentPhase, iter, plc.maxIter)
 
 			// Update the phase in state so skills/routing pick it up
-			state.Phase = currentPhase
+			state.Phase = plc.currentPhase
+
+			// Reset per-iteration state
+			plc.phaseOutput = ""
+			plc.commentContent = ""
+			plc.skipIteration = false
 
 			// Check for pre-existing plan (PLAN phase, iteration 1 only)
-			var phaseOutput string    // Full output for internal processing (handoff, judge)
-			var commentContent string // Filtered output for GitHub comments
-			var skipIteration bool
-			if c.shouldSkipPlanIteration(currentPhase, iter) {
-				planContent := c.extractExistingPlan()
-				c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", currentPhase)
-				phaseOutput = planContent
-				skipIteration = true
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController, "Pre-existing plan detected in issue body (skipped planning agent)")
-			}
+			c.handlePlanSkip(ctx, plc, iter)
 
-			if !skipIteration {
-				// Run an agent iteration for this phase
-				c.iteration++
-				if c.cloudLogger != nil {
-					c.cloudLogger.SetIteration(c.iteration)
-				}
-
-				result, err := c.runIteration(ctx)
-				if err != nil {
-					c.logError("Phase %s iteration %d failed: %v", currentPhase, iter, err)
+			if !plc.skipIteration {
+				if err := c.runWorkerIteration(ctx, plc, iter); err != nil {
+					c.logError("%v", err)
 					continue
 				}
-
-				// Record Worker generation in Langfuse
-				c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
-					Name:         "Worker",
-					Model:        c.config.Agent,
-					Input:        result.PromptInput,
-					Output:       result.RawTextContent,
-					InputTokens:  result.InputTokens,
-					OutputTokens: result.OutputTokens,
-					Status:       "completed",
-					StartTime:    result.StartTime,
-					EndTime:      result.EndTime,
-				})
-				totalInputTokens += result.InputTokens
-				totalOutputTokens += result.OutputTokens
-
-				// Full output for internal processing (handoff parsing, judge context)
-				phaseOutput = result.RawTextContent
-				if phaseOutput == "" {
-					phaseOutput = result.Summary
-				}
-
-				// Filtered output for GitHub comments (assistant text only, no tool results)
-				commentContent = result.AssistantText
-				if commentContent == "" {
-					commentContent = phaseOutput
-				}
-				commentContent = StripAgentiumSignals(commentContent)
-				commentContent = StripPreamble(commentContent)
-				commentContent = SummarizeForComment(commentContent, 250)
 			}
 
-			// Warn if phase output exceeds judge context budget (judge/reviewer will see truncated output)
-			if phaseOutput != "" && len(phaseOutput) > c.judgeContextBudget() {
-				c.logWarning("Phase %s output (%d chars) exceeds judge context budget (%d chars) — judge/reviewer will see truncated output",
-					currentPhase, len(phaseOutput), c.judgeContextBudget())
-			}
+			c.processWorkerHandoff(plc, iter)
 
-			// Parse and store handoff output if enabled
-			if c.isHandoffEnabled() && phaseOutput != "" {
-				if handoffErr := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); handoffErr != nil {
-					c.logWarning("Failed to process handoff output for phase %s: %v", currentPhase, handoffErr)
-				}
-			}
-
-			// When plan skip triggers and processHandoffOutput didn't store a PlanOutput
-			// (because the issue body doesn't contain AGENTIUM_HANDOFF), create a minimal
-			// PlanOutput from the issue body's structured plan sections.
-			if skipIteration && c.isHandoffEnabled() {
-				hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhasePlan)
-				if hd == nil || hd.PlanOutput == nil {
-					planOutput := extractPlanFromIssueBody(phaseOutput)
-					if planOutput != nil {
-						if storeErr := c.handoffStore.StorePhaseOutput(taskID, handoff.PhasePlan, iter, planOutput); storeErr != nil {
-							c.logWarning("Failed to store extracted plan from issue body: %v", storeErr)
-						} else {
-							c.logInfo("Stored plan extracted from issue body in handoff store")
-							if saveErr := c.handoffStore.Save(); saveErr != nil {
-								c.logWarning("Failed to persist handoff store: %v", saveErr)
-							}
-						}
-					}
-				}
-			}
-
-			// For DOCS phase: skip reviewer/judge if no documentation changes were made
-			if currentPhase == PhaseDocs && c.docsOutputIndicatesNoChanges(taskID) {
-				c.logInfo("Phase %s: no documentation changes detected, skipping review/judge", currentPhase)
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
-					"No documentation changes detected — skipping review (auto-advance)")
-
-				// Clear feedback and record phase result
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (no changes, auto-advanced)", currentPhase)},
-					}, c.iteration, taskID)
-				}
-				advanced = true
+			// Phase-specific auto-advance checks
+			if c.handleDocsAutoAdvance(ctx, plc, iter) {
 				break
 			}
 
-			// For VERIFY phase: skip reviewer/judge (CI check/merge is mechanical, not creative)
-			if currentPhase == PhaseVerify {
-				merged, remainingFailures := c.tryVerifyMerge(ctx, taskID, state)
-				if merged {
-					state.PRMerged = true
-					c.postPhaseComment(ctx, currentPhase, iter, RoleController,
-						"Merge successful — skipping review (auto-advance)")
-					if c.memoryStore != nil {
-						c.memoryStore.ClearByType(memory.EvalFeedback)
-						c.memoryStore.Update([]memory.Signal{
-							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (merge successful, iteration %d)", currentPhase, iter)},
-						}, c.iteration, taskID)
-					}
-					advanced = true
-					break
-				}
-				// Not merged — surface remaining failures so worker knows what to fix
-				retryMsg := "Merge not yet successful — iterating"
-				if len(remainingFailures) > 0 {
-					retryMsg = fmt.Sprintf("Merge not yet successful — remaining failures: %s", strings.Join(remainingFailures, ", "))
-				}
-				c.logInfo("VERIFY: not yet merged, continuing to iteration %d/%d", iter+1, maxIter)
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController, retryMsg)
+			if advanced, shouldContinue := c.handleVerifyPhase(ctx, plc, iter); advanced {
+				break
+			} else if shouldContinue {
 				continue
 			}
 
 			// Post phase comment with filtered content (no tool results, max 250 lines)
-			c.postPhaseComment(ctx, currentPhase, iter, RoleWorker, commentContent)
+			c.postPhaseComment(ctx, plc.currentPhase, iter, RoleWorker, plc.commentContent)
 
 			// Create draft PR after first IMPLEMENT iteration with commits
-			if currentPhase == PhaseImplement && !state.DraftPRCreated {
+			if plc.currentPhase == PhaseImplement && !state.DraftPRCreated {
 				if prErr := c.maybeCreateDraftPR(ctx, taskID); prErr != nil {
 					c.logWarning("Failed to create draft PR: %v", prErr)
 				}
 			}
 
-			// Run complexity assessor after PLAN iteration 1 (only if workflow path is unset)
-			if currentPhase == PhasePlan && iter == 1 && state.WorkflowPath == WorkflowPathUnset {
-				complexityResult, complexityErr := c.runComplexityAssessor(ctx, complexityRunParams{
-					PlanOutput:    phaseOutput,
-					Iteration:     iter,
-					MaxIterations: maxIter,
-				})
-				if complexityErr != nil {
-					c.logWarning("Complexity assessor error: %v (defaulting to COMPLEX)", complexityErr)
-					state.WorkflowPath = WorkflowPathComplex
-				} else {
-					state.WorkflowPath = complexityResult.Verdict
-					c.logInfo("Workflow path set to %s: %s", state.WorkflowPath, complexityResult.Feedback)
-				}
-
-				// Post complexity verdict comment
-				c.postPhaseComment(ctx, currentPhase, iter, RoleComplexityAssessor,
-					fmt.Sprintf("Complexity assessment: **%s**\n\n%s", state.WorkflowPath, complexityResult.Feedback))
-
-				// For SIMPLE tasks, auto-advance from PLAN (skip reviewer/judge)
-				if state.WorkflowPath == WorkflowPathSimple {
-					c.logInfo("SIMPLE workflow: auto-advancing from PLAN phase")
-					// Clear any feedback and store phase result
-					if c.memoryStore != nil {
-						c.memoryStore.ClearByType(memory.EvalFeedback)
-						c.memoryStore.Update([]memory.Signal{
-							{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (SIMPLE path, iteration %d)", currentPhase, iter)},
-						}, c.iteration, taskID)
-					}
-					// Post implementation plan as a comment (follows "append only" principle)
-					if phaseOutput != "" {
-						c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
-					}
-					advanced = true
-					break
-				}
-
-				// For COMPLEX tasks, recalculate max iterations now that we know the path
-				maxIter = c.phaseMaxIterations(currentPhase, state.WorkflowPath)
-				state.MaxPhaseIterations = maxIter
-				c.logInfo("COMPLEX workflow: continuing with reviewer/judge (max iterations: %d)", maxIter)
-			}
-
-			// Gather previous iteration feedback for reviewer context
-			var previousFeedback string
-			if iter > 1 && c.memoryStore != nil {
-				prevEntries := c.memoryStore.GetPreviousIterationFeedback(taskID, iter)
-				if len(prevEntries) > 0 {
-					var feedbackParts []string
-					for _, e := range prevEntries {
-						feedbackParts = append(feedbackParts, e.Content)
-					}
-					previousFeedback = strings.Join(feedbackParts, "\n")
-				}
-			}
-
-			// Get worker handoff summary if available
-			workerHandoffSummary := c.buildWorkerHandoffSummary(taskID, currentPhase, iter)
-
-			// Extract worker's feedback responses from phase output (iteration > 1 only)
-			var workerFeedbackResponses string
-			if iter > 1 && phaseOutput != "" {
-				responses := extractFeedbackResponses(phaseOutput)
-				if len(responses) > 0 {
-					workerFeedbackResponses = strings.Join(responses, "\n")
-				}
-			}
-
-			// Check if reviewer should be skipped (skip=true takes precedence over skip_on)
-			if skipReviewer, skipReason := c.shouldSkipReviewer(phaseOutput, taskID); skipReviewer {
-				c.logInfo("Phase %s: reviewer skip condition met (%s), skipping review/judge (auto-advance)", currentPhase, skipReason)
-				c.tracer.RecordSkipped(activeSpanCtx, "Reviewer", skipReason)
-				c.tracer.RecordSkipped(activeSpanCtx, "Judge", "reviewer_skipped")
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
-					fmt.Sprintf("Reviewer skip condition (%s) met — skipping review (auto-advance)", skipReason))
-
-				// Clear feedback and record phase result
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (skip condition met, auto-advanced)", currentPhase)},
-					}, c.iteration, taskID)
-				}
-				advanced = true
+			// Complexity assessment after PLAN iteration 1
+			if c.handleComplexityAssessment(ctx, plc, iter) {
 				break
 			}
 
-			// Run reviewer + judge
-			reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
-				CompletedPhase:          currentPhase,
-				PhaseOutput:             phaseOutput,
-				Iteration:               iter,
-				MaxIterations:           maxIter,
-				PreviousFeedback:        previousFeedback,
-				WorkerHandoffSummary:    workerHandoffSummary,
-				WorkerFeedbackResponses: workerFeedbackResponses,
-				ParentBranch:            state.ParentBranch,
-			})
-			if reviewErr != nil {
-				c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", currentPhase, reviewErr)
-				state.LastJudgeVerdict = string(VerdictAdvance)
-				// Clear stale feedback to prevent leaking into later phases
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-				}
-				// Record phase result
-				if c.memoryStore != nil {
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (reviewer error, forced advance)", currentPhase)},
-					}, c.iteration, taskID)
-				}
-				advanced = true
-				break
-			}
-
-			// Record Reviewer generation in Langfuse
-			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
-				Name:         "Reviewer",
-				Model:        c.config.Agent,
-				Input:        reviewResult.Prompt,
-				Output:       reviewResult.Feedback,
-				InputTokens:  reviewResult.InputTokens,
-				OutputTokens: reviewResult.OutputTokens,
-				Status:       "completed",
-				StartTime:    reviewResult.StartTime,
-				EndTime:      reviewResult.EndTime,
-			})
-			totalInputTokens += reviewResult.InputTokens
-			totalOutputTokens += reviewResult.OutputTokens
-
-			// Store reviewer feedback on TaskState for defense-in-depth fallback
-			state.LastReviewerFeedback = reviewResult.Feedback
-
-			// Post reviewer feedback to appropriate location (filtered for readability)
-			reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
-			reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
-			reviewFeedbackComment = SummarizeForComment(reviewFeedbackComment, 250)
-			c.postReviewFeedbackForPhase(ctx, currentPhase, iter, reviewFeedbackComment)
-
-			priorDirectives := ""
-			if c.memoryStore != nil && iter > 1 {
-				priorDirectives = c.memoryStore.BuildJudgeHistoryContext(taskID, iter)
-			}
-
-			// Check if judge should be skipped (skip=true takes precedence over skip_on)
-			if skipJudge, skipReason := c.shouldSkipJudge(phaseOutput, taskID); skipJudge {
-				c.logInfo("Phase %s: judge skip condition met (%s), skipping judge (auto-advance)", currentPhase, skipReason)
-				c.tracer.RecordSkipped(activeSpanCtx, "Judge", skipReason)
-				c.postPhaseComment(ctx, currentPhase, iter, RoleController,
-					fmt.Sprintf("Judge skip condition (%s) met — skipping judge (auto-advance)", skipReason))
-
-				// Clear feedback and record phase result
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (judge skip condition met, auto-advanced)", currentPhase)},
-					}, c.iteration, taskID)
-				}
-				advanced = true
-				break
-			}
-
-			judgeResult, err := c.runJudge(ctx, judgeRunParams{
-				CompletedPhase:  currentPhase,
-				PhaseOutput:     phaseOutput,
-				ReviewFeedback:  reviewResult.Feedback,
-				Iteration:       iter,
-				MaxIterations:   maxIter,
-				PhaseIteration:  iter,
-				PriorDirectives: priorDirectives,
-			})
-			if err != nil {
-				c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", currentPhase, err)
-				judgeResult = JudgeResult{Verdict: VerdictAdvance}
-			}
-
-			// Record Judge generation in Langfuse
-			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
-				Name:         "Judge",
-				Model:        c.config.Agent,
-				Input:        judgeResult.Prompt,
-				Output:       judgeResult.Output,
-				InputTokens:  judgeResult.InputTokens,
-				OutputTokens: judgeResult.OutputTokens,
-				Status:       "completed",
-				StartTime:    judgeResult.StartTime,
-				EndTime:      judgeResult.EndTime,
-			})
-			totalInputTokens += judgeResult.InputTokens
-			totalOutputTokens += judgeResult.OutputTokens
-
-			// Track consecutive no-signal count for fail-closed behavior
-			if !judgeResult.SignalFound {
-				noSignalCount++
-				c.logWarning("Judge did not emit signal for phase %s (no-signal count: %d/%d)", currentPhase, noSignalCount, c.judgeNoSignalLimit())
-				if noSignalCount >= c.judgeNoSignalLimit() {
-					c.logWarning("Phase %s: no-signal limit reached, force-advancing", currentPhase)
-					judgeResult = JudgeResult{Verdict: VerdictAdvance, SignalFound: false}
-				}
-			} else {
-				noSignalCount = 0
-			}
-
-			state.LastJudgeVerdict = string(judgeResult.Verdict)
-			state.LastJudgeFeedback = judgeResult.Feedback
-
-			// Hard-gate: PLAN phase cannot advance without a valid PlanOutput in the handoff store
-			if currentPhase == PhasePlan && judgeResult.Verdict == VerdictAdvance && c.isHandoffEnabled() {
-				hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhasePlan)
-				if hd == nil || hd.PlanOutput == nil {
-					c.logWarning("PLAN: judge ADVANCE but no AGENTIUM_HANDOFF signal — forcing ITERATE")
-					judgeResult = JudgeResult{
-						Verdict:  VerdictIterate,
-						Feedback: "No AGENTIUM_HANDOFF signal detected. You must emit the structured handoff signal with your plan before the PLAN phase can advance.",
-						// SignalFound: true so noSignalCount resets — we want the hard-gate
-						// to persist across iterations without triggering the no-signal fail-safe.
-						SignalFound: true,
-					}
-					state.LastJudgeVerdict = string(judgeResult.Verdict)
-					state.LastJudgeFeedback = judgeResult.Feedback
-				}
-			}
-
-			// Detect when judge overrides reviewer's recommendation (NOMERGE trigger)
-			if judgeResult.Verdict == VerdictAdvance {
-				reviewerVerdict := extractReviewerVerdict(reviewResult.Feedback)
-				if reviewerVerdict == VerdictIterate || reviewerVerdict == VerdictBlocked {
-					state.JudgeOverrodeReviewer = true
-					c.logWarning("Phase %s: judge ADVANCE overrode reviewer %s", currentPhase, reviewerVerdict)
-				}
-			}
-
-			// Post judge comment
-			c.postJudgeComment(ctx, currentPhase, iter, judgeResult)
-
-			switch judgeResult.Verdict {
-			case VerdictAdvance:
-				// Clear feedback from memory and move to next phase
-				if c.memoryStore != nil {
-					c.memoryStore.ClearByType(memory.EvalFeedback)
-				}
-				// Store phase result in memory
-				if c.memoryStore != nil {
-					c.memoryStore.Update([]memory.Signal{
-						{Type: memory.PhaseResult, Content: fmt.Sprintf("%s completed (iteration %d)", currentPhase, iter)},
-					}, c.iteration, taskID)
-				}
-
-				// Post implementation plan as a comment after PLAN phase advances
-				// (postImplementationPlan follows "append only" principle)
-				if currentPhase == PhasePlan && phaseOutput != "" {
-					c.postImplementationPlan(ctx, c.formatPlanForComment(taskID, phaseOutput))
-				}
-
-				advanced = true
-
-			case VerdictIterate:
-				// Store feedback in memory for the next iteration's worker prompt.
-				// This is done HERE (not in runJudge) so that hard-gate overrides
-				// (e.g., PLAN phase missing AGENTIUM_HANDOFF) also get their
-				// feedback stored correctly.
-				if c.memoryStore != nil {
-					var signals []memory.Signal
-					if reviewResult.Feedback != "" {
-						signals = append(signals, memory.Signal{
-							Type:    memory.EvalFeedback,
-							Content: reviewResult.Feedback,
-						})
-					}
-					if judgeResult.Feedback != "" {
-						signals = append(signals, memory.Signal{
-							Type:    memory.JudgeDirective,
-							Content: judgeResult.Feedback,
-						})
-					}
-					if len(signals) > 0 {
-						c.memoryStore.UpdateWithPhaseIteration(signals, c.iteration, iter, taskID)
-					}
-				}
-				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
-				continue
-
-			case VerdictBlocked:
-				state.Phase = PhaseBlocked
-				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
-				endActiveSpan("blocked")
-				traceStatus = "blocked"
+			// Review/judge pipeline
+			advanced, blocked, shouldContinue := c.runReviewJudgePipeline(ctx, plc, iter)
+			if blocked {
 				return nil
 			}
-
+			if shouldContinue {
+				continue
+			}
 			if advanced {
 				break
 			}
 		}
 
-		if !advanced {
-			// Exhausted max iterations without ADVANCE
-			switch currentPhase {
-			case PhaseDocs:
-				// DOCS phase auto-succeeds - documentation should not block PR finalization
-				c.logInfo("Phase %s: exhausted %d iterations, auto-advancing (non-blocking)", currentPhase, maxIter)
-				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
-					fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", maxIter))
-			case PhaseVerify:
-				// VERIFY phase exhaustion: PR is already ready for review, note that auto-merge failed
-				c.logWarning("Phase %s: exhausted %d iterations, auto-merge failed (PR remains ready for human review)", currentPhase, maxIter)
-				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
-					fmt.Sprintf("Auto-merge failed: exhausted %d iterations. PR is ready for human review.", maxIter))
-			default:
-				// Set ControllerOverrode flag for NOMERGE handling during PR finalization
-				state.ControllerOverrode = true
-				c.logWarning("Phase %s: exhausted %d iterations without ADVANCE, forcing advance (NOMERGE flag set)", currentPhase, maxIter)
-				c.postPhaseComment(ctx, currentPhase, maxIter, RoleController,
-					fmt.Sprintf("Forced advance: exhausted %d iterations without judge ADVANCE (PR will require human review)", maxIter))
-			}
-			if c.memoryStore != nil {
-				c.memoryStore.ClearByType(memory.EvalFeedback)
-			}
+		if !plc.advanced {
+			c.handleExhaustedIterations(ctx, plc)
 		}
 
 		// Stop long-lived containers for this phase
@@ -1028,14 +620,14 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 		// End phase span in Langfuse
 		phaseStatus := "completed"
-		if !advanced {
+		if !plc.advanced {
 			phaseStatus = "exhausted"
 		}
-		endActiveSpan(phaseStatus)
+		c.endPhaseSpan(plc, phaseStatus)
 
 		// Move to next phase
-		nextPhase := c.advancePhase(currentPhase)
-		c.logInfo("Phase loop: advancing from %s to %s", currentPhase, nextPhase)
+		nextPhase := c.advancePhase(plc.currentPhase)
+		c.logInfo("Phase loop: advancing from %s to %s", plc.currentPhase, nextPhase)
 		state.Phase = nextPhase
 	}
 }
