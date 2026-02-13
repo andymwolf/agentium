@@ -24,7 +24,6 @@ import (
 	"github.com/andywolf/agentium/internal/routing"
 	"github.com/andywolf/agentium/internal/scope"
 	"github.com/andywolf/agentium/internal/version"
-	"github.com/andywolf/agentium/prompts/skills"
 )
 
 const (
@@ -282,7 +281,6 @@ type Controller struct {
 	activeTask             string                  // Current task ID being focused on
 	activeTaskType         string                  // "issue"
 	activeTaskExistingWork *agent.ExistingWork     // Existing work detected for active task (issues only)
-	skillSelector          *skills.Selector        // Phase-aware skill selector (nil = legacy mode)
 	memoryStore            *memory.Store           // Persistent memory store (nil = disabled)
 	handoffStore           *handoff.Store          // Structured handoff store (nil = disabled)
 	handoffBuilder         *handoff.Builder        // Phase input builder (nil = disabled)
@@ -589,9 +587,7 @@ func (c *Controller) initSession(ctx context.Context) error {
 	}
 
 	// Load system and project prompts
-	if err := c.loadPrompts(); err != nil {
-		return fmt.Errorf("failed to load prompts: %w", err)
-	}
+	c.loadPrompts()
 
 	// Fetch all task details upfront
 	if len(c.config.Tasks) > 0 {

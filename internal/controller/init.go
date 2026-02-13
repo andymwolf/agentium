@@ -16,7 +16,6 @@ import (
 	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/memory"
 	"github.com/andywolf/agentium/internal/prompt"
-	"github.com/andywolf/agentium/prompts/skills"
 )
 
 func (c *Controller) initializeWorkspace(ctx context.Context) error {
@@ -157,24 +156,8 @@ func parseSecretName(secretPath string) string {
 	return secretPath
 }
 
-func (c *Controller) loadPrompts() error {
-	// Load skills manifest (required)
-	manifest, err := skills.LoadManifest()
-	if err != nil {
-		return fmt.Errorf("failed to load skills manifest: %w", err)
-	}
-
-	loaded, err := skills.LoadSkills(manifest)
-	if err != nil {
-		return fmt.Errorf("failed to load skills: %w", err)
-	}
-
-	c.skillSelector = skills.NewSelector(loaded)
-	names := make([]string, len(loaded))
-	for i, s := range loaded {
-		names[i] = s.Entry.Name
-	}
-	c.logInfo("Skills loaded: %v", names)
+func (c *Controller) loadPrompts() {
+	c.logInfo("Phase prompts loaded (static per-phase-role files)")
 
 	// Load project prompt from workspace (.agentium/AGENTS.md) - optional
 	projectPrompt, err := prompt.LoadProjectPrompt(c.workDir)
@@ -219,8 +202,6 @@ func (c *Controller) loadPrompts() error {
 			c.logInfo("Event sink initialized: %s", eventFile)
 		}
 	}
-
-	return nil
 }
 
 func (c *Controller) cloneRepository(ctx context.Context) error {

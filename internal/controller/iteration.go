@@ -7,6 +7,7 @@ import (
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/handoff"
+	"github.com/andywolf/agentium/prompts/phases"
 )
 
 // phaseIteration returns the 1-indexed, phase-scoped iteration counter for
@@ -72,17 +73,17 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		PackagePath:      c.packagePath,
 	}
 
-	// Compose phase-aware skills: API-provided worker prompt takes precedence over built-in skills
+	// Compose phase-aware skills: API-provided worker prompt takes precedence over built-in phases
 	phase := c.determineActivePhase()
 	if workerPrompt := c.phaseWorkerPrompt(phase); workerPrompt != "" {
 		session.IterationContext.Phase = string(phase)
 		session.IterationContext.SkillsPrompt = workerPrompt
 		c.logInfo("Using API-provided worker prompt for phase %s", phase)
-	} else if c.skillSelector != nil {
+	} else {
 		phaseStr := string(phase)
 		session.IterationContext.Phase = phaseStr
-		session.IterationContext.SkillsPrompt = c.skillSelector.SelectForPhase(phaseStr)
-		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phaseStr))
+		session.IterationContext.SkillsPrompt = phases.Get(phaseStr, "WORKER")
+		c.logInfo("Using phase prompt for %s WORKER", phase)
 	}
 	skillsPrompt := session.IterationContext.SkillsPrompt
 

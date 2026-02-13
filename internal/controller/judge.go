@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
+	"github.com/andywolf/agentium/prompts/phases"
 )
 
 // JudgeVerdict represents the outcome of a judge decision.
@@ -102,7 +103,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgePhase := fmt.Sprintf("%s_JUDGE", params.CompletedPhase)
 	skillPhase := judgePhase
 
-	// API-provided judge criteria takes precedence over built-in skills
+	// API-provided judge criteria takes precedence over built-in phases
 	var judgeSkillsPrompt string
 	if judgeCriteria := c.phaseJudgeCriteria(params.CompletedPhase); judgeCriteria != "" {
 		judgeSkillsPrompt = judgeCriteria
@@ -111,8 +112,8 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 			SkillsPrompt: judgeCriteria,
 		}
 		c.logInfo("Using API-provided judge criteria for phase %s", params.CompletedPhase)
-	} else if c.skillSelector != nil {
-		judgeSkillsPrompt = c.skillSelector.SelectForPhase(skillPhase)
+	} else {
+		judgeSkillsPrompt = phases.Get(string(params.CompletedPhase), "JUDGE")
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: judgeSkillsPrompt,
