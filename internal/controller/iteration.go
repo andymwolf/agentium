@@ -179,11 +179,15 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		StdinPrompt: stdinPrompt,
 	}
 
+	execStart := time.Now()
+
 	// Use interactive Docker execution in local mode
 	if c.config.Interactive {
 		result, err := c.runAgentContainerInteractive(ctx, params)
 		if result != nil {
 			result.PromptInput = promptInput
+			result.StartTime = execStart
+			result.EndTime = time.Now()
 		}
 		return result, err
 	}
@@ -191,13 +195,16 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// Use pooled execution if container pool is active
 	if c.containerPool != nil && c.containerPool.IsHealthy(RoleWorkerContainer) {
 		result, err := c.runIterationPooled(ctx, activeAgent, session, params)
-		if result != nil && result.PromptInput == "" {
-			result.PromptInput = promptInput
+		if result != nil {
+			if result.PromptInput == "" {
+				result.PromptInput = promptInput
+			}
+			result.StartTime = execStart
+			result.EndTime = time.Now()
 		}
 		return result, err
 	}
 
-	execStart := time.Now()
 	result, err := c.runAgentContainer(ctx, params)
 	execDuration := time.Since(execStart)
 
@@ -223,6 +230,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			fbResult, fbErr := c.runAgentContainer(ctx, fallbackParams)
 			if fbResult != nil {
 				fbResult.PromptInput = promptInput
+				fbResult.StartTime = execStart
+				fbResult.EndTime = time.Now()
 			}
 			return fbResult, fbErr
 		}
@@ -230,6 +239,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	if result != nil {
 		result.PromptInput = promptInput
+		result.StartTime = execStart
+		result.EndTime = time.Now()
 	}
 	return result, err
 }
@@ -288,9 +299,12 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 		StdinPrompt: feedbackSection,
 	}
 
+	contStart := time.Now()
 	result, err := c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
 	if result != nil {
 		result.PromptInput = feedbackSection
+		result.StartTime = contStart
+		result.EndTime = time.Now()
 	}
 	return result, err
 }

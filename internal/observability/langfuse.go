@@ -144,6 +144,14 @@ func (t *LangfuseTracer) StartPhase(trace TraceContext, phase string, opts SpanO
 
 // RecordGeneration records an LLM invocation as a Langfuse generation.
 func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput) {
+	startTime := gen.StartTime
+	if startTime.IsZero() {
+		startTime = time.Now()
+	}
+	endTime := gen.EndTime
+	if endTime.IsZero() {
+		endTime = time.Now()
+	}
 	body := map[string]interface{}{
 		"id":                  uuid.New().String(),
 		"traceId":             span.TraceID,
@@ -155,10 +163,10 @@ func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput)
 			"output": gen.OutputTokens,
 		},
 		"metadata": map[string]interface{}{
-			"status":      gen.Status,
-			"duration_ms": gen.DurationMs,
+			"status": gen.Status,
 		},
-		"startTime": time.Now().UTC().Format(time.RFC3339Nano),
+		"startTime": startTime.UTC().Format(time.RFC3339Nano),
+		"endTime":   endTime.UTC().Format(time.RFC3339Nano),
 	}
 	if gen.Input != "" {
 		body["input"] = gen.Input

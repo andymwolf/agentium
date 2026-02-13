@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
 )
@@ -13,9 +14,11 @@ import (
 type ReviewResult struct {
 	Feedback     string
 	Error        error
-	Prompt       string // Prompt text sent to the reviewer (for Langfuse generation input)
-	InputTokens  int    // Input tokens consumed by the reviewer
-	OutputTokens int    // Output tokens consumed by the reviewer
+	Prompt       string    // Prompt text sent to the reviewer (for Langfuse generation input)
+	InputTokens  int       // Input tokens consumed by the reviewer
+	OutputTokens int       // Output tokens consumed by the reviewer
+	StartTime    time.Time // When the reviewer invocation started
+	EndTime      time.Time // When the reviewer invocation finished
 }
 
 // reviewRunParams holds parameters for running a reviewer agent.
@@ -128,12 +131,14 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	// Use pooled execution if container pool is active
 	var result *agent.IterationResult
 	var err error
+	reviewStart := time.Now()
 	if c.containerPool != nil && c.containerPool.IsHealthy(RoleReviewerContainer) {
 		c.logInfo("Using pooled execution for Reviewer")
 		result, err = c.runAgentContainerPooled(ctx, RoleReviewerContainer, reviewerParams)
 	} else {
 		result, err = c.runAgentContainer(ctx, reviewerParams)
 	}
+	reviewEnd := time.Now()
 	if err != nil {
 		c.logError("Reviewer container failed for phase %s: %v", params.CompletedPhase, err)
 		return ReviewResult{}, fmt.Errorf("reviewer failed: %w", err)
@@ -164,6 +169,8 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		Prompt:       stdinPrompt,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
+		StartTime:    reviewStart,
+		EndTime:      reviewEnd,
 	}, nil
 }
 

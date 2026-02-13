@@ -1,5 +1,7 @@
 package agent
 
+import "time"
+
 // ExistingWork represents prior work detected on GitHub for a given issue
 type ExistingWork struct {
 	Branch   string // Existing remote branch name (e.g. "agentium/issue-6-cloud-logging")
@@ -68,6 +70,8 @@ type IterationResult struct {
 	AssistantText  string        `json:"-"` // Only assistant text blocks (for readable GitHub comments)
 	PromptInput    string        `json:"-"` // Prompt text sent to the LLM (for Langfuse generation input)
 	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present
+	StartTime      time.Time     `json:"-"` // When the LLM invocation started
+	EndTime        time.Time     `json:"-"` // When the LLM invocation finished
 }
 
 // Agent defines the interface that all agent adapters must implement
