@@ -588,7 +588,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
 					Name:         "Worker",
 					Model:        c.config.Agent,
-					Input:        c.lastPrompt,
+					Input:        result.PromptInput,
 					Output:       result.RawTextContent,
 					InputTokens:  result.InputTokens,
 					OutputTokens: result.OutputTokens,

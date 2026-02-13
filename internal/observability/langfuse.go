@@ -144,26 +144,31 @@ func (t *LangfuseTracer) StartPhase(trace TraceContext, phase string, opts SpanO
 
 // RecordGeneration records an LLM invocation as a Langfuse generation.
 func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput) {
+	body := map[string]interface{}{
+		"id":                  uuid.New().String(),
+		"traceId":             span.TraceID,
+		"parentObservationId": span.SpanID,
+		"name":                gen.Name,
+		"model":               gen.Model,
+		"usage": map[string]interface{}{
+			"input":  gen.InputTokens,
+			"output": gen.OutputTokens,
+		},
+		"metadata": map[string]interface{}{
+			"status":      gen.Status,
+			"duration_ms": gen.DurationMs,
+		},
+		"startTime": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if gen.Input != "" {
+		body["input"] = gen.Input
+	}
+	if gen.Output != "" {
+		body["output"] = gen.Output
+	}
 	t.enqueue(ingestionEvent{
 		Type: "generation-create",
-		Body: map[string]interface{}{
-			"id":                  uuid.New().String(),
-			"traceId":             span.TraceID,
-			"parentObservationId": span.SpanID,
-			"name":                gen.Name,
-			"model":               gen.Model,
-			"input":               gen.Input,
-			"output":              gen.Output,
-			"usage": map[string]interface{}{
-				"input":  gen.InputTokens,
-				"output": gen.OutputTokens,
-			},
-			"metadata": map[string]interface{}{
-				"status":      gen.Status,
-				"duration_ms": gen.DurationMs,
-			},
-			"startTime": time.Now().UTC().Format(time.RFC3339Nano),
-		},
+		Body: body,
 	})
 }
 

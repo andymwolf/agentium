@@ -295,7 +295,6 @@ type Controller struct {
 	metadataUpdater        gcp.MetadataUpdater     // Instance metadata updater (nil if unavailable)
 	eventSink              *event.FileSink         // Local JSONL event sink (nil = disabled)
 	tracer                 observability.Tracer    // Langfuse observability tracer (never nil; NoOpTracer if disabled)
-	lastPrompt             string                  // Last prompt sent to the worker agent (for Langfuse generation input)
 
 	// Custom phase step configs (indexed by phase name for O(1) lookup)
 	phaseConfigs map[TaskPhase]*PhaseStepConfig

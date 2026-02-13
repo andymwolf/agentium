@@ -66,6 +66,7 @@ type IterationResult struct {
 	Events         []interface{} `json:"-"` // Structured events (type-assert per adapter)
 	RawTextContent string        `json:"-"` // Aggregated text from structured output (includes tool results)
 	AssistantText  string        `json:"-"` // Only assistant text blocks (for readable GitHub comments)
+	PromptInput    string        `json:"-"` // Prompt text sent to the LLM (for Langfuse generation input)
 	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present
 }
 
