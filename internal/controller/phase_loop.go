@@ -588,6 +588,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
 					Name:         "Worker",
 					Model:        c.config.Agent,
+					Input:        result.PromptInput,
+					Output:       result.RawTextContent,
 					InputTokens:  result.InputTokens,
 					OutputTokens: result.OutputTokens,
 					Status:       "completed",
@@ -810,6 +812,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
 				Name:         "Reviewer",
 				Model:        c.config.Agent,
+				Input:        reviewResult.Prompt,
+				Output:       reviewResult.Feedback,
 				InputTokens:  reviewResult.InputTokens,
 				OutputTokens: reviewResult.OutputTokens,
 				Status:       "completed",
@@ -864,6 +868,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			c.tracer.RecordGeneration(activeSpanCtx, observability.GenerationInput{
 				Name:         "Judge",
 				Model:        c.config.Agent,
+				Input:        judgeResult.Prompt,
+				Output:       judgeResult.Output,
 				InputTokens:  judgeResult.InputTokens,
 				OutputTokens: judgeResult.OutputTokens,
 				Status:       "completed",

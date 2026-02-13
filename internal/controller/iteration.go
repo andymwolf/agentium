@@ -164,6 +164,12 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
+	// Determine prompt input for Langfuse generation tracking
+	promptInput := stdinPrompt
+	if promptInput == "" {
+		promptInput = prompt
+	}
+
 	params := containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
@@ -175,12 +181,20 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	// Use interactive Docker execution in local mode
 	if c.config.Interactive {
-		return c.runAgentContainerInteractive(ctx, params)
+		result, err := c.runAgentContainerInteractive(ctx, params)
+		if result != nil {
+			result.PromptInput = promptInput
+		}
+		return result, err
 	}
 
 	// Use pooled execution if container pool is active
 	if c.containerPool != nil && c.containerPool.IsHealthy(RoleWorkerContainer) {
-		return c.runIterationPooled(ctx, activeAgent, session, params)
+		result, err := c.runIterationPooled(ctx, activeAgent, session, params)
+		if result != nil && result.PromptInput == "" {
+			result.PromptInput = promptInput
+		}
+		return result, err
 	}
 
 	execStart := time.Now()
@@ -206,10 +220,17 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 			fallbackAdapter := c.adapters[fallbackName]
 			fallbackParams := c.buildFallbackParams(fallbackAdapter, session, activeAgent.Name(), phaseIter)
-			return c.runAgentContainer(ctx, fallbackParams)
+			fbResult, fbErr := c.runAgentContainer(ctx, fallbackParams)
+			if fbResult != nil {
+				fbResult.PromptInput = promptInput
+			}
+			return fbResult, fbErr
 		}
 	}
 
+	if result != nil {
+		result.PromptInput = promptInput
+	}
 	return result, err
 }
 
@@ -267,7 +288,11 @@ func (c *Controller) runIterationContinue(ctx context.Context, activeAgent agent
 		StdinPrompt: feedbackSection,
 	}
 
-	return c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
+	result, err := c.runAgentContainerPooled(ctx, RoleWorkerContainer, params)
+	if result != nil {
+		result.PromptInput = feedbackSection
+	}
+	return result, err
 }
 
 // buildFallbackParams constructs container run parameters for the fallback adapter.
