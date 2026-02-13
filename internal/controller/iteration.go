@@ -104,20 +104,17 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 	// This ensures workers receive both reviewer analysis and judge directives.
 	// buildIterateFeedbackSection checks memory store first, then falls back to
 	// TaskState fields, so no outer nil guard is needed.
-	{
-		taskID := taskKey(c.activeTaskType, c.activeTask)
-		state := c.taskStates[taskID]
-		if state != nil && state.PhaseIteration > 1 {
-			feedbackSection := c.buildIterateFeedbackSection(taskID, state.PhaseIteration, state.ParentBranch, state.Phase)
-			if feedbackSection != "" {
-				// Prepend to PhaseInput for maximum visibility
-				if session.IterationContext.PhaseInput != "" {
-					session.IterationContext.PhaseInput = feedbackSection + "\n\n" + session.IterationContext.PhaseInput
-				} else {
-					session.IterationContext.PhaseInput = feedbackSection
-				}
-				c.logInfo("Injected ITERATE feedback section (%d chars)", len(feedbackSection))
+	feedbackTaskID := taskKey(c.activeTaskType, c.activeTask)
+	if state := c.taskStates[feedbackTaskID]; state != nil && state.PhaseIteration > 1 {
+		feedbackSection := c.buildIterateFeedbackSection(feedbackTaskID, state.PhaseIteration, state.ParentBranch, state.Phase)
+		if feedbackSection != "" {
+			// Prepend to PhaseInput for maximum visibility
+			if session.IterationContext.PhaseInput != "" {
+				session.IterationContext.PhaseInput = feedbackSection + "\n\n" + session.IterationContext.PhaseInput
+			} else {
+				session.IterationContext.PhaseInput = feedbackSection
 			}
+			c.logInfo("Injected ITERATE feedback section (%d chars)", len(feedbackSection))
 		}
 	}
 
