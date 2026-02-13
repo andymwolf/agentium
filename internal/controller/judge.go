@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
 	"github.com/andywolf/agentium/internal/memory"
@@ -23,11 +24,13 @@ const (
 type JudgeResult struct {
 	Verdict      JudgeVerdict
 	Feedback     string
-	SignalFound  bool   // Whether the AGENTIUM_EVAL signal was found in output
-	Prompt       string // Prompt text sent to the judge (for Langfuse generation input)
-	Output       string // Raw agent output (for Langfuse generation output)
-	InputTokens  int    // Input tokens consumed by the judge
-	OutputTokens int    // Output tokens consumed by the judge
+	SignalFound  bool      // Whether the AGENTIUM_EVAL signal was found in output
+	Prompt       string    // Prompt text sent to the judge (for Langfuse generation input)
+	Output       string    // Raw agent output (for Langfuse generation output)
+	InputTokens  int       // Input tokens consumed by the judge
+	OutputTokens int       // Output tokens consumed by the judge
+	StartTime    time.Time // When the judge invocation started
+	EndTime      time.Time // When the judge invocation finished
 }
 
 // judgeRunParams holds parameters for running a judge agent.
@@ -171,12 +174,14 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	// Use pooled execution if container pool is active
 	var result *agent.IterationResult
 	var err error
+	judgeStart := time.Now()
 	if c.containerPool != nil && c.containerPool.IsHealthy(RoleJudgeContainer) {
 		c.logInfo("Using pooled execution for Judge")
 		result, err = c.runAgentContainerPooled(ctx, RoleJudgeContainer, judgeParams)
 	} else {
 		result, err = c.runAgentContainer(ctx, judgeParams)
 	}
+	judgeEnd := time.Now()
 	if err != nil {
 		c.logError("Judge container failed for phase %s: %v", params.CompletedPhase, err)
 		return JudgeResult{Verdict: VerdictAdvance}, fmt.Errorf("judge failed: %w", err)
@@ -191,6 +196,8 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgeResult.Output = parseSource
 	judgeResult.InputTokens = result.InputTokens
 	judgeResult.OutputTokens = result.OutputTokens
+	judgeResult.StartTime = judgeStart
+	judgeResult.EndTime = judgeEnd
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
 
 	// On ITERATE, store both reviewer feedback and judge directive in memory for the worker.

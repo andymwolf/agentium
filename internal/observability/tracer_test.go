@@ -109,24 +109,30 @@ func TestLangfuseTracerSendsBatches(t *testing.T) {
 		MaxIterations: 5,
 	})
 
+	workerStart := time.Now().Add(-5 * time.Second)
+	workerEnd := time.Now()
 	tracer.RecordGeneration(span, GenerationInput{
 		Name:         "Worker",
 		Model:        "claude-sonnet-4-20250514",
 		InputTokens:  1500,
 		OutputTokens: 300,
 		Status:       "completed",
-		DurationMs:   5000,
+		StartTime:    workerStart,
+		EndTime:      workerEnd,
 	})
 
 	tracer.RecordSkipped(span, "Reviewer", "reviewer_skip=true")
 
+	judgeStart := time.Now().Add(-2 * time.Second)
+	judgeEnd := time.Now()
 	tracer.RecordGeneration(span, GenerationInput{
 		Name:         "Judge",
 		Model:        "claude-sonnet-4-20250514",
 		InputTokens:  800,
 		OutputTokens: 50,
 		Status:       "completed",
-		DurationMs:   2000,
+		StartTime:    judgeStart,
+		EndTime:      judgeEnd,
 	})
 
 	tracer.EndPhase(span, "completed", 7000)

@@ -593,6 +593,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 					InputTokens:  result.InputTokens,
 					OutputTokens: result.OutputTokens,
 					Status:       "completed",
+					StartTime:    result.StartTime,
+					EndTime:      result.EndTime,
 				})
 				totalInputTokens += result.InputTokens
 				totalOutputTokens += result.OutputTokens
@@ -817,6 +819,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				InputTokens:  reviewResult.InputTokens,
 				OutputTokens: reviewResult.OutputTokens,
 				Status:       "completed",
+				StartTime:    reviewResult.StartTime,
+				EndTime:      reviewResult.EndTime,
 			})
 			totalInputTokens += reviewResult.InputTokens
 			totalOutputTokens += reviewResult.OutputTokens
@@ -873,6 +877,8 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				InputTokens:  judgeResult.InputTokens,
 				OutputTokens: judgeResult.OutputTokens,
 				Status:       "completed",
+				StartTime:    judgeResult.StartTime,
+				EndTime:      judgeResult.EndTime,
 			})
 			totalInputTokens += judgeResult.InputTokens
 			totalOutputTokens += judgeResult.OutputTokens

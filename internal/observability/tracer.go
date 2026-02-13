@@ -1,6 +1,9 @@
 package observability
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Tracer defines the interface for observability tracing.
 // Implementations track the lifecycle of tasks through phases,
@@ -60,8 +63,9 @@ type GenerationInput struct {
 	Output       string // Response text from the LLM
 	InputTokens  int
 	OutputTokens int
-	Status       string // "completed" or "error"
-	DurationMs   int64
+	Status       string    // "completed" or "error"
+	StartTime    time.Time // When the LLM invocation started
+	EndTime      time.Time // When the LLM invocation finished
 }
 
 // CompleteOptions configures trace completion.
