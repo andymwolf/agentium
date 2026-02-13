@@ -14,29 +14,37 @@ import (
 
 // phaseLoopContext bundles the mutable state threaded through runPhaseLoop,
 // eliminating the need to pass many local variables between extracted methods.
+//
+// Field ownership by file:
+//
+//	phase_loop.go          — initializes/resets all fields in the outer and inner loops
+//	phase_loop_tracing.go  — manages tracing fields (traceCtx … traceStatus)
+//	phase_loop_iteration.go — writes per-iteration output (phaseOutput, commentContent, skipIteration)
+//	phase_loop_phases.go   — writes advanced, maxIter (complexity assessment), and state fields
+//	phase_loop_eval.go     — writes advanced, noSignalCount, traceStatus, and state fields
 type phaseLoopContext struct {
 	taskID string
 	state  *TaskState
 
-	// Langfuse tracing
+	// Langfuse tracing — owned by phase_loop_tracing.go
 	traceCtx          observability.TraceContext
 	activeSpanCtx     observability.SpanContext
 	activePhaseStart  time.Time
 	hasActiveSpan     bool
 	totalInputTokens  int
 	totalOutputTokens int
-	traceStatus       string
+	traceStatus       string // also set by phase_loop.go (cancelled/terminated) and phase_loop_eval.go (blocked)
 
-	// Per-phase state (reset each phase)
+	// Per-phase state (reset each phase in runPhaseLoop)
 	currentPhase  TaskPhase
-	maxIter       int
-	advanced      bool
-	noSignalCount int
+	maxIter       int  // also updated by handleComplexityAssessment (phase_loop_phases.go)
+	advanced      bool // set by phase_loop_phases.go and phase_loop_eval.go
+	noSignalCount int  // updated by applyJudgePostProcessing (phase_loop_eval.go)
 
-	// Per-iteration output (reset each iteration)
-	phaseOutput    string
-	commentContent string
-	skipIteration  bool
+	// Per-iteration output (reset each iteration in runPhaseLoop)
+	phaseOutput    string // written by handlePlanSkip, runWorkerIteration (phase_loop_iteration.go)
+	commentContent string // written by runWorkerIteration (phase_loop_iteration.go)
+	skipIteration  bool   // written by handlePlanSkip (phase_loop_iteration.go)
 }
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
@@ -577,7 +585,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				break
 			}
 
-			if advanced, shouldContinue := c.handleVerifyPhase(ctx, plc, iter); advanced {
+			if advanced, _, shouldContinue := c.handleVerifyPhase(ctx, plc, iter); advanced {
 				break
 			} else if shouldContinue {
 				continue
