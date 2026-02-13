@@ -3,6 +3,7 @@ package controller
 import (
 	"time"
 
+	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/observability"
 )
 
@@ -38,9 +39,56 @@ func (c *Controller) startPhaseSpan(plc *phaseLoopContext) {
 // endPhaseSpan ends the active Langfuse span if one exists.
 func (c *Controller) endPhaseSpan(plc *phaseLoopContext, status string) {
 	if plc.hasActiveSpan {
-		c.tracer.EndPhase(plc.activeSpanCtx, status, time.Since(plc.activePhaseStart).Milliseconds())
+		opts := observability.EndPhaseOptions{
+			Status:     status,
+			DurationMs: time.Since(plc.activePhaseStart).Milliseconds(),
+		}
+		if c.handoffStore != nil {
+			opts.Input = c.resolvePhaseInput(plc.taskID, plc.currentPhase)
+			opts.Output = c.resolvePhaseOutput(plc.taskID, plc.currentPhase)
+		}
+		c.tracer.EndPhase(plc.activeSpanCtx, opts)
 		plc.hasActiveSpan = false
 	}
+}
+
+// resolvePhaseInput returns the structured input for a phase based on the
+// handoff data flowing into it from previous phases.
+func (c *Controller) resolvePhaseInput(taskID string, phase TaskPhase) any {
+	switch phase {
+	case PhasePlan:
+		return c.handoffStore.GetIssueContext(taskID)
+	case PhaseImplement:
+		return c.handoffStore.GetPlanOutput(taskID)
+	case PhaseDocs:
+		plan := c.handoffStore.GetPlanOutput(taskID)
+		impl := c.handoffStore.GetImplementOutput(taskID)
+		if plan == nil && impl == nil {
+			return nil
+		}
+		m := map[string]any{}
+		if plan != nil {
+			m["plan"] = plan
+		}
+		if impl != nil {
+			m["implement"] = impl
+		}
+		return m
+	case PhaseVerify:
+		return c.handoffStore.GetImplementOutput(taskID)
+	default:
+		return nil
+	}
+}
+
+// resolvePhaseOutput returns the structured output produced by the current phase,
+// or nil if the phase was interrupted or hasn't produced output yet.
+func (c *Controller) resolvePhaseOutput(taskID string, phase TaskPhase) any {
+	hd := c.handoffStore.GetPhaseOutput(taskID, handoff.Phase(phase))
+	if hd == nil {
+		return nil
+	}
+	return hd.GetOutput()
 }
 
 // recordGenerationTokens records a generation event and accumulates token counts.

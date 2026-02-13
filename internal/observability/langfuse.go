@@ -201,20 +201,24 @@ func (t *LangfuseTracer) RecordSkipped(span SpanContext, component string, reaso
 	})
 }
 
-// EndPhase closes a Langfuse span with a status and duration.
-func (t *LangfuseTracer) EndPhase(span SpanContext, status string, durationMs int64) {
-	t.enqueue(ingestionEvent{
-		Type: "span-update",
-		Body: map[string]interface{}{
-			"id":      span.SpanID,
-			"traceId": span.TraceID,
-			"metadata": map[string]interface{}{
-				"status":      status,
-				"duration_ms": durationMs,
-			},
-			"endTime": time.Now().UTC().Format(time.RFC3339Nano),
+// EndPhase closes a Langfuse span with status, duration, and optional I/O.
+func (t *LangfuseTracer) EndPhase(span SpanContext, opts EndPhaseOptions) {
+	body := map[string]interface{}{
+		"id":      span.SpanID,
+		"traceId": span.TraceID,
+		"metadata": map[string]interface{}{
+			"status":      opts.Status,
+			"duration_ms": opts.DurationMs,
 		},
-	})
+		"endTime": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if opts.Input != nil {
+		body["input"] = opts.Input
+	}
+	if opts.Output != nil {
+		body["output"] = opts.Output
+	}
+	t.enqueue(ingestionEvent{Type: "span-update", Body: body})
 }
 
 // CompleteTrace updates a Langfuse trace with final status and token totals.

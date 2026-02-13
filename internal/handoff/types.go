@@ -179,17 +179,26 @@ type HandoffData struct {
 }
 
 // GetOutput returns the populated output based on the phase, or nil if none.
-func (h *HandoffData) GetOutput() interface{} {
+// Each branch nil-checks the concrete pointer to avoid returning a typed nil
+// wrapped in an interface (which would compare != nil at the caller).
+func (h *HandoffData) GetOutput() any {
 	switch h.Phase {
 	case PhasePlan:
-		return h.PlanOutput
+		if h.PlanOutput != nil {
+			return h.PlanOutput
+		}
 	case PhaseImplement:
-		return h.ImplementOutput
+		if h.ImplementOutput != nil {
+			return h.ImplementOutput
+		}
 	case PhaseDocs:
-		return h.DocsOutput
+		if h.DocsOutput != nil {
+			return h.DocsOutput
+		}
 	case PhaseVerify:
-		return h.VerifyOutput
-	default:
-		return nil
+		if h.VerifyOutput != nil {
+			return h.VerifyOutput
+		}
 	}
+	return nil
 }

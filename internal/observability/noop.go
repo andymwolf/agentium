@@ -18,7 +18,7 @@ func (n *NoOpTracer) RecordGeneration(_ SpanContext, _ GenerationInput) {}
 
 func (n *NoOpTracer) RecordSkipped(_ SpanContext, _ string, _ string) {}
 
-func (n *NoOpTracer) EndPhase(_ SpanContext, _ string, _ int64) {}
+func (n *NoOpTracer) EndPhase(_ SpanContext, _ EndPhaseOptions) {}
 
 func (n *NoOpTracer) CompleteTrace(_ TraceContext, _ CompleteOptions) {}
 
