@@ -57,6 +57,7 @@ type GenerationInput struct {
 	Name         string // "Worker", "Reviewer", or "Judge"
 	Model        string
 	Input        string // Prompt text sent to the LLM
+	Output       string // Response text from the LLM
 	InputTokens  int
 	OutputTokens int
 	Status       string // "completed" or "error"

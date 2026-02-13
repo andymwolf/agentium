@@ -25,6 +25,7 @@ type JudgeResult struct {
 	Feedback     string
 	SignalFound  bool   // Whether the AGENTIUM_EVAL signal was found in output
 	Prompt       string // Prompt text sent to the judge (for Langfuse generation input)
+	Output       string // Raw agent output (for Langfuse generation output)
 	InputTokens  int    // Input tokens consumed by the judge
 	OutputTokens int    // Output tokens consumed by the judge
 }
@@ -187,6 +188,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	}
 	judgeResult := parseJudgeVerdict(parseSource)
 	judgeResult.Prompt = stdinPrompt
+	judgeResult.Output = parseSource
 	judgeResult.InputTokens = result.InputTokens
 	judgeResult.OutputTokens = result.OutputTokens
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
