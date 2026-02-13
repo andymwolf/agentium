@@ -197,7 +197,13 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgeResult := parseJudgeVerdict(parseSource)
 	judgeResult.Prompt = stdinPrompt
 	judgeResult.SystemPrompt = judgeSkillsPrompt
-	judgeResult.Output = parseSource
+	// Prefer AssistantText (excludes tool results like diffs/file contents),
+	// falling back to parseSource (RawTextContent) for adapters that don't populate it.
+	judgeOutput := result.AssistantText
+	if judgeOutput == "" {
+		judgeOutput = parseSource
+	}
+	judgeResult.Output = judgeOutput
 	judgeResult.InputTokens = result.InputTokens
 	judgeResult.OutputTokens = result.OutputTokens
 	judgeResult.StartTime = judgeStart

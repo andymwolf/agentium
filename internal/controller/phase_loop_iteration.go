@@ -34,12 +34,19 @@ func (c *Controller) runWorkerIteration(ctx context.Context, plc *phaseLoopConte
 		return fmt.Errorf("phase %s iteration %d failed: %w", plc.currentPhase, iter, err)
 	}
 
+	// Prefer AssistantText (excludes tool results like diffs/file contents),
+	// falling back to RawTextContent for adapters that don't populate it.
+	workerOutput := result.AssistantText
+	if workerOutput == "" {
+		workerOutput = result.RawTextContent
+	}
+
 	// Record Worker generation in Langfuse
 	c.recordGenerationTokens(plc, observability.GenerationInput{
 		Name:         "Worker",
 		Model:        c.config.Agent,
 		Input:        result.PromptInput,
-		Output:       result.RawTextContent,
+		Output:       workerOutput,
 		SystemPrompt: result.SystemPrompt,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
