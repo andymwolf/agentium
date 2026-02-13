@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.0](https://github.com/andymwolf/agentium/compare/v0.9.0...v0.10.0) (2026-02-13)
+
+
+### Features
+
+* add Langfuse generation inputs (prompt text) ([8e922e5](https://github.com/andymwolf/agentium/commit/8e922e5de110b71040bc41a34e16776abd809570)), closes [#503](https://github.com/andymwolf/agentium/issues/503)
+* add Langfuse generation inputs and outputs ([7a0c508](https://github.com/andymwolf/agentium/commit/7a0c508c1c3d9ab60c99c926145519cc363b1959))
+* add Langfuse generation outputs (response text) ([1fb5f3c](https://github.com/andymwolf/agentium/commit/1fb5f3cb85ccccd0fa5a607146d0e25eae627acb)), closes [#503](https://github.com/andymwolf/agentium/issues/503)
+* add start/end times to Langfuse generation events ([27c06e9](https://github.com/andymwolf/agentium/commit/27c06e91096d2d58f5cb7229545dd27e597aa6aa))
+* add start/end times to Langfuse generation events ([220c40c](https://github.com/andymwolf/agentium/commit/220c40c81e52434f3e80fe96dab6e1536d0f1bf8))
+* phase-based comment routing for all roles ([#509](https://github.com/andymwolf/agentium/issues/509)) ([fdd5c8e](https://github.com/andymwolf/agentium/commit/fdd5c8e97dfb09fa080909ff08cb1b09daceca7d)), closes [#508](https://github.com/andymwolf/agentium/issues/508)
+
+
+### Bug Fixes
+
+* always initialize memory store, fix feedback delivery, add branch sync ([#513](https://github.com/andymwolf/agentium/issues/513)) ([c3651cb](https://github.com/andymwolf/agentium/commit/c3651cbbc080e92209b420364fc0c9021596021a))
+* respect defaults.max_duration and defaults.agent from config file ([#506](https://github.com/andymwolf/agentium/issues/506)) ([b9081a7](https://github.com/andymwolf/agentium/commit/b9081a719bf615445b289bbf98b39500e51cb58c))
+
 ## [0.9.0](https://github.com/andymwolf/agentium/compare/v0.8.1...v0.9.0) (2026-02-12)
 
 
