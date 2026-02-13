@@ -130,7 +130,7 @@ func (t *LangfuseTracer) StartPhase(trace TraceContext, phase string, opts SpanO
 			"id":        spanID,
 			"traceId":   trace.TraceID,
 			"name":      phase,
-			"metadata":  metadata,
+			"metadata": metadata,
 			"startTime": time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	})
@@ -168,7 +168,7 @@ func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput)
 			"input":  gen.InputTokens,
 			"output": gen.OutputTokens,
 		},
-		"metadata":  metadata,
+		"metadata": metadata,
 		"startTime": startTime.UTC().Format(time.RFC3339Nano),
 		"endTime":   endTime.UTC().Format(time.RFC3339Nano),
 	}
