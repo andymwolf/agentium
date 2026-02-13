@@ -951,19 +951,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			case VerdictIterate:
 				// Feedback is already stored in memory by runJudge
 				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
-				// Post judge verdict to PR if available (makes ITERATE visible)
-				if prNumber := c.getPRNumberForTask(); prNumber != "" {
-					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
-				}
 				continue
 
 			case VerdictBlocked:
 				state.Phase = PhaseBlocked
 				c.logInfo("Phase %s: judge returned BLOCKED: %s", currentPhase, judgeResult.Feedback)
-				// Post judge verdict to PR if available (makes BLOCKED visible)
-				if prNumber := c.getPRNumberForTask(); prNumber != "" {
-					c.postPRJudgeVerdict(ctx, prNumber, currentPhase, iter, judgeResult)
-				}
 				endActiveSpan("blocked")
 				traceStatus = "blocked"
 				return nil
