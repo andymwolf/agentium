@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/andymwolf/agentium/compare/v0.10.0...v0.11.0) (2026-02-13)
+
+
+### Features
+
+* add structured phase I/O to Langfuse span traces ([#521](https://github.com/andymwolf/agentium/issues/521)) ([c228c76](https://github.com/andymwolf/agentium/commit/c228c7605479e20fa053d1029843bd2d8939bacc))
+* add system/skills prompts to Langfuse generation traces ([#520](https://github.com/andymwolf/agentium/issues/520)) ([166b01d](https://github.com/andymwolf/agentium/commit/166b01dd44a12bde026b9e9f7f03e6eb2e10e07d))
+
+
+### Bug Fixes
+
+* consistent return tuple for handleVerifyPhase and add phaseLoopContext ownership docs ([#518](https://github.com/andymwolf/agentium/issues/518)) ([d8d10cf](https://github.com/andymwolf/agentium/commit/d8d10cf108267bd73ef29c05894b6eab911d33ee))
+
 ## [0.10.0](https://github.com/andymwolf/agentium/compare/v0.9.0...v0.10.0) (2026-02-13)
 
 
