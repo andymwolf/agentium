@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
-	"github.com/andywolf/agentium/internal/memory"
 )
 
 // JudgeVerdict represents the outcome of a judge decision.
@@ -199,34 +198,6 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	judgeResult.StartTime = judgeStart
 	judgeResult.EndTime = judgeEnd
 	c.logInfo("Judge verdict for phase %s: %s (signal_found=%v)", params.CompletedPhase, judgeResult.Verdict, judgeResult.SignalFound)
-
-	// On ITERATE, store both reviewer feedback and judge directive in memory for the worker.
-	// The reviewer feedback provides detailed analysis, while the judge directive contains
-	// the required action items. Use phase iteration to scope feedback so judge only sees
-	// current iteration's feedback.
-	if judgeResult.Verdict == VerdictIterate && c.memoryStore != nil {
-		var signals []memory.Signal
-
-		// Store reviewer feedback (detailed analysis context)
-		if params.ReviewFeedback != "" {
-			signals = append(signals, memory.Signal{
-				Type:    memory.EvalFeedback,
-				Content: params.ReviewFeedback,
-			})
-		}
-
-		// Store judge directive (required action items)
-		if judgeResult.Feedback != "" {
-			signals = append(signals, memory.Signal{
-				Type:    memory.JudgeDirective,
-				Content: judgeResult.Feedback,
-			})
-		}
-
-		if len(signals) > 0 {
-			c.memoryStore.UpdateWithPhaseIteration(signals, c.iteration, params.PhaseIteration, taskKey("issue", c.activeTask))
-		}
-	}
 
 	return judgeResult, nil
 }

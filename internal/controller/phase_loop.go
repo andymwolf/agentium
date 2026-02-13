@@ -39,7 +39,9 @@ const (
 )
 
 // defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
-const defaultJudgeContextBudget = 8000
+// Increased from 8000 to 16000 to avoid truncating PLAN phase output that the judge/reviewer
+// need to see in full for correct ADVANCE/ITERATE decisions.
+const defaultJudgeContextBudget = 16000
 
 // Skip condition constants for reviewer/judge conditional skipping.
 const (
@@ -615,6 +617,12 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				commentContent = SummarizeForComment(commentContent, 250)
 			}
 
+			// Warn if phase output exceeds judge context budget (judge/reviewer will see truncated output)
+			if phaseOutput != "" && len(phaseOutput) > c.judgeContextBudget() {
+				c.logWarning("Phase %s output (%d chars) exceeds judge context budget (%d chars) — judge/reviewer will see truncated output",
+					currentPhase, len(phaseOutput), c.judgeContextBudget())
+			}
+
 			// Parse and store handoff output if enabled
 			if c.isHandoffEnabled() && phaseOutput != "" {
 				if handoffErr := c.processHandoffOutput(taskID, currentPhase, iter, phaseOutput); handoffErr != nil {
@@ -825,6 +833,9 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			totalInputTokens += reviewResult.InputTokens
 			totalOutputTokens += reviewResult.OutputTokens
 
+			// Store reviewer feedback on TaskState for defense-in-depth fallback
+			state.LastReviewerFeedback = reviewResult.Feedback
+
 			// Post reviewer feedback to appropriate location (filtered for readability)
 			reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
 			reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
@@ -949,7 +960,28 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				advanced = true
 
 			case VerdictIterate:
-				// Feedback is already stored in memory by runJudge
+				// Store feedback in memory for the next iteration's worker prompt.
+				// This is done HERE (not in runJudge) so that hard-gate overrides
+				// (e.g., PLAN phase missing AGENTIUM_HANDOFF) also get their
+				// feedback stored correctly.
+				if c.memoryStore != nil {
+					var signals []memory.Signal
+					if reviewResult.Feedback != "" {
+						signals = append(signals, memory.Signal{
+							Type:    memory.EvalFeedback,
+							Content: reviewResult.Feedback,
+						})
+					}
+					if judgeResult.Feedback != "" {
+						signals = append(signals, memory.Signal{
+							Type:    memory.JudgeDirective,
+							Content: judgeResult.Feedback,
+						})
+					}
+					if len(signals) > 0 {
+						c.memoryStore.UpdateWithPhaseIteration(signals, c.iteration, iter, taskID)
+					}
+				}
 				c.logInfo("Phase %s: judge requested iteration (feedback: %s)", currentPhase, judgeResult.Feedback)
 				continue
 

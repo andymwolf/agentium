@@ -42,7 +42,6 @@ type Data struct {
 
 // Config holds memory feature configuration.
 type Config struct {
-	Enabled       bool
 	MaxEntries    int
 	ContextBudget int
 }

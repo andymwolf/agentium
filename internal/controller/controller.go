@@ -90,6 +90,7 @@ type TaskState struct {
 	MaxPhaseIterations    int          // Max iterations for current phase (phase loop)
 	LastJudgeVerdict      string       // Last judge verdict (ADVANCE, ITERATE, BLOCKED)
 	LastJudgeFeedback     string       // Last judge feedback text
+	LastReviewerFeedback  string       // Reviewer feedback from the last iteration (fallback for memory store)
 	DraftPRCreated        bool         // Whether draft PR has been created for this task
 	WorkflowPath          WorkflowPath // Set after PLAN iteration 1 (SIMPLE or COMPLEX)
 	ControllerOverrode    bool         // True if controller forced ADVANCE at max iterations (triggers NOMERGE)
@@ -155,9 +156,8 @@ type SessionConfig struct {
 		Enabled bool `json:"enabled,omitempty"`
 	} `json:"skills,omitempty"`
 	Memory struct {
-		Enabled       bool `json:"enabled,omitempty"`
-		MaxEntries    int  `json:"max_entries,omitempty"`
-		ContextBudget int  `json:"context_budget,omitempty"`
+		MaxEntries    int `json:"max_entries,omitempty"`
+		ContextBudget int `json:"context_budget,omitempty"`
 	} `json:"memory,omitempty"`
 	Handoff        struct{}               `json:"handoff,omitempty"` // Kept for config compatibility; handoff is always enabled
 	Routing        *routing.PhaseRouting  `json:"routing,omitempty"`

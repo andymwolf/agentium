@@ -185,18 +185,16 @@ func (c *Controller) loadPrompts() error {
 		c.logInfo("Project prompt loaded from .agentium/AGENTS.md")
 	}
 
-	// Initialize persistent memory store if enabled
-	if c.config.Memory.Enabled {
-		c.memoryStore = memory.NewStore(c.workDir, memory.Config{
-			Enabled:       true,
-			MaxEntries:    c.config.Memory.MaxEntries,
-			ContextBudget: c.config.Memory.ContextBudget,
-		})
-		if loadErr := c.memoryStore.Load(); loadErr != nil {
-			c.logWarning("failed to load memory store: %v", loadErr)
-		} else {
-			c.logInfo("Memory store initialized (%d entries)", len(c.memoryStore.Entries()))
-		}
+	// Always initialize memory store — required for iterate feedback delivery,
+	// phase result recording, and context building across all phases.
+	c.memoryStore = memory.NewStore(c.workDir, memory.Config{
+		MaxEntries:    c.config.Memory.MaxEntries,
+		ContextBudget: c.config.Memory.ContextBudget,
+	})
+	if loadErr := c.memoryStore.Load(); loadErr != nil {
+		c.logWarning("failed to load memory store: %v", loadErr)
+	} else {
+		c.logInfo("Memory store initialized (%d entries)", len(c.memoryStore.Entries()))
 	}
 
 	// Initialize structured handoff store (always enabled for reviewer context)

@@ -100,9 +100,11 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		}
 	}
 
-	// Inject feedback from previous iteration for ITERATE cycles
-	// This ensures workers receive both reviewer analysis and judge directives
-	if c.memoryStore != nil {
+	// Inject feedback from previous iteration for ITERATE cycles.
+	// This ensures workers receive both reviewer analysis and judge directives.
+	// buildIterateFeedbackSection checks memory store first, then falls back to
+	// TaskState fields, so no outer nil guard is needed.
+	{
 		taskID := taskKey(c.activeTaskType, c.activeTask)
 		state := c.taskStates[taskID]
 		if state != nil && state.PhaseIteration > 1 {
