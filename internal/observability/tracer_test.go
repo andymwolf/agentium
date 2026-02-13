@@ -30,7 +30,7 @@ func TestNoOpTracer(t *testing.T) {
 		OutputTokens: 50,
 	})
 	tracer.RecordSkipped(span, "Reviewer", "empty_output")
-	tracer.EndPhase(span, "completed", 1000)
+	tracer.EndPhase(span, EndPhaseOptions{Status: "completed", DurationMs: 1000})
 	tracer.CompleteTrace(trace, CompleteOptions{Status: "completed"})
 
 	if err := tracer.Flush(context.Background()); err != nil {
@@ -136,7 +136,7 @@ func TestLangfuseTracerSendsBatches(t *testing.T) {
 		EndTime:      judgeEnd,
 	})
 
-	tracer.EndPhase(span, "completed", 7000)
+	tracer.EndPhase(span, EndPhaseOptions{Status: "completed", DurationMs: 7000})
 	tracer.CompleteTrace(trace, CompleteOptions{
 		Status:            "completed",
 		TotalInputTokens:  2300,
@@ -623,4 +623,125 @@ func TestLangfuseTracerDoubleStop(t *testing.T) {
 	if err := tracer.Stop(ctx); err != nil {
 		t.Fatalf("second Stop() returned error: %v", err)
 	}
+}
+
+func TestLangfuseTracerEndPhaseWithIO(t *testing.T) {
+	var mu sync.Mutex
+	var receivedBatches []ingestionPayload
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload ingestionPayload
+		_ = json.Unmarshal(body, &payload)
+		mu.Lock()
+		receivedBatches = append(receivedBatches, payload)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[],"errors":[]}`))
+	}))
+	defer server.Close()
+
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, newTestLogger())
+
+	trace := tracer.StartTrace("task-io", TraceOptions{Workflow: "test"})
+	span := tracer.StartPhase(trace, "IMPLEMENT", SpanOptions{})
+
+	tracer.EndPhase(span, EndPhaseOptions{
+		Status:     "completed",
+		DurationMs: 5000,
+		Input:      map[string]string{"summary": "Add feature X"},
+		Output:     map[string]string{"branch_name": "feat/x"},
+	})
+
+	ctx := context.Background()
+	if err := tracer.Stop(ctx); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, batch := range receivedBatches {
+		for _, evt := range batch.Batch {
+			if evt.Type != "span-update" {
+				continue
+			}
+			if _, ok := evt.Body["input"]; !ok {
+				t.Error("span-update body missing 'input' key when Input was provided")
+			}
+			if _, ok := evt.Body["output"]; !ok {
+				t.Error("span-update body missing 'output' key when Output was provided")
+			}
+			inputMap, _ := evt.Body["input"].(map[string]interface{})
+			if inputMap["summary"] != "Add feature X" {
+				t.Errorf("expected input summary 'Add feature X', got %v", inputMap["summary"])
+			}
+			outputMap, _ := evt.Body["output"].(map[string]interface{})
+			if outputMap["branch_name"] != "feat/x" {
+				t.Errorf("expected output branch_name 'feat/x', got %v", outputMap["branch_name"])
+			}
+			return // Found and verified
+		}
+	}
+	t.Error("no span-update event found in received batches")
+}
+
+func TestLangfuseTracerEndPhaseNilIO(t *testing.T) {
+	var mu sync.Mutex
+	var receivedBatches []ingestionPayload
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload ingestionPayload
+		_ = json.Unmarshal(body, &payload)
+		mu.Lock()
+		receivedBatches = append(receivedBatches, payload)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[],"errors":[]}`))
+	}))
+	defer server.Close()
+
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, newTestLogger())
+
+	trace := tracer.StartTrace("task-nil-io", TraceOptions{Workflow: "test"})
+	span := tracer.StartPhase(trace, "PLAN", SpanOptions{})
+
+	tracer.EndPhase(span, EndPhaseOptions{
+		Status:     "completed",
+		DurationMs: 3000,
+		// Input and Output intentionally nil
+	})
+
+	ctx := context.Background()
+	if err := tracer.Stop(ctx); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, batch := range receivedBatches {
+		for _, evt := range batch.Batch {
+			if evt.Type != "span-update" {
+				continue
+			}
+			if _, ok := evt.Body["input"]; ok {
+				t.Error("span-update body should not contain 'input' key when Input is nil")
+			}
+			if _, ok := evt.Body["output"]; ok {
+				t.Error("span-update body should not contain 'output' key when Output is nil")
+			}
+			return // Found and verified
+		}
+	}
+	t.Error("no span-update event found in received batches")
 }

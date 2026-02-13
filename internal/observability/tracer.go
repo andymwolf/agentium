@@ -21,7 +21,7 @@ type Tracer interface {
 	StartPhase(trace TraceContext, phase string, opts SpanOptions) SpanContext
 	RecordGeneration(span SpanContext, gen GenerationInput)
 	RecordSkipped(span SpanContext, component string, reason string)
-	EndPhase(span SpanContext, status string, durationMs int64)
+	EndPhase(span SpanContext, opts EndPhaseOptions)
 	CompleteTrace(trace TraceContext, opts CompleteOptions)
 	Flush(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -53,6 +53,14 @@ type SpanOptions struct {
 	Iteration     int
 	MaxIterations int
 	Metadata      map[string]string
+}
+
+// EndPhaseOptions configures EndPhase with optional structured I/O.
+type EndPhaseOptions struct {
+	Status     string
+	DurationMs int64
+	Input      interface{} // JSON-serializable, may be nil
+	Output     interface{} // JSON-serializable, may be nil
 }
 
 // GenerationInput describes an LLM invocation to record.
