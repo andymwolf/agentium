@@ -99,7 +99,7 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		stdinPrompt = provider.GetStdinPrompt(session, phaseIter)
 	}
 
-	return c.runAgentContainer(ctx, containerRunParams{
+	result, err := c.runAgentContainer(ctx, containerRunParams{
 		Agent:       activeAgent,
 		Session:     session,
 		Env:         env,
@@ -107,4 +107,8 @@ func (c *Controller) runDelegatedIteration(ctx context.Context, phase TaskPhase,
 		LogTag:      "Delegated agent",
 		StdinPrompt: stdinPrompt,
 	})
+	if result != nil {
+		result.SystemPrompt = skillsPrompt
+	}
+	return result, err
 }

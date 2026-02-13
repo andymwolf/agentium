@@ -70,6 +70,7 @@ type IterationResult struct {
 	AssistantText  string        `json:"-"` // Only assistant text blocks (for readable GitHub comments)
 	PromptInput    string        `json:"-"` // Prompt text sent to the LLM (for Langfuse generation input)
 	HandoffOutput  string        `json:"-"` // Raw AGENTIUM_HANDOFF JSON if present
+	SystemPrompt   string        `json:"-"` // System/skills prompt (for Langfuse)
 	StartTime      time.Time     `json:"-"` // When the LLM invocation started
 	EndTime        time.Time     `json:"-"` // When the LLM invocation finished
 }
