@@ -25,6 +25,7 @@ type JudgeResult struct {
 	Feedback     string
 	SignalFound  bool      // Whether the AGENTIUM_EVAL signal was found in output
 	Prompt       string    // Prompt text sent to the judge (for Langfuse generation input)
+	SystemPrompt string    // System/skills prompt (for Langfuse)
 	Output       string    // Raw agent output (for Langfuse generation output)
 	InputTokens  int       // Input tokens consumed by the judge
 	OutputTokens int       // Output tokens consumed by the judge
@@ -102,16 +103,19 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	skillPhase := judgePhase
 
 	// API-provided judge criteria takes precedence over built-in skills
+	var judgeSkillsPrompt string
 	if judgeCriteria := c.phaseJudgeCriteria(params.CompletedPhase); judgeCriteria != "" {
+		judgeSkillsPrompt = judgeCriteria
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: judgeCriteria,
 		}
 		c.logInfo("Using API-provided judge criteria for phase %s", params.CompletedPhase)
 	} else if c.skillSelector != nil {
+		judgeSkillsPrompt = c.skillSelector.SelectForPhase(skillPhase)
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
-			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),
+			SkillsPrompt: judgeSkillsPrompt,
 		}
 	}
 
@@ -192,6 +196,7 @@ func (c *Controller) runJudge(ctx context.Context, params judgeRunParams) (Judge
 	}
 	judgeResult := parseJudgeVerdict(parseSource)
 	judgeResult.Prompt = stdinPrompt
+	judgeResult.SystemPrompt = judgeSkillsPrompt
 	judgeResult.Output = parseSource
 	judgeResult.InputTokens = result.InputTokens
 	judgeResult.OutputTokens = result.OutputTokens

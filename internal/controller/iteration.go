@@ -84,6 +84,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		session.IterationContext.SkillsPrompt = c.skillSelector.SelectForPhase(phaseStr)
 		c.logInfo("Using skills for phase %s: %v", phase, c.skillSelector.SkillsForPhase(phaseStr))
 	}
+	skillsPrompt := session.IterationContext.SkillsPrompt
 
 	// Inject structured handoff context if enabled
 	handoffInjected := false
@@ -185,6 +186,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		result, err := c.runAgentContainerInteractive(ctx, params)
 		if result != nil {
 			result.PromptInput = promptInput
+			result.SystemPrompt = skillsPrompt
 			result.StartTime = execStart
 			result.EndTime = time.Now()
 		}
@@ -198,6 +200,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			if result.PromptInput == "" {
 				result.PromptInput = promptInput
 			}
+			result.SystemPrompt = skillsPrompt
 			result.StartTime = execStart
 			result.EndTime = time.Now()
 		}
@@ -229,6 +232,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 			fbResult, fbErr := c.runAgentContainer(ctx, fallbackParams)
 			if fbResult != nil {
 				fbResult.PromptInput = promptInput
+				fbResult.SystemPrompt = skillsPrompt
 				fbResult.StartTime = execStart
 				fbResult.EndTime = time.Now()
 			}
@@ -238,6 +242,7 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 
 	if result != nil {
 		result.PromptInput = promptInput
+		result.SystemPrompt = skillsPrompt
 		result.StartTime = execStart
 		result.EndTime = time.Now()
 	}

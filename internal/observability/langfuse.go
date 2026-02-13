@@ -152,6 +152,12 @@ func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput)
 	if endTime.IsZero() {
 		endTime = time.Now()
 	}
+	metadata := map[string]interface{}{
+		"status": gen.Status,
+	}
+	if gen.SystemPrompt != "" {
+		metadata["system_prompt"] = gen.SystemPrompt
+	}
 	body := map[string]interface{}{
 		"id":                  uuid.New().String(),
 		"traceId":             span.TraceID,
@@ -162,9 +168,7 @@ func (t *LangfuseTracer) RecordGeneration(span SpanContext, gen GenerationInput)
 			"input":  gen.InputTokens,
 			"output": gen.OutputTokens,
 		},
-		"metadata": map[string]interface{}{
-			"status": gen.Status,
-		},
+		"metadata":  metadata,
 		"startTime": startTime.UTC().Format(time.RFC3339Nano),
 		"endTime":   endTime.UTC().Format(time.RFC3339Nano),
 	}

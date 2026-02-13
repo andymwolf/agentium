@@ -15,6 +15,7 @@ type ReviewResult struct {
 	Feedback     string
 	Error        error
 	Prompt       string    // Prompt text sent to the reviewer (for Langfuse generation input)
+	SystemPrompt string    // System/skills prompt (for Langfuse)
 	InputTokens  int       // Input tokens consumed by the reviewer
 	OutputTokens int       // Output tokens consumed by the reviewer
 	StartTime    time.Time // When the reviewer invocation started
@@ -60,16 +61,19 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	skillPhase := reviewPhase
 
 	// API-provided reviewer prompt takes precedence over built-in skills
+	var reviewerSkillsPrompt string
 	if reviewerPrompt := c.phaseReviewerPrompt(params.CompletedPhase); reviewerPrompt != "" {
+		reviewerSkillsPrompt = reviewerPrompt
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
 			SkillsPrompt: reviewerPrompt,
 		}
 		c.logInfo("Using API-provided reviewer prompt for phase %s", params.CompletedPhase)
 	} else if c.skillSelector != nil {
+		reviewerSkillsPrompt = c.skillSelector.SelectForPhase(skillPhase)
 		session.IterationContext = &agent.IterationContext{
 			Phase:        skillPhase,
-			SkillsPrompt: c.skillSelector.SelectForPhase(skillPhase),
+			SkillsPrompt: reviewerSkillsPrompt,
 		}
 	}
 
@@ -167,6 +171,7 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 	return ReviewResult{
 		Feedback:     feedback,
 		Prompt:       stdinPrompt,
+		SystemPrompt: reviewerSkillsPrompt,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
 		StartTime:    reviewStart,

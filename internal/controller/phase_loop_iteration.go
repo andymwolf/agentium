@@ -40,6 +40,7 @@ func (c *Controller) runWorkerIteration(ctx context.Context, plc *phaseLoopConte
 		Model:        c.config.Agent,
 		Input:        result.PromptInput,
 		Output:       result.RawTextContent,
+		SystemPrompt: result.SystemPrompt,
 		InputTokens:  result.InputTokens,
 		OutputTokens: result.OutputTokens,
 		Status:       "completed",

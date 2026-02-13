@@ -114,6 +114,7 @@ func TestLangfuseTracerSendsBatches(t *testing.T) {
 	tracer.RecordGeneration(span, GenerationInput{
 		Name:         "Worker",
 		Model:        "claude-sonnet-4-20250514",
+		SystemPrompt: "You are a coding assistant",
 		InputTokens:  1500,
 		OutputTokens: 300,
 		Status:       "completed",
@@ -190,6 +191,86 @@ func TestLangfuseTracerSendsBatches(t *testing.T) {
 	for evtType, expected := range expectations {
 		if got := eventTypes[evtType]; got != expected {
 			t.Errorf("expected %d %s events, got %d", expected, evtType, got)
+		}
+	}
+
+	// Verify Worker generation includes system_prompt in metadata,
+	// and Judge generation (no SystemPrompt set) does not.
+	for _, batch := range receivedBatches {
+		for _, evt := range batch.Batch {
+			if evt.Type != "generation-create" {
+				continue
+			}
+			meta, _ := evt.Body["metadata"].(map[string]interface{})
+			name, _ := evt.Body["name"].(string)
+			if name == "Worker" {
+				sp, ok := meta["system_prompt"]
+				if !ok {
+					t.Error("Worker generation metadata missing system_prompt")
+				} else if sp != "You are a coding assistant" {
+					t.Errorf("Worker system_prompt = %q, want %q", sp, "You are a coding assistant")
+				}
+			}
+			if name == "Judge" {
+				if _, ok := meta["system_prompt"]; ok {
+					t.Error("Judge generation metadata should not contain system_prompt when empty")
+				}
+			}
+		}
+	}
+}
+
+func TestLangfuseTracerSystemPromptOmittedWhenEmpty(t *testing.T) {
+	var mu sync.Mutex
+	var receivedBatches []ingestionPayload
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload ingestionPayload
+		_ = json.Unmarshal(body, &payload)
+		mu.Lock()
+		receivedBatches = append(receivedBatches, payload)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"successes":[],"errors":[]}`))
+	}))
+	defer server.Close()
+
+	tracer := NewLangfuseTracer(LangfuseConfig{
+		PublicKey: "pk-test",
+		SecretKey: "sk-test",
+		BaseURL:   server.URL,
+	}, newTestLogger())
+
+	trace := tracer.StartTrace("task-empty-sp", TraceOptions{Workflow: "test"})
+	span := tracer.StartPhase(trace, "TEST", SpanOptions{})
+
+	tracer.RecordGeneration(span, GenerationInput{
+		Name:         "Worker",
+		Model:        "test-model",
+		SystemPrompt: "", // Explicitly empty
+		InputTokens:  100,
+		OutputTokens: 50,
+		Status:       "completed",
+	})
+
+	ctx := context.Background()
+	if err := tracer.Stop(ctx); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, batch := range receivedBatches {
+		for _, evt := range batch.Batch {
+			if evt.Type != "generation-create" {
+				continue
+			}
+			meta, _ := evt.Body["metadata"].(map[string]interface{})
+			if _, ok := meta["system_prompt"]; ok {
+				t.Error("metadata should not contain system_prompt when SystemPrompt is empty")
+			}
 		}
 	}
 }

@@ -61,6 +61,7 @@ type GenerationInput struct {
 	Model        string
 	Input        string // Prompt text sent to the LLM
 	Output       string // Response text from the LLM
+	SystemPrompt string // System/skills prompt used for this invocation
 	InputTokens  int
 	OutputTokens int
 	Status       string    // "completed" or "error"
