@@ -55,8 +55,6 @@ func init() {
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
-	_ = viper.BindPFlag("session.agent", runCmd.Flags().Lookup("agent"))
-	_ = viper.BindPFlag("session.max_duration", runCmd.Flags().Lookup("max-duration"))
 	_ = viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
 	_ = viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
 	_ = viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
@@ -99,7 +97,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 		cfg.Session.Tasks = expandedIssues
 	}
-	if agent := viper.GetString("session.agent"); agent != "" {
+	if cmd.Flags().Changed("agent") {
+		agent, _ := cmd.Flags().GetString("agent")
 		cfg.Session.Agent = agent
 	}
 	if cmd.Flags().Changed("max-duration") {
