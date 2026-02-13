@@ -59,8 +59,8 @@ type SpanOptions struct {
 type EndPhaseOptions struct {
 	Status     string
 	DurationMs int64
-	Input      interface{} // JSON-serializable, may be nil
-	Output     interface{} // JSON-serializable, may be nil
+	Input  any // JSON-serializable, may be nil
+	Output any // JSON-serializable, may be nil
 }
 
 // GenerationInput describes an LLM invocation to record.

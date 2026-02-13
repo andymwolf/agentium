@@ -355,6 +355,34 @@ More output`
 	})
 }
 
+func TestGetOutput_NilFieldReturnsNilInterface(t *testing.T) {
+	// Verify that GetOutput returns an untyped nil (not a typed nil like
+	// (*PlanOutput)(nil) wrapped in interface{}) when the concrete field is nil.
+	hd := &HandoffData{Phase: PhasePlan, PlanOutput: nil}
+	got := hd.GetOutput()
+	if got != nil {
+		t.Errorf("expected nil, got %v (type %T)", got, got)
+	}
+
+	hd = &HandoffData{Phase: PhaseImplement, ImplementOutput: nil}
+	got = hd.GetOutput()
+	if got != nil {
+		t.Errorf("expected nil, got %v (type %T)", got, got)
+	}
+
+	hd = &HandoffData{Phase: PhaseDocs, DocsOutput: nil}
+	got = hd.GetOutput()
+	if got != nil {
+		t.Errorf("expected nil, got %v (type %T)", got, got)
+	}
+
+	hd = &HandoffData{Phase: PhaseVerify, VerifyOutput: nil}
+	got = hd.GetOutput()
+	if got != nil {
+		t.Errorf("expected nil, got %v (type %T)", got, got)
+	}
+}
+
 func TestStore_VerifyOutput(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "handoff-verify-test")
 	defer func() { _ = os.RemoveAll(tmpDir) }()

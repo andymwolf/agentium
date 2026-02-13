@@ -54,7 +54,7 @@ func (c *Controller) endPhaseSpan(plc *phaseLoopContext, status string) {
 
 // resolvePhaseInput returns the structured input for a phase based on the
 // handoff data flowing into it from previous phases.
-func (c *Controller) resolvePhaseInput(taskID string, phase TaskPhase) interface{} {
+func (c *Controller) resolvePhaseInput(taskID string, phase TaskPhase) any {
 	switch phase {
 	case PhasePlan:
 		return c.handoffStore.GetIssueContext(taskID)
@@ -66,7 +66,7 @@ func (c *Controller) resolvePhaseInput(taskID string, phase TaskPhase) interface
 		if plan == nil && impl == nil {
 			return nil
 		}
-		m := map[string]interface{}{}
+		m := map[string]any{}
 		if plan != nil {
 			m["plan"] = plan
 		}
@@ -83,7 +83,7 @@ func (c *Controller) resolvePhaseInput(taskID string, phase TaskPhase) interface
 
 // resolvePhaseOutput returns the structured output produced by the current phase,
 // or nil if the phase was interrupted or hasn't produced output yet.
-func (c *Controller) resolvePhaseOutput(taskID string, phase TaskPhase) interface{} {
+func (c *Controller) resolvePhaseOutput(taskID string, phase TaskPhase) any {
 	hd := c.handoffStore.GetPhaseOutput(taskID, handoff.Phase(phase))
 	if hd == nil {
 		return nil
