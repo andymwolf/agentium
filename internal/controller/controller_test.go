@@ -284,18 +284,16 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 		wantNil       bool
 		wantPlan      int
 		wantImplement int
-		wantDocs      int
 	}{
 		{
 			name: "phase_loop present with iterations",
 			envValue: `{
 				"id": "test", "repository": "github.com/org/repo",
-				"phase_loop": {"plan_max_iterations": 2, "implement_max_iterations": 8, "docs_max_iterations": 3}
+				"phase_loop": {"plan_max_iterations": 2, "implement_max_iterations": 8}
 			}`,
 			wantNil:       false,
 			wantPlan:      2,
 			wantImplement: 8,
-			wantDocs:      3,
 		},
 		{
 			name: "phase_loop absent",
@@ -346,9 +344,6 @@ func TestLoadConfigFromEnv_PhaseLoopConfig(t *testing.T) {
 			}
 			if tt.wantImplement > 0 && config.PhaseLoop.ImplementMaxIterations != tt.wantImplement {
 				t.Errorf("ImplementMaxIterations = %d, want %d", config.PhaseLoop.ImplementMaxIterations, tt.wantImplement)
-			}
-			if tt.wantDocs > 0 && config.PhaseLoop.DocsMaxIterations != tt.wantDocs {
-				t.Errorf("DocsMaxIterations = %d, want %d", config.PhaseLoop.DocsMaxIterations, tt.wantDocs)
 			}
 		})
 	}

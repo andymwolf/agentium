@@ -38,20 +38,6 @@ func (c *Controller) handleVerifyPreChecks(plc *phaseLoopContext) bool {
 	return false
 }
 
-// handleDocsAutoAdvance checks if the DOCS phase should auto-advance because
-// no documentation changes were made. Returns true if auto-advanced.
-func (c *Controller) handleDocsAutoAdvance(ctx context.Context, plc *phaseLoopContext, iter int) bool {
-	if plc.currentPhase != PhaseDocs || !c.docsOutputIndicatesNoChanges(plc.taskID) {
-		return false
-	}
-	c.logInfo("Phase %s: no documentation changes detected, skipping review/judge", plc.currentPhase)
-	c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController,
-		"No documentation changes detected — skipping review (auto-advance)")
-	c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (no changes, auto-advanced)", plc.currentPhase))
-	plc.advanced = true
-	return true
-}
-
 // handleVerifyPhase handles VERIFY phase logic (merge attempt or retry).
 // Returns the same (advanced, blocked, shouldContinue) tuple as runReviewJudgePipeline
 // for consistent flow control at the call site. blocked is always false here since
@@ -125,11 +111,6 @@ func (c *Controller) handleComplexityAssessment(ctx context.Context, plc *phaseL
 // without receiving an ADVANCE verdict.
 func (c *Controller) handleExhaustedIterations(ctx context.Context, plc *phaseLoopContext) {
 	switch plc.currentPhase {
-	case PhaseDocs:
-		// DOCS phase auto-succeeds - documentation should not block PR finalization
-		c.logInfo("Phase %s: exhausted %d iterations, auto-advancing (non-blocking)", plc.currentPhase, plc.maxIter)
-		c.postPhaseComment(ctx, plc.currentPhase, plc.maxIter, RoleController,
-			fmt.Sprintf("Auto-advanced: DOCS phase exhausted %d iterations (non-blocking)", plc.maxIter))
 	case PhaseVerify:
 		// VERIFY phase exhaustion: PR is already ready for review, note that auto-merge failed
 		c.logWarning("Phase %s: exhausted %d iterations, auto-merge failed (PR remains ready for human review)", plc.currentPhase, plc.maxIter)

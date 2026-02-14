@@ -18,8 +18,7 @@ func TestAdvancePhase(t *testing.T) {
 		want    TaskPhase
 	}{
 		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
-		{"IMPLEMENT advances to DOCS", PhaseImplement, PhaseDocs},
-		{"DOCS advances to COMPLETE", PhaseDocs, PhaseComplete},
+		{"IMPLEMENT advances to COMPLETE", PhaseImplement, PhaseComplete},
 		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
 		{"COMPLETE stays COMPLETE", PhaseComplete, PhaseComplete},
 	}
@@ -42,8 +41,7 @@ func TestAdvancePhase_WithAutoMerge(t *testing.T) {
 		want    TaskPhase
 	}{
 		{"PLAN advances to IMPLEMENT", PhasePlan, PhaseImplement},
-		{"IMPLEMENT advances to DOCS", PhaseImplement, PhaseDocs},
-		{"DOCS advances to VERIFY", PhaseDocs, PhaseVerify},
+		{"IMPLEMENT advances to VERIFY", PhaseImplement, PhaseVerify},
 		{"VERIFY advances to COMPLETE", PhaseVerify, PhaseComplete},
 		{"unknown phase advances to COMPLETE", TaskPhase("UNKNOWN"), PhaseComplete},
 	}
@@ -61,7 +59,7 @@ func TestAdvancePhase_WithAutoMerge(t *testing.T) {
 func TestPhaseOrder_WithAutoMerge(t *testing.T) {
 	c := &Controller{config: SessionConfig{AutoMerge: true}}
 	order := c.phaseOrder()
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhaseVerify}
+	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseVerify}
 	if len(order) != len(expected) {
 		t.Fatalf("phaseOrder() length = %d, want %d", len(order), len(expected))
 	}
@@ -75,7 +73,7 @@ func TestPhaseOrder_WithAutoMerge(t *testing.T) {
 func TestPhaseOrder_WithoutAutoMerge(t *testing.T) {
 	c := &Controller{config: SessionConfig{}}
 	order := c.phaseOrder()
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs}
+	expected := []TaskPhase{PhasePlan, PhaseImplement}
 	if len(order) != len(expected) {
 		t.Fatalf("phaseOrder() length = %d, want %d", len(order), len(expected))
 	}
@@ -99,7 +97,6 @@ func TestPhaseMaxIterations_Defaults(t *testing.T) {
 	}{
 		{PhasePlan, defaultPlanMaxIter},
 		{PhaseImplement, defaultImplementMaxIter},
-		{PhaseDocs, defaultDocsMaxIter},
 		{PhaseVerify, defaultVerifyMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
@@ -120,7 +117,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 			PhaseLoop: &PhaseLoopConfig{
 				PlanMaxIterations:      2,
 				ImplementMaxIterations: 10,
-				DocsMaxIterations:      4,
 			},
 		},
 	}
@@ -131,7 +127,6 @@ func TestPhaseMaxIterations_CustomConfig(t *testing.T) {
 	}{
 		{PhasePlan, 2},
 		{PhaseImplement, 10},
-		{PhaseDocs, 4},
 	}
 
 	for _, tt := range tests {
@@ -163,7 +158,6 @@ func TestPhaseMaxIterations_SimplePath(t *testing.T) {
 			PhaseLoop: &PhaseLoopConfig{
 				PlanMaxIterations:      5, // Should be ignored for SIMPLE path
 				ImplementMaxIterations: 10,
-				DocsMaxIterations:      4,
 			},
 		},
 	}
@@ -174,7 +168,6 @@ func TestPhaseMaxIterations_SimplePath(t *testing.T) {
 	}{
 		{PhasePlan, simplePlanMaxIter},
 		{PhaseImplement, simpleImplementMaxIter},
-		{PhaseDocs, simpleDocsMaxIter},
 		{PhaseVerify, simpleVerifyMaxIter},
 		{TaskPhase("UNKNOWN"), 1},
 	}
@@ -213,7 +206,7 @@ func TestIsPhaseLoopEnabled(t *testing.T) {
 func TestIssuePhaseOrder(t *testing.T) {
 	// Verify the expected phase order (REVIEW and PR_CREATION phases removed)
 	// Draft PRs are created during IMPLEMENT and finalized at PhaseComplete
-	expected := []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs}
+	expected := []TaskPhase{PhasePlan, PhaseImplement}
 	if len(issuePhaseOrder) != len(expected) {
 		t.Fatalf("issuePhaseOrder length = %d, want %d", len(issuePhaseOrder), len(expected))
 	}

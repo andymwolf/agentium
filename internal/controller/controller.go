@@ -102,7 +102,6 @@ type TaskState struct {
 type PhaseLoopConfig struct {
 	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
-	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`
 	VerifyMaxIterations    int    `json:"verify_max_iterations,omitempty"`
 	JudgeContextBudget     int    `json:"judge_context_budget,omitempty"`
 	JudgeNoSignalLimit     int    `json:"judge_no_signal_limit,omitempty"`

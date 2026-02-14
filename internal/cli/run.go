@@ -286,7 +286,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
 		ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,
-		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
 		VerifyMaxIterations:    cfg.PhaseLoop.VerifyMaxIterations,
 		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
 		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,

@@ -215,6 +215,7 @@ Your plan is output as rich markdown between `AGENTIUM_PLAN_START` / `AGENTIUM_P
 - **Files to Create**: List of new files (if any)
 - **Implementation Steps**: Numbered, detailed steps with code patterns found during exploration
 - **Testing Approach**: How the changes will be verified
+- **Documentation**: Note any documentation that should be updated alongside the code changes
 
 Include enough detail that another agent could follow the plan step-by-step: file paths, function names, code patterns observed, and edge cases to handle.
 

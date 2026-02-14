@@ -151,12 +151,11 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	sessionConfig.ClaudeAuth.AuthMode = claudeAuthMode
 	sessionConfig.ClaudeAuth.AuthJSONBase64 = claudeAuthBase64
 
-	// Enable phase loop (PLAN → IMPLEMENT → DOCS → PR workflow)
+	// Enable phase loop (PLAN → IMPLEMENT → PR workflow)
 	// Phase loop is always enabled - the config just customizes iteration counts
 	sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
 		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
-		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,
 		VerifyMaxIterations:    cfg.PhaseLoop.VerifyMaxIterations,
 		JudgeContextBudget:     cfg.PhaseLoop.JudgeContextBudget,
 		JudgeNoSignalLimit:     cfg.PhaseLoop.JudgeNoSignalLimit,

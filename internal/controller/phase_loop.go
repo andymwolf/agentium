@@ -51,14 +51,12 @@ type phaseLoopContext struct {
 var issuePhaseOrder = []TaskPhase{
 	PhasePlan,
 	PhaseImplement,
-	PhaseDocs,
 }
 
 // Default max iterations per phase when not configured.
 const (
 	defaultPlanMaxIter      = 3
 	defaultImplementMaxIter = 5
-	defaultDocsMaxIter      = 2
 	defaultVerifyMaxIter    = 3
 )
 
@@ -66,7 +64,6 @@ const (
 const (
 	simplePlanMaxIter      = 1
 	simpleImplementMaxIter = 2
-	simpleDocsMaxIter      = 1
 	simpleVerifyMaxIter    = 2
 )
 
@@ -118,10 +115,6 @@ func (c *Controller) phaseMaxIterations(phase TaskPhase, workflowPath WorkflowPa
 		if cfg.ImplementMaxIterations > 0 {
 			return cfg.ImplementMaxIterations
 		}
-	case PhaseDocs:
-		if cfg.DocsMaxIterations > 0 {
-			return cfg.DocsMaxIterations
-		}
 	case PhaseVerify:
 		if cfg.VerifyMaxIterations > 0 {
 			return cfg.VerifyMaxIterations
@@ -136,8 +129,6 @@ func defaultMaxIter(phase TaskPhase) int {
 		return defaultPlanMaxIter
 	case PhaseImplement:
 		return defaultImplementMaxIter
-	case PhaseDocs:
-		return defaultDocsMaxIter
 	case PhaseVerify:
 		return defaultVerifyMaxIter
 	default:
@@ -151,8 +142,6 @@ func simpleMaxIter(phase TaskPhase) int {
 		return simplePlanMaxIter
 	case PhaseImplement:
 		return simpleImplementMaxIter
-	case PhaseDocs:
-		return simpleDocsMaxIter
 	case PhaseVerify:
 		return simpleVerifyMaxIter
 	default:
@@ -269,21 +258,6 @@ func (c *Controller) shouldSkipJudge(phaseOutput, taskID string) (skip bool, rea
 	return false, ""
 }
 
-// docsOutputIndicatesNoChanges returns true if the DOCS phase handoff output
-// indicates no documentation changes were made.
-func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
-	if !c.isHandoffEnabled() || c.handoffStore == nil {
-		return false
-	}
-
-	hd := c.handoffStore.GetPhaseOutput(taskID, handoff.PhaseDocs)
-	if hd == nil || hd.DocsOutput == nil {
-		return false
-	}
-
-	return len(hd.DocsOutput.DocsUpdated) == 0 && !hd.DocsOutput.ReadmeChanged
-}
-
 // tryVerifyMerge checks if the PR was merged by the worker (via handoff) or
 // attempts a controller-side merge if CI checks passed. Returns true if merged,
 // and any remaining CI failures reported by the worker (for retry feedback).
@@ -321,7 +295,7 @@ func (c *Controller) tryVerifyMerge(ctx context.Context, taskID string, state *T
 
 // phaseOrder returns the active phase sequence based on config.
 // When custom Phases are provided, derives order from them.
-// When auto-merge is enabled, VERIFY is appended after DOCS if not already present.
+// When auto-merge is enabled, VERIFY is appended after IMPLEMENT if not already present.
 func (c *Controller) phaseOrder() []TaskPhase {
 	if len(c.config.Phases) > 0 {
 		order := make([]TaskPhase, len(c.config.Phases))
@@ -335,7 +309,7 @@ func (c *Controller) phaseOrder() []TaskPhase {
 		return order
 	}
 	if c.config.AutoMerge {
-		return []TaskPhase{PhasePlan, PhaseImplement, PhaseDocs, PhaseVerify}
+		return []TaskPhase{PhasePlan, PhaseImplement, PhaseVerify}
 	}
 	return issuePhaseOrder
 }
@@ -506,11 +480,6 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 						fmt.Sprintf("Plan file write failed: %v", handoffErr))
 				}
 				return nil
-			}
-
-			// Phase-specific auto-advance checks
-			if c.handleDocsAutoAdvance(ctx, plc, iter) {
-				break
 			}
 
 			if advanced, _, shouldContinue := c.handleVerifyPhase(ctx, plc, iter); advanced {
