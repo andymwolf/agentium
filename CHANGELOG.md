@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.12.0](https://github.com/andymwolf/agentium/compare/v0.11.0...v0.12.0) (2026-02-14)
+
+
+### Features
+
+* file-based plan handoff (PLAN → IMPLEMENT) ([d1bf6fc](https://github.com/andymwolf/agentium/commit/d1bf6fc670b2637b2c29de0d824387e34432dc91))
+* implement file-based plan handoff between PLAN and IMPLEMENT phases ([3f90c37](https://github.com/andymwolf/agentium/commit/3f90c37905546fc31887d20ca5d64a946725a1b8))
+* use AssistantText for Worker and Judge Langfuse generation output ([#524](https://github.com/andymwolf/agentium/issues/524)) ([237f592](https://github.com/andymwolf/agentium/commit/237f5922b963bfc0d8c912dfccd5060198575370))
+
+
+### Bug Fixes
+
+* add AGENTIUM_EVAL verdict signal to reviewer prompts ([#525](https://github.com/andymwolf/agentium/issues/525)) ([aba5f16](https://github.com/andymwolf/agentium/commit/aba5f160ddafa83b501e1f8cba34a6eaf17c938a)), closes [#386](https://github.com/andymwolf/agentium/issues/386)
+* align struct fields in EndPhaseOptions to satisfy gofmt ([#522](https://github.com/andymwolf/agentium/issues/522)) ([6be0ff0](https://github.com/andymwolf/agentium/commit/6be0ff04c2aad209b0cc8e67d5aff935c00a7d25))
+
 ## [0.11.0](https://github.com/andymwolf/agentium/compare/v0.10.0...v0.11.0) (2026-02-13)
 
 
