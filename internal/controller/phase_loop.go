@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 //
 //	phase_loop.go          — initializes/resets all fields in the outer and inner loops
 //	phase_loop_tracing.go  — manages tracing fields (traceCtx … traceStatus)
-//	phase_loop_iteration.go — writes per-iteration output (phaseOutput, commentContent, skipIteration)
+//	phase_loop_iteration.go — writes per-iteration output (phaseOutput, commentContent)
 //	phase_loop_phases.go   — writes advanced, maxIter (complexity assessment), and state fields
 //	phase_loop_eval.go     — writes advanced, noSignalCount, traceStatus, and state fields
 type phaseLoopContext struct {
@@ -42,9 +41,8 @@ type phaseLoopContext struct {
 	noSignalCount int  // updated by applyJudgePostProcessing (phase_loop_eval.go)
 
 	// Per-iteration output (reset each iteration in runPhaseLoop)
-	phaseOutput    string // written by handlePlanSkip, runWorkerIteration (phase_loop_iteration.go)
+	phaseOutput    string // written by runWorkerIteration (phase_loop_iteration.go)
 	commentContent string // written by runWorkerIteration (phase_loop_iteration.go)
-	skipIteration  bool   // written by handlePlanSkip (phase_loop_iteration.go)
 }
 
 // issuePhaseOrder defines the sequence of phases for issue tasks in the phase loop.
@@ -271,81 +269,6 @@ func (c *Controller) shouldSkipJudge(phaseOutput, taskID string) (skip bool, rea
 	return false, ""
 }
 
-// existingPlanIndicators are strings that indicate an issue already contains
-// a complete implementation plan. When any of these are found in the issue body,
-// the PLAN phase agent iteration can be skipped.
-var existingPlanIndicators = []string{
-	"Files to Create/Modify",
-	"Files to Modify",
-	"Implementation Steps",
-	"## Implementation Plan",
-}
-
-// hasExistingPlan checks if the active issue body contains indicators
-// of a pre-existing implementation plan.
-func (c *Controller) hasExistingPlan() bool {
-	issueBody := c.getActiveIssueBody()
-	if issueBody == "" {
-		return false
-	}
-	for _, indicator := range existingPlanIndicators {
-		if strings.Contains(issueBody, indicator) {
-			return true
-		}
-	}
-	return false
-}
-
-// extractExistingPlan returns the issue body as the plan content if
-// an existing plan is detected, otherwise returns an empty string.
-func (c *Controller) extractExistingPlan() string {
-	if !c.hasExistingPlan() {
-		return ""
-	}
-	return c.getActiveIssueBody()
-}
-
-// getActiveIssueBody returns the body of the currently active issue.
-func (c *Controller) getActiveIssueBody() string {
-	for _, issue := range c.issueDetails {
-		if fmt.Sprintf("%d", issue.Number) == c.activeTask {
-			return issue.Body
-		}
-	}
-	return ""
-}
-
-// isPlanSkipEnabled returns true if plan skipping is configured and enabled.
-func (c *Controller) isPlanSkipEnabled() bool {
-	if c.config.PhaseLoop == nil {
-		return false
-	}
-	return c.config.PhaseLoop.SkipPlanIfExists
-}
-
-// shouldSkipPlanIteration returns true if the planning agent iteration should
-// be skipped because a pre-existing plan was detected in the issue body.
-// This ONLY returns true when:
-// 1. The current phase is PLAN
-// 2. This is iteration 1 (first iteration of the phase)
-// 3. The skip_plan_if_exists config option is enabled
-// 4. The issue body contains plan indicators
-//
-// Subsequent iterations (2, 3, etc.) will NEVER be skipped, even if the issue
-// contains a plan. This ensures that if the reviewer requests iteration (ITERATE
-// verdict), the agent will run normally on iteration 2+.
-func (c *Controller) shouldSkipPlanIteration(phase TaskPhase, iter int) bool {
-	// Only skip on iteration 1 of PLAN phase
-	if phase != PhasePlan || iter != 1 {
-		return false
-	}
-	// Check if skip is enabled and plan exists
-	if !c.isPlanSkipEnabled() {
-		return false
-	}
-	return c.hasExistingPlan()
-}
-
 // docsOutputIndicatesNoChanges returns true if the DOCS phase handoff output
 // indicates no documentation changes were made.
 func (c *Controller) docsOutputIndicatesNoChanges(taskID string) bool {
@@ -566,19 +489,24 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Reset per-iteration state
 			plc.phaseOutput = ""
 			plc.commentContent = ""
-			plc.skipIteration = false
 
-			// Check for pre-existing plan (PLAN phase, iteration 1 only)
-			c.handlePlanSkip(ctx, plc, iter)
-
-			if !plc.skipIteration {
-				if err := c.runWorkerIteration(ctx, plc, iter); err != nil {
-					c.logError("%v", err)
-					continue
-				}
+			if err := c.runWorkerIteration(ctx, plc, iter); err != nil {
+				c.logError("%v", err)
+				continue
 			}
 
-			c.processWorkerHandoff(plc, iter)
+			if handoffErr := c.processWorkerHandoff(plc, iter); handoffErr != nil {
+				c.logError("Phase %s: fatal handoff error: %v", plc.currentPhase, handoffErr)
+				state.Phase = PhaseBlocked
+				state.ControllerOverrode = true
+				c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController,
+					fmt.Sprintf("BLOCKED: %v — task requires human intervention.", handoffErr))
+				if state.PRNumber != "" {
+					c.postNOMERGEComment(ctx, state.PRNumber,
+						fmt.Sprintf("Plan file write failed: %v", handoffErr))
+				}
+				return nil
+			}
 
 			// Phase-specific auto-advance checks
 			if c.handleDocsAutoAdvance(ctx, plc, iter) {
@@ -831,131 +759,6 @@ func formatPlanOutput(plan *handoff.PlanOutput) string {
 	}
 
 	return strings.TrimSpace(sb.String())
-}
-
-// issuePlanFilePattern matches file paths in list items (e.g., "- `path/to/file.go`" or "- path/to/file.go").
-var issuePlanFilePattern = regexp.MustCompile(`(?m)^[\s]*[-*]\s+` + "`?" + `([\w./\-]+\.\w+)` + "`?")
-
-// issuePlanStepPattern matches numbered list items (e.g., "1. Do something").
-var issuePlanStepPattern = regexp.MustCompile(`(?m)^[\s]*(\d+)\.\s+(.+)$`)
-
-// extractPlanFromIssueBody parses an issue body's structured plan sections into a
-// handoff.PlanOutput. This is deterministic regex/string parsing — no LLM call needed.
-// Returns nil if the body does not contain enough plan structure.
-func extractPlanFromIssueBody(body string) *handoff.PlanOutput {
-	if body == "" {
-		return nil
-	}
-
-	plan := &handoff.PlanOutput{}
-
-	// Extract sections by splitting on markdown headings
-	sections := splitMarkdownSections(body)
-
-	for heading, content := range sections {
-		normalizedHeading := strings.ToLower(strings.TrimSpace(heading))
-		switch {
-		case strings.Contains(normalizedHeading, "summary"):
-			plan.Summary = strings.TrimSpace(content)
-		case strings.Contains(normalizedHeading, "files to create/modify"):
-			// Combined section: treat all as files to modify
-			plan.FilesToModify = extractFilePaths(content)
-		case strings.Contains(normalizedHeading, "files to modify"):
-			plan.FilesToModify = extractFilePaths(content)
-		case strings.Contains(normalizedHeading, "files to create"):
-			plan.FilesToCreate = extractFilePaths(content)
-		case strings.Contains(normalizedHeading, "implementation"):
-			plan.ImplementationSteps = extractSteps(content)
-		case strings.Contains(normalizedHeading, "test"):
-			plan.TestingApproach = strings.TrimSpace(content)
-		}
-	}
-
-	// Only return a plan if we extracted something meaningful
-	if plan.Summary == "" && len(plan.FilesToModify) == 0 && len(plan.FilesToCreate) == 0 && len(plan.ImplementationSteps) == 0 {
-		return nil
-	}
-
-	return plan
-}
-
-// splitMarkdownSections splits markdown content by ## or # headings, returning
-// a map of heading text to section content.
-func splitMarkdownSections(body string) map[string]string {
-	sections := make(map[string]string)
-	lines := strings.Split(body, "\n")
-
-	currentHeading := ""
-	var currentContent strings.Builder
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "# ") {
-			// Save previous section
-			if currentHeading != "" {
-				sections[currentHeading] = currentContent.String()
-			}
-			currentHeading = strings.TrimLeft(trimmed, "# ")
-			currentContent.Reset()
-		} else if currentHeading != "" {
-			currentContent.WriteString(line)
-			currentContent.WriteString("\n")
-		}
-	}
-
-	// Save last section
-	if currentHeading != "" {
-		sections[currentHeading] = currentContent.String()
-	}
-
-	return sections
-}
-
-// extractFilePaths extracts file paths from markdown list items.
-func extractFilePaths(content string) []string {
-	matches := issuePlanFilePattern.FindAllStringSubmatch(content, -1)
-	paths := make([]string, 0, len(matches))
-	seen := make(map[string]bool)
-	for _, m := range matches {
-		path := m[1]
-		if !seen[path] {
-			paths = append(paths, path)
-			seen[path] = true
-		}
-	}
-	return paths
-}
-
-// extractSteps extracts numbered steps from markdown content.
-func extractSteps(content string) []handoff.ImplementationStep {
-	matches := issuePlanStepPattern.FindAllStringSubmatch(content, -1)
-	steps := make([]handoff.ImplementationStep, 0, len(matches))
-	for i, m := range matches {
-		order := i + 1
-		if len(m) >= 3 {
-			// Try to parse the step number; fallback to sequential
-			if n := parseStepNumber(m[1]); n > 0 {
-				order = n
-			}
-			steps = append(steps, handoff.ImplementationStep{
-				Order:       order,
-				Description: strings.TrimSpace(m[2]),
-			})
-		}
-	}
-	return steps
-}
-
-// parseStepNumber converts a string like "1" to an int, returning 0 on failure.
-func parseStepNumber(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
 }
 
 // knownPhases is the set of built-in phases that have default skill prompts.

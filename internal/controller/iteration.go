@@ -85,6 +85,8 @@ func (c *Controller) runIteration(ctx context.Context) (*agent.IterationResult, 
 		session.IterationContext.SkillsPrompt = phases.Get(phaseStr, "WORKER")
 		c.logInfo("Using phase prompt for %s WORKER", phase)
 	}
+	// Apply template variable substitution to skills prompts (e.g., {{plan_file}})
+	session.IterationContext.SkillsPrompt = c.renderWithParameters(session.IterationContext.SkillsPrompt)
 	skillsPrompt := session.IterationContext.SkillsPrompt
 
 	// Inject structured handoff context if enabled

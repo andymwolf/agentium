@@ -283,7 +283,6 @@ func runSession(cmd *cobra.Command, args []string) error {
 	// Propagate phase loop config from config file
 	// Phase loop is always enabled - the config just customizes iteration counts
 	sessionConfig.PhaseLoop = &provisioner.ProvPhaseLoopConfig{
-		SkipPlanIfExists:       cfg.PhaseLoop.SkipPlanIfExists,
 		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
 		ReviewMaxIterations:    cfg.PhaseLoop.ReviewMaxIterations,

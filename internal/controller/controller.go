@@ -100,7 +100,6 @@ type TaskState struct {
 
 // PhaseLoopConfig controls the controller-as-judge phase loop behavior.
 type PhaseLoopConfig struct {
-	SkipPlanIfExists       bool   `json:"skip_plan_if_exists,omitempty"`
 	PlanMaxIterations      int    `json:"plan_max_iterations,omitempty"`
 	ImplementMaxIterations int    `json:"implement_max_iterations,omitempty"`
 	DocsMaxIterations      int    `json:"docs_max_iterations,omitempty"`

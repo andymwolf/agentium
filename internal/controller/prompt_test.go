@@ -367,9 +367,9 @@ func TestBuildPromptForTask_ImplementWithPlan(t *testing.T) {
 	if containsString(got, "This is urgent") {
 		t.Errorf("expected comments to be omitted when plan exists, got:\n%s", got)
 	}
-	// Should reference phase input
-	if !containsString(got, "Phase Input") {
-		t.Errorf("expected reference to Phase Input, got:\n%s", got)
+	// Should reference issue-scoped plan file
+	if !containsString(got, ".agentium/plan-42.md") {
+		t.Errorf("expected reference to plan file, got:\n%s", got)
 	}
 }
 
@@ -599,7 +599,7 @@ func TestBuildIterateFeedbackSection(t *testing.T) {
 			phase:          PhasePlan,
 			wantContains: []string{
 				"plan was reviewed",
-				"AGENTIUM_HANDOFF",
+				"AGENTIUM_PLAN_START",
 				"revised plan",
 				"Add API endpoints to plan",
 			},
@@ -814,21 +814,32 @@ func TestBuildIterateFeedbackSectionWithPlan(t *testing.T) {
 		logger:       log.New(io.Discard, "", 0),
 		memoryStore:  memStore,
 		handoffStore: hStore,
+		activeTask:   "42",
 	}
 
 	got := c.buildIterateFeedbackSection("issue:42", 2, "", PhasePlan)
 
 	wantContains := []string{
 		"plan was reviewed",
-		"AGENTIUM_HANDOFF",
+		"AGENTIUM_PLAN_START",
 		"Your current plan",
-		"Implement user auth",
-		"Add login endpoint",
+		".agentium/plan-42.md",
 		"Submit your revised plan",
 	}
 	for _, substr := range wantContains {
 		if !containsString(got, substr) {
 			t.Errorf("buildIterateFeedbackSection() with plan missing %q in:\n%s", substr, got)
+		}
+	}
+
+	// Embedded plan content should NOT be present (file-based handoff)
+	wantNotContain := []string{
+		"Implement user auth",
+		"Add login endpoint",
+	}
+	for _, substr := range wantNotContain {
+		if containsString(got, substr) {
+			t.Errorf("buildIterateFeedbackSection() should not embed plan content %q in:\n%s", substr, got)
 		}
 	}
 }

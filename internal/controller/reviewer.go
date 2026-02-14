@@ -78,6 +78,10 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		}
 	}
 
+	// Apply template variable substitution to skills prompts (e.g., {{plan_file}})
+	reviewerSkillsPrompt = c.renderWithParameters(reviewerSkillsPrompt)
+	session.IterationContext.SkillsPrompt = reviewerSkillsPrompt
+
 	// Select adapter via compound key fallback chain
 	activeAgent := c.agent
 	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
@@ -227,11 +231,10 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	sb.WriteString("## Your Task\n\n")
 
 	if params.CompletedPhase == PhasePlan {
-		// PLAN phase: no code changes exist — review the plan itself
+		// PLAN phase: review the plan file written to the workspace
 		sb.WriteString("Review the **plan** produced in this phase.\n\n")
-		sb.WriteString("**IMPORTANT:** The plan is provided in the **Phase Output** section above — it is NOT written to a file on disk. ")
-		sb.WriteString("Do NOT run `git diff`, look for modified files, or search for plan files — there are none. ")
-		sb.WriteString("The PLAN phase produces a plan in the agent output, not code or files.\n\n")
+		sb.WriteString(fmt.Sprintf("**IMPORTANT:** Read the plan at `%s`. Evaluate it against the issue requirements. ", PlanFilePath(c.activeTask)))
+		sb.WriteString("The Phase Output above shows the worker's exploration process for context.\n\n")
 		sb.WriteString("Evaluate the plan on:\n")
 		sb.WriteString("- **Issue alignment:** Does the plan address what the issue asks for?\n")
 		sb.WriteString("- **Feasibility:** Is the approach technically sound?\n")

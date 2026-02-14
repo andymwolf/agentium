@@ -3,22 +3,29 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
-	"github.com/andywolf/agentium/internal/handoff"
 	"github.com/andywolf/agentium/internal/observability"
 )
 
-// handlePlanSkip checks for a pre-existing plan and populates plc with the plan
-// content if found, setting plc.skipIteration = true to skip the worker iteration.
-func (c *Controller) handlePlanSkip(ctx context.Context, plc *phaseLoopContext, iter int) {
-	if !c.shouldSkipPlanIteration(plc.currentPhase, iter) {
-		return
-	}
-	planContent := c.extractExistingPlan()
-	c.logInfo("Phase %s: detected pre-existing plan in issue body, skipping agent iteration", plc.currentPhase)
-	plc.phaseOutput = planContent
-	plc.skipIteration = true
-	c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController, "Pre-existing plan detected in issue body (skipped planning agent)")
+// Plan marker constants for extracting rich plan content from worker output.
+const (
+	planMarkerStart = "AGENTIUM_PLAN_START"
+	planMarkerEnd   = "AGENTIUM_PLAN_END"
+)
+
+// Plan file path constants.
+const (
+	planFileDir    = ".agentium"
+	planFilePrefix = "plan-"
+	planFileExt    = ".md"
+)
+
+// PlanFilePath returns the issue-scoped plan file path, e.g. ".agentium/plan-42.md".
+func PlanFilePath(issueNumber string) string {
+	return filepath.Join(planFileDir, planFilePrefix+issueNumber+planFileExt)
 }
 
 // runWorkerIteration executes one worker agent iteration, recording the generation
@@ -73,9 +80,10 @@ func (c *Controller) runWorkerIteration(ctx context.Context, plc *phaseLoopConte
 	return nil
 }
 
-// processWorkerHandoff parses and stores handoff output from the worker, handling
-// both regular handoff signals and the plan-skip fallback for issue body plans.
-func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) {
+// processWorkerHandoff parses and stores handoff output from the worker and
+// writes the plan file for the PLAN phase. Returns an error if the plan file
+// write fails — callers should treat this as a fatal condition (BLOCKED).
+func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) error {
 	// Warn if phase output exceeds judge context budget
 	if plc.phaseOutput != "" && len(plc.phaseOutput) > c.judgeContextBudget() {
 		c.logWarning("Phase %s output (%d chars) exceeds judge context budget (%d chars) — judge/reviewer will see truncated output",
@@ -89,23 +97,44 @@ func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) {
 		}
 	}
 
-	// When plan skip triggers and processHandoffOutput didn't store a PlanOutput
-	// (because the issue body doesn't contain AGENTIUM_HANDOFF), create a minimal
-	// PlanOutput from the issue body's structured plan sections.
-	if plc.skipIteration && c.isHandoffEnabled() {
-		hd := c.handoffStore.GetPhaseOutput(plc.taskID, handoff.PhasePlan)
-		if hd == nil || hd.PlanOutput == nil {
-			planOutput := extractPlanFromIssueBody(plc.phaseOutput)
-			if planOutput != nil {
-				if storeErr := c.handoffStore.StorePhaseOutput(plc.taskID, handoff.PhasePlan, iter, planOutput); storeErr != nil {
-					c.logWarning("Failed to store extracted plan from issue body: %v", storeErr)
-				} else {
-					c.logInfo("Stored plan extracted from issue body in handoff store")
-					if saveErr := c.handoffStore.Save(); saveErr != nil {
-						c.logWarning("Failed to persist handoff store: %v", saveErr)
-					}
-				}
+	// Write plan markdown file when PLAN phase produces marker-delimited plan content.
+	// The controller acts as write proxy since PLAN-WORKER runs in read-only mode.
+	if plc.currentPhase == PhasePlan {
+		if planMD := extractPlanMarkdown(plc.phaseOutput); planMD != "" {
+			planPath := filepath.Join(c.workDir, PlanFilePath(c.activeTask))
+			if err := os.MkdirAll(filepath.Dir(planPath), 0755); err != nil {
+				return fmt.Errorf("create plan directory: %w", err)
 			}
+			if err := os.WriteFile(planPath, []byte(planMD), 0644); err != nil {
+				return fmt.Errorf("write plan file %s: %w", planPath, err)
+			}
+			c.logInfo("Wrote plan to %s (%d bytes)", planPath, len(planMD))
 		}
 	}
+
+	return nil
+}
+
+// extractPlanMarkdown extracts content between AGENTIUM_PLAN_START and
+// AGENTIUM_PLAN_END markers from worker output. Returns empty string if
+// markers are not found or content is empty.
+func extractPlanMarkdown(output string) string {
+	startIdx := strings.Index(output, planMarkerStart)
+	if startIdx == -1 {
+		return ""
+	}
+
+	// Move past the marker and any trailing whitespace/newline
+	contentStart := startIdx + len(planMarkerStart)
+	if contentStart < len(output) && output[contentStart] == '\n' {
+		contentStart++
+	}
+
+	endIdx := strings.Index(output[contentStart:], planMarkerEnd)
+	if endIdx == -1 {
+		return ""
+	}
+
+	content := strings.TrimSpace(output[contentStart : contentStart+endIdx])
+	return content
 }

@@ -172,6 +172,17 @@ Format: `AGENTIUM_MEMORY: TYPE content`
 
 You are in the **IMPLEMENT** phase. Your job is to implement the solution and create a draft PR.
 
+### Step 0: Read Your Implementation Plan (MANDATORY)
+
+Before doing anything else, read your implementation plan:
+
+```bash
+cat {{plan_file}}
+```
+
+This plan was produced and approved during the PLAN phase. Follow it step by step.
+Use your own internal tracking to manage progress through the plan steps.
+
 ### Step 1: Ensure Branch is Current
 
 Before starting implementation:
