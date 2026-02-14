@@ -26,6 +26,7 @@ You are reviewing a **plan** produced by an agent. Your role is to provide const
 - **Completeness:** Are necessary steps identified?
 - **Feasibility:** Will this work given the codebase?
 - **Scope:** Does the plan stay within issue requirements?
+- **Documentation:** Does the plan note documentation updates needed alongside code changes?
 
 Plans describe approach, not implementation code. Do not request code snippets, line numbers, or low-level details.
 
