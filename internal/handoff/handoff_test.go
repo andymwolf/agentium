@@ -258,8 +258,8 @@ func TestBuildImplementInput_UsesIssueRef(t *testing.T) {
 	if !strings.Contains(input, `"plan_file"`) {
 		t.Errorf("expected plan_file in implement input, got:\n%s", input)
 	}
-	if !strings.Contains(input, `.agentium/plan.md`) {
-		t.Errorf("expected .agentium/plan.md path in implement input, got:\n%s", input)
+	if !strings.Contains(input, `.agentium/plan-42.md`) {
+		t.Errorf("expected .agentium/plan-42.md path in implement input, got:\n%s", input)
 	}
 }
 
@@ -457,7 +457,7 @@ func TestParser_VerifyOutput(t *testing.T) {
 func TestParseAny_DetectsPlanByPlanFile(t *testing.T) {
 	parser := NewParser()
 
-	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan.md","summary":"Add caching","files_to_modify":["handler.go"],"files_to_create":[],"testing_approach":"unit tests"}`
+	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan-99.md","summary":"Add caching","files_to_modify":["handler.go"],"files_to_create":[],"testing_approach":"unit tests"}`
 
 	phase, result, err := parser.ParseAny(output)
 	if err != nil {
@@ -468,8 +468,8 @@ func TestParseAny_DetectsPlanByPlanFile(t *testing.T) {
 	}
 
 	planOut := result.(*PlanOutput)
-	if planOut.PlanFile != ".agentium/plan.md" {
-		t.Errorf("Expected PlanFile '.agentium/plan.md', got %s", planOut.PlanFile)
+	if planOut.PlanFile != ".agentium/plan-99.md" {
+		t.Errorf("Expected PlanFile '.agentium/plan-99.md', got %s", planOut.PlanFile)
 	}
 	if planOut.Summary != "Add caching" {
 		t.Errorf("Expected summary 'Add caching', got %s", planOut.Summary)
@@ -480,7 +480,7 @@ func TestParser_PlanFileOutput(t *testing.T) {
 	parser := NewParser()
 
 	// Test parsing a plan with plan_file field (file-based handoff format)
-	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan.md","summary":"Implement feature","files_to_modify":["api.go"],"files_to_create":["cache.go"],"testing_approach":"integration tests"}`
+	output := `AGENTIUM_HANDOFF: {"plan_file":".agentium/plan-77.md","summary":"Implement feature","files_to_modify":["api.go"],"files_to_create":["cache.go"],"testing_approach":"integration tests"}`
 
 	result, err := parser.ParseOutput(output, PhasePlan)
 	if err != nil {
@@ -491,8 +491,8 @@ func TestParser_PlanFileOutput(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected *PlanOutput, got %T", result)
 	}
-	if plan.PlanFile != ".agentium/plan.md" {
-		t.Errorf("Expected PlanFile '.agentium/plan.md', got %s", plan.PlanFile)
+	if plan.PlanFile != ".agentium/plan-77.md" {
+		t.Errorf("Expected PlanFile '.agentium/plan-77.md', got %s", plan.PlanFile)
 	}
 	if plan.Summary != "Implement feature" {
 		t.Errorf("Expected summary 'Implement feature', got %s", plan.Summary)

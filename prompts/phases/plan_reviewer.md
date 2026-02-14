@@ -31,7 +31,7 @@ Plans describe approach, not implementation code. Do not request code snippets, 
 
 ### Where the Plan Is
 
-The plan is at `.agentium/plan.md`. Read this file to evaluate the plan. The phase output log shows the worker's exploration process for context.
+The plan is at `{{plan_file}}`. Read this file to evaluate the plan. The phase output log shows the worker's exploration process for context.
 
 ### Guidelines
 

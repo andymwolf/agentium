@@ -78,6 +78,10 @@ func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (R
 		}
 	}
 
+	// Apply template variable substitution to skills prompts (e.g., {{plan_file}})
+	reviewerSkillsPrompt = c.renderWithParameters(reviewerSkillsPrompt)
+	session.IterationContext.SkillsPrompt = reviewerSkillsPrompt
+
 	// Select adapter via compound key fallback chain
 	activeAgent := c.agent
 	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
@@ -229,7 +233,7 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	if params.CompletedPhase == PhasePlan {
 		// PLAN phase: review the plan file written to the workspace
 		sb.WriteString("Review the **plan** produced in this phase.\n\n")
-		sb.WriteString("**IMPORTANT:** Read the plan at `.agentium/plan.md`. Evaluate it against the issue requirements. ")
+		sb.WriteString(fmt.Sprintf("**IMPORTANT:** Read the plan at `%s`. Evaluate it against the issue requirements. ", PlanFilePath(c.activeTask)))
 		sb.WriteString("The Phase Output above shows the worker's exploration process for context.\n\n")
 		sb.WriteString("Evaluate the plan on:\n")
 		sb.WriteString("- **Issue alignment:** Does the plan address what the issue asks for?\n")

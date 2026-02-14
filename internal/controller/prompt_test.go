@@ -367,8 +367,8 @@ func TestBuildPromptForTask_ImplementWithPlan(t *testing.T) {
 	if containsString(got, "This is urgent") {
 		t.Errorf("expected comments to be omitted when plan exists, got:\n%s", got)
 	}
-	// Should reference plan file
-	if !containsString(got, ".agentium/plan.md") {
+	// Should reference issue-scoped plan file
+	if !containsString(got, ".agentium/plan-42.md") {
 		t.Errorf("expected reference to plan file, got:\n%s", got)
 	}
 }
@@ -814,6 +814,7 @@ func TestBuildIterateFeedbackSectionWithPlan(t *testing.T) {
 		logger:       log.New(io.Discard, "", 0),
 		memoryStore:  memStore,
 		handoffStore: hStore,
+		activeTask:   "42",
 	}
 
 	got := c.buildIterateFeedbackSection("issue:42", 2, "", PhasePlan)
@@ -822,7 +823,7 @@ func TestBuildIterateFeedbackSectionWithPlan(t *testing.T) {
 		"plan was reviewed",
 		"AGENTIUM_PLAN_START",
 		"Your current plan",
-		".agentium/plan.md",
+		".agentium/plan-42.md",
 		"Submit your revised plan",
 	}
 	for _, substr := range wantContains {

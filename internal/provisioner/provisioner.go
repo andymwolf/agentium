@@ -108,14 +108,13 @@ type ProvDelegationConfig struct {
 // ProvPhaseLoopConfig contains phase loop configuration for provisioned sessions.
 // Phase loop is enabled when this config is present (non-nil).
 type ProvPhaseLoopConfig struct {
-	SkipPlanIfExists       bool `json:"skip_plan_if_exists,omitempty"`
-	PlanMaxIterations      int  `json:"plan_max_iterations,omitempty"`
-	ImplementMaxIterations int  `json:"implement_max_iterations,omitempty"`
-	ReviewMaxIterations    int  `json:"review_max_iterations,omitempty"`
-	DocsMaxIterations      int  `json:"docs_max_iterations,omitempty"`
-	VerifyMaxIterations    int  `json:"verify_max_iterations,omitempty"`
-	JudgeContextBudget     int  `json:"judge_context_budget,omitempty"`
-	JudgeNoSignalLimit     int  `json:"judge_no_signal_limit,omitempty"`
+	PlanMaxIterations      int `json:"plan_max_iterations,omitempty"`
+	ImplementMaxIterations int `json:"implement_max_iterations,omitempty"`
+	ReviewMaxIterations    int `json:"review_max_iterations,omitempty"`
+	DocsMaxIterations      int `json:"docs_max_iterations,omitempty"`
+	VerifyMaxIterations    int `json:"verify_max_iterations,omitempty"`
+	JudgeContextBudget     int `json:"judge_context_budget,omitempty"`
+	JudgeNoSignalLimit     int `json:"judge_no_signal_limit,omitempty"`
 }
 
 // ProvMonorepoConfig contains monorepo settings for provisioned sessions.

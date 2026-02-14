@@ -26,9 +26,10 @@ func (c *Controller) renderWithParameters(prompt string) string {
 		builtins["issue_url"] = fmt.Sprintf("https://github.com/%s/issues/%s", c.config.Repository, c.activeTask)
 	}
 
-	// Add issue_number only for issue tasks (not PR tasks)
+	// Add issue_number and plan_file only for issue tasks (not PR tasks)
 	if c.activeTask != "" && c.activeTaskType == "issue" {
 		builtins["issue_number"] = c.activeTask
+		builtins["plan_file"] = PlanFilePath(c.activeTask)
 	}
 
 	// Merge with user parameters (user params override builtins)
@@ -59,7 +60,7 @@ func (c *Controller) buildPromptForTask(issueNumber string, existingWork *agent.
 
 		// For IMPLEMENT with handoff plan: skip body/comments (plan replaces them)
 		if phase == PhaseImplement && c.hasPlanForTask(issueNumber) {
-			sb.WriteString("Your implementation plan is at `.agentium/plan.md` — read it before starting work.\n\n")
+			sb.WriteString(fmt.Sprintf("Your implementation plan is at `%s` — read it before starting work.\n\n", PlanFilePath(issueNumber)))
 		} else {
 			// Full context for PLAN, DOCS, VERIFY, or fallback when no plan exists
 			if issue.Body != "" {
@@ -320,12 +321,12 @@ func (c *Controller) writePhaseCompletion(sb *strings.Builder, phase TaskPhase, 
 	case PhasePlan:
 		// Direct the worker to read the plan file
 		sb.WriteString("## Your current plan\n\n")
-		sb.WriteString("Your current plan is at `.agentium/plan.md` — read it, then output a revised plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers.\n\n")
+		fmt.Fprintf(sb, "Your current plan is at `%s` — read it, then output a revised plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers.\n\n", PlanFilePath(c.activeTask))
 
 		sb.WriteString("## Submit your revised plan\n\n")
 		sb.WriteString("When you've addressed the feedback, output your revised plan between markers and emit a lightweight handoff signal:\n\n")
 		sb.WriteString("```\nAGENTIUM_PLAN_START\n# Implementation Plan\n...(your revised plan in markdown)...\nAGENTIUM_PLAN_END\n\n")
-		sb.WriteString("AGENTIUM_HANDOFF: {\"plan_file\": \".agentium/plan.md\", \"summary\": \"...\", \"files_to_modify\": [\"...\"], \"files_to_create\": [\"...\"], \"testing_approach\": \"...\"}\n```\n\n")
+		fmt.Fprintf(sb, "AGENTIUM_HANDOFF: {\"plan_file\": \"%s\", \"summary\": \"...\", \"files_to_modify\": [\"...\"], \"files_to_create\": [\"...\"], \"testing_approach\": \"...\"}\n```\n\n", PlanFilePath(c.activeTask))
 
 	case PhaseImplement:
 		diffBase := "main"

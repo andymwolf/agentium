@@ -154,7 +154,6 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 	// Enable phase loop (PLAN → IMPLEMENT → DOCS → PR workflow)
 	// Phase loop is always enabled - the config just customizes iteration counts
 	sessionConfig.PhaseLoop = &controller.PhaseLoopConfig{
-		SkipPlanIfExists:       cfg.PhaseLoop.SkipPlanIfExists,
 		PlanMaxIterations:      cfg.PhaseLoop.PlanMaxIterations,
 		ImplementMaxIterations: cfg.PhaseLoop.ImplementMaxIterations,
 		DocsMaxIterations:      cfg.PhaseLoop.DocsMaxIterations,

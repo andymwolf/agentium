@@ -245,7 +245,7 @@ Include enough detail that another agent could follow the plan step-by-step: fil
 
 When your plan is ready:
 
-1. **Output the plan between markers** — this is the rich, detailed plan that will be saved to `.agentium/plan.md` for the IMPLEMENT phase to follow:
+1. **Output the plan between markers** — this is the rich, detailed plan that will be saved to `{{plan_file}}` for the IMPLEMENT phase to follow:
 
 ```
 AGENTIUM_PLAN_START
@@ -277,7 +277,7 @@ AGENTIUM_PLAN_END
 2. **Emit a lightweight handoff signal** with metadata for the controller:
 
 ```
-AGENTIUM_HANDOFF: {"plan_file": ".agentium/plan.md", "summary": "...", "files_to_modify": ["..."], "files_to_create": ["..."], "testing_approach": "..."}
+AGENTIUM_HANDOFF: {"plan_file": "{{plan_file}}", "summary": "...", "files_to_modify": ["..."], "files_to_create": ["..."], "testing_approach": "..."}
 ```
 
 3. **Emit the status signal:**
@@ -288,7 +288,7 @@ AGENTIUM_STATUS: COMPLETE
 ### On ITERATE (Subsequent Iterations)
 
 If you receive feedback and are asked to revise your plan:
-1. Read `.agentium/plan.md` to see your current plan
+1. Read `{{plan_file}}` to see your current plan
 2. Address the feedback
 3. Output a revised plan between `AGENTIUM_PLAN_START` / `AGENTIUM_PLAN_END` markers
 4. Emit the updated `AGENTIUM_HANDOFF` signal and `AGENTIUM_STATUS: COMPLETE`

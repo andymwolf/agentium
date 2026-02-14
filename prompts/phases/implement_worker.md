@@ -177,7 +177,7 @@ You are in the **IMPLEMENT** phase. Your job is to implement the solution and cr
 Before doing anything else, read your implementation plan:
 
 ```bash
-cat .agentium/plan.md
+cat {{plan_file}}
 ```
 
 This plan was produced and approved during the PLAN phase. Follow it step by step.

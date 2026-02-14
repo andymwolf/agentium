@@ -73,10 +73,10 @@ func (b *Builder) buildImplementInput(taskID string) (*ImplementInput, error) {
 		return nil, fmt.Errorf("no plan output found for task %s", taskID)
 	}
 
-	// Use the plan file path if available, otherwise fall back to a default path.
+	// Use the plan file path if available, otherwise fall back to issue-scoped default.
 	planFile := plan.PlanFile
 	if planFile == "" {
-		planFile = ".agentium/plan.md"
+		planFile = fmt.Sprintf(".agentium/plan-%d.md", issue.Number)
 	}
 
 	input := &ImplementInput{

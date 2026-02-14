@@ -27,7 +27,7 @@ func TestBuildReviewPrompt(t *testing.T) {
 		"#42",
 		"modify auth.go",
 		"Review the **plan**",
-		".agentium/plan.md",
+		".agentium/plan-42.md",
 		"Issue alignment",
 	}
 	notContains := []string{
@@ -397,7 +397,7 @@ func TestBuildReviewPrompt_PlanPhaseNoCodeReview(t *testing.T) {
 
 	contains := []string{
 		"Review the **plan**",
-		".agentium/plan.md",
+		".agentium/plan-10.md",
 		"Issue alignment",
 		"Feasibility",
 		"Completeness",
