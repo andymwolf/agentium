@@ -21,6 +21,7 @@ type issueDetail struct {
 	Number    int            `json:"number"`
 	Title     string         `json:"title"`
 	Body      string         `json:"body"`
+	State     string         `json:"state"`
 	Labels    []issueLabel   `json:"labels"`
 	Comments  []issueComment `json:"comments"`
 	DependsOn []string       // Parsed dependency issue IDs (populated by buildDependencyGraph)
