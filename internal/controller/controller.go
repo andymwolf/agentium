@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -590,6 +591,34 @@ func (c *Controller) initSession(ctx context.Context) error {
 	// Fetch all task details upfront
 	if len(c.config.Tasks) > 0 {
 		c.issueDetails = c.fetchIssueDetails(ctx)
+
+		// Filter out closed issues — they should not be processed
+		var openIssues []issueDetail
+		for _, issue := range c.issueDetails {
+			id := strconv.Itoa(issue.Number)
+			if strings.EqualFold(issue.State, "CLOSED") {
+				c.logWarning("Issue #%s is closed — skipping", id)
+				delete(c.taskStates, taskKey("issue", id))
+				continue
+			}
+			openIssues = append(openIssues, issue)
+		}
+		c.issueDetails = openIssues
+
+		// Rebuild issueDetailsByNumber to reflect filtered list
+		c.issueDetailsByNumber = make(map[string]*issueDetail, len(c.issueDetails))
+		for i := range c.issueDetails {
+			c.issueDetailsByNumber[strconv.Itoa(c.issueDetails[i].Number)] = &c.issueDetails[i]
+		}
+
+		// Rebuild task queue without closed issues
+		var filteredQueue []TaskQueueItem
+		for _, item := range c.taskQueue {
+			if _, exists := c.taskStates[taskKey(item.Type, item.ID)]; exists {
+				filteredQueue = append(filteredQueue, item)
+			}
+		}
+		c.taskQueue = filteredQueue
 	}
 
 	// Build inter-issue dependency graph (only for multi-issue batches)

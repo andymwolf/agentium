@@ -19,7 +19,7 @@ func (c *Controller) fetchIssueDetails(ctx context.Context) []issueDetail {
 		// Use gh CLI to fetch issue
 		cmd := c.execCommand(ctx, "gh", "issue", "view", taskID,
 			"--repo", c.config.Repository,
-			"--json", "number,title,body,labels,comments",
+			"--json", "number,title,body,state,labels,comments",
 		)
 		cmd.Env = c.envWithGitHubToken()
 

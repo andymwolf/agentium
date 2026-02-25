@@ -180,7 +180,7 @@ func (c *Controller) fetchSubIssueDetails(ctx context.Context, issueIDs []string
 
 		cmd := c.execCommand(ctx, "gh", "issue", "view", id,
 			"--repo", c.config.Repository,
-			"--json", "number,title,body,labels",
+			"--json", "number,title,body,state,labels",
 		)
 		cmd.Env = c.envWithGitHubToken()
 

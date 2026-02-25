@@ -1,6 +1,12 @@
 package controller
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -234,5 +240,204 @@ func TestFormatExternalComments(t *testing.T) {
 				t.Errorf("formatExternalComments() =\n%q\nwant:\n%q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFetchIssueDetails_IncludesState(t *testing.T) {
+	// Verify that fetchIssueDetails populates the State field from gh output
+	issue := issueDetail{
+		Number: 42,
+		Title:  "Open issue",
+		Body:   "body",
+		State:  "OPEN",
+		Labels: []issueLabel{{Name: "bug"}},
+	}
+	closedIssue := issueDetail{
+		Number: 43,
+		Title:  "Closed issue",
+		Body:   "done",
+		State:  "CLOSED",
+		Labels: []issueLabel{{Name: "bug"}},
+	}
+
+	responses := map[string]issueDetail{
+		"42": issue,
+		"43": closedIssue,
+	}
+
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+			Tasks:      []string{"42", "43"},
+		},
+		logger: newTestLogger(),
+		cmdRunner: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			// Find the issue number from args (it follows "view")
+			var issueNum string
+			for i, arg := range args {
+				if arg == "view" && i+1 < len(args) {
+					issueNum = args[i+1]
+					break
+				}
+			}
+			resp, ok := responses[issueNum]
+			if !ok {
+				return exec.CommandContext(ctx, "false")
+			}
+			data, _ := json.Marshal(resp)
+			return exec.CommandContext(ctx, "echo", string(data))
+		},
+	}
+
+	issues := c.fetchIssueDetails(context.Background())
+
+	if len(issues) != 2 {
+		t.Fatalf("got %d issues, want 2", len(issues))
+	}
+
+	for _, iss := range issues {
+		want := responses[strconv.Itoa(iss.Number)]
+		if iss.State != want.State {
+			t.Errorf("issue #%d State = %q, want %q", iss.Number, iss.State, want.State)
+		}
+	}
+}
+
+func TestFilterClosedIssues(t *testing.T) {
+	// Simulate what initSession does after fetchIssueDetails:
+	// closed issues should be removed from issueDetails, taskStates, and taskQueue.
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+			Tasks:      []string{"10", "11", "12"},
+		},
+		taskStates: map[string]*TaskState{
+			"issue:10": {ID: "10", Type: "issue", Phase: PhaseImplement},
+			"issue:11": {ID: "11", Type: "issue", Phase: PhaseImplement},
+			"issue:12": {ID: "12", Type: "issue", Phase: PhaseImplement},
+		},
+		taskQueue: []TaskQueueItem{
+			{Type: "issue", ID: "10"},
+			{Type: "issue", ID: "11"},
+			{Type: "issue", ID: "12"},
+		},
+		issueDetails: []issueDetail{
+			{Number: 10, Title: "Open", State: "OPEN"},
+			{Number: 11, Title: "Closed", State: "CLOSED"},
+			{Number: 12, Title: "Also open", State: "OPEN"},
+		},
+	}
+
+	// Apply the same filtering logic as initSession
+	var openIssues []issueDetail
+	for _, issue := range c.issueDetails {
+		id := strconv.Itoa(issue.Number)
+		if strings.EqualFold(issue.State, "CLOSED") {
+			delete(c.taskStates, taskKey("issue", id))
+			continue
+		}
+		openIssues = append(openIssues, issue)
+	}
+	c.issueDetails = openIssues
+
+	c.issueDetailsByNumber = make(map[string]*issueDetail, len(c.issueDetails))
+	for i := range c.issueDetails {
+		c.issueDetailsByNumber[fmt.Sprintf("%d", c.issueDetails[i].Number)] = &c.issueDetails[i]
+	}
+
+	var filteredQueue []TaskQueueItem
+	for _, item := range c.taskQueue {
+		if _, exists := c.taskStates[taskKey(item.Type, item.ID)]; exists {
+			filteredQueue = append(filteredQueue, item)
+		}
+	}
+	c.taskQueue = filteredQueue
+
+	// Verify: only open issues remain
+	if len(c.issueDetails) != 2 {
+		t.Fatalf("issueDetails length = %d, want 2", len(c.issueDetails))
+	}
+	for _, iss := range c.issueDetails {
+		if iss.Number == 11 {
+			t.Errorf("closed issue #11 should have been filtered out")
+		}
+	}
+
+	// Verify task states
+	if _, ok := c.taskStates["issue:11"]; ok {
+		t.Error("taskStates should not contain closed issue:11")
+	}
+	if _, ok := c.taskStates["issue:10"]; !ok {
+		t.Error("taskStates should contain open issue:10")
+	}
+	if _, ok := c.taskStates["issue:12"]; !ok {
+		t.Error("taskStates should contain open issue:12")
+	}
+
+	// Verify task queue
+	if len(c.taskQueue) != 2 {
+		t.Fatalf("taskQueue length = %d, want 2", len(c.taskQueue))
+	}
+	wantIDs := []string{"10", "12"}
+	for i, want := range wantIDs {
+		if c.taskQueue[i].ID != want {
+			t.Errorf("taskQueue[%d].ID = %q, want %q", i, c.taskQueue[i].ID, want)
+		}
+	}
+
+	// Verify issueDetailsByNumber
+	if _, ok := c.issueDetailsByNumber["11"]; ok {
+		t.Error("issueDetailsByNumber should not contain closed issue #11")
+	}
+	if _, ok := c.issueDetailsByNumber["10"]; !ok {
+		t.Error("issueDetailsByNumber should contain open issue #10")
+	}
+}
+
+func TestFilterClosedIssues_AllClosed(t *testing.T) {
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+			Tasks:      []string{"1"},
+		},
+		taskStates: map[string]*TaskState{
+			"issue:1": {ID: "1", Type: "issue", Phase: PhaseImplement},
+		},
+		taskQueue: []TaskQueueItem{
+			{Type: "issue", ID: "1"},
+		},
+		issueDetails: []issueDetail{
+			{Number: 1, Title: "Done", State: "CLOSED"},
+		},
+	}
+
+	// Apply filtering
+	var openIssues []issueDetail
+	for _, issue := range c.issueDetails {
+		id := strconv.Itoa(issue.Number)
+		if strings.EqualFold(issue.State, "CLOSED") {
+			delete(c.taskStates, taskKey("issue", id))
+			continue
+		}
+		openIssues = append(openIssues, issue)
+	}
+	c.issueDetails = openIssues
+
+	var filteredQueue []TaskQueueItem
+	for _, item := range c.taskQueue {
+		if _, exists := c.taskStates[taskKey(item.Type, item.ID)]; exists {
+			filteredQueue = append(filteredQueue, item)
+		}
+	}
+	c.taskQueue = filteredQueue
+
+	if len(c.issueDetails) != 0 {
+		t.Errorf("issueDetails length = %d, want 0", len(c.issueDetails))
+	}
+	if len(c.taskStates) != 0 {
+		t.Errorf("taskStates length = %d, want 0", len(c.taskStates))
+	}
+	if len(c.taskQueue) != 0 {
+		t.Errorf("taskQueue length = %d, want 0", len(c.taskQueue))
 	}
 }
