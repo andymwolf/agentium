@@ -491,10 +491,36 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Post phase comment with filtered content (no tool results, max 250 lines)
 			c.postPhaseComment(ctx, plc.currentPhase, iter, RoleWorker, plc.commentContent)
 
-			// Create draft PR after first IMPLEMENT iteration with commits
+			// Create draft PR after first IMPLEMENT iteration with commits.
+			// Retry with backoff — a task must not "complete" without a PR.
 			if plc.currentPhase == PhaseImplement && !state.DraftPRCreated {
-				if prErr := c.maybeCreateDraftPR(ctx, taskID); prErr != nil {
-					c.logWarning("Failed to create draft PR: %v", prErr)
+				delays := []time.Duration{0, 2 * time.Second, 4 * time.Second}
+				var prErr error
+				for attempt, delay := range delays {
+					if attempt > 0 {
+						c.logWarning("Draft PR creation failed (attempt %d/%d), retrying in %s: %v",
+							attempt, len(delays), delay, prErr)
+						select {
+						case <-time.After(delay):
+						case <-ctx.Done():
+						}
+						if ctx.Err() != nil {
+							prErr = ctx.Err()
+							break
+						}
+					}
+					prErr = c.maybeCreateDraftPR(ctx, taskID)
+					if prErr == nil {
+						break
+					}
+				}
+				if prErr != nil {
+					c.logError("Draft PR creation failed after %d attempts: %v", len(delays), prErr)
+					state.Phase = PhaseBlocked
+					state.ControllerOverrode = true
+					c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController,
+						fmt.Sprintf("BLOCKED: draft PR creation failed after %d attempts: %v — task requires human intervention.", len(delays), prErr))
+					return nil
 				}
 			}
 

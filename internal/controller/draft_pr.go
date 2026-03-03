@@ -192,6 +192,7 @@ func (c *Controller) ensureBranchPushed(ctx context.Context, branchName string) 
 	// Check if remote branch exists
 	checkCmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", "origin", branchName)
 	checkCmd.Dir = c.workDir
+	checkCmd.Env = c.envWithGitHubToken()
 	checkOutput, checkErr := checkCmd.Output()
 	if checkErr != nil {
 		return fmt.Errorf("failed to check remote branch: %w", checkErr)
