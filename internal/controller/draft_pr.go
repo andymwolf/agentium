@@ -7,9 +7,41 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/andywolf/agentium/internal/handoff"
 )
+
+// createDraftPRWithRetry attempts to create a draft PR with retries and backoff.
+// Returns true if the task was blocked (all retry attempts exhausted).
+func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, state *TaskState, phase TaskPhase, iter int) bool {
+	delays := []time.Duration{0, 2 * time.Second, 4 * time.Second}
+	var prErr error
+	for attempt, delay := range delays {
+		if attempt > 0 {
+			c.logWarning("Draft PR creation failed (retry %d/%d), retrying in %s: %v",
+				attempt, len(delays)-1, delay, prErr)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+			}
+			if ctx.Err() != nil {
+				prErr = ctx.Err()
+				break
+			}
+		}
+		prErr = c.maybeCreateDraftPR(ctx, taskID)
+		if prErr == nil {
+			return false
+		}
+	}
+	c.logError("Draft PR creation failed after %d attempts: %v", len(delays), prErr)
+	state.Phase = PhaseBlocked
+	state.ControllerOverrode = true
+	c.postPhaseComment(ctx, phase, iter, RoleController,
+		fmt.Sprintf("BLOCKED: draft PR creation failed after %d attempts: %v — task requires human intervention.", len(delays), prErr))
+	return true
+}
 
 // maybeCreateDraftPR ensures a draft PR exists for the current branch.
 // It first checks if a PR already exists (from worker, previous run, etc.),

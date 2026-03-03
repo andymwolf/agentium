@@ -494,32 +494,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Create draft PR after first IMPLEMENT iteration with commits.
 			// Retry with backoff — a task must not "complete" without a PR.
 			if plc.currentPhase == PhaseImplement && !state.DraftPRCreated {
-				delays := []time.Duration{0, 2 * time.Second, 4 * time.Second}
-				var prErr error
-				for attempt, delay := range delays {
-					if attempt > 0 {
-						c.logWarning("Draft PR creation failed (attempt %d/%d), retrying in %s: %v",
-							attempt, len(delays), delay, prErr)
-						select {
-						case <-time.After(delay):
-						case <-ctx.Done():
-						}
-						if ctx.Err() != nil {
-							prErr = ctx.Err()
-							break
-						}
-					}
-					prErr = c.maybeCreateDraftPR(ctx, taskID)
-					if prErr == nil {
-						break
-					}
-				}
-				if prErr != nil {
-					c.logError("Draft PR creation failed after %d attempts: %v", len(delays), prErr)
-					state.Phase = PhaseBlocked
-					state.ControllerOverrode = true
-					c.postPhaseComment(ctx, plc.currentPhase, iter, RoleController,
-						fmt.Sprintf("BLOCKED: draft PR creation failed after %d attempts: %v — task requires human intervention.", len(delays), prErr))
+				if blocked := c.createDraftPRWithRetry(ctx, taskID, state, plc.currentPhase, iter); blocked {
 					return nil
 				}
 			}
