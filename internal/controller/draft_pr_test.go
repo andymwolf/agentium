@@ -238,6 +238,96 @@ func TestMaybeCreateDraftPR_SkipsMismatchedBranch(t *testing.T) {
 	}
 }
 
+func TestCreateDraftPRWithRetry_BlocksOnExhaustion(t *testing.T) {
+	taskID := "issue:123"
+	state := &TaskState{
+		ID:             "123",
+		Type:           "issue",
+		Phase:          PhaseImplement,
+		DraftPRCreated: false,
+	}
+	c := &Controller{
+		taskStates: map[string]*TaskState{taskID: state},
+		logger:     newTestLogger(),
+		workDir:    "/nonexistent/path/that/does/not/exist",
+	}
+
+	// maybeCreateDraftPR will fail because workDir doesn't exist,
+	// causing branch detection to fail on every attempt.
+	blocked := c.createDraftPRWithRetry(context.Background(), taskID, state, PhaseImplement, 1)
+
+	if !blocked {
+		t.Fatal("expected createDraftPRWithRetry to return blocked=true after exhausting retries")
+	}
+	if state.Phase != PhaseBlocked {
+		t.Errorf("state.Phase = %q, want %q", state.Phase, PhaseBlocked)
+	}
+	if !state.ControllerOverrode {
+		t.Error("expected state.ControllerOverrode to be true")
+	}
+	if state.DraftPRCreated {
+		t.Error("expected state.DraftPRCreated to remain false")
+	}
+}
+
+func TestCreateDraftPRWithRetry_SucceedsWhenAlreadyCreated(t *testing.T) {
+	taskID := "issue:456"
+	state := &TaskState{
+		ID:             "456",
+		Type:           "issue",
+		Phase:          PhaseImplement,
+		DraftPRCreated: true, // Already created
+	}
+	c := &Controller{
+		taskStates: map[string]*TaskState{taskID: state},
+		logger:     newTestLogger(),
+	}
+
+	// maybeCreateDraftPR returns nil immediately when DraftPRCreated is true,
+	// so the retry loop should succeed on the first attempt.
+	blocked := c.createDraftPRWithRetry(context.Background(), taskID, state, PhaseImplement, 1)
+
+	if blocked {
+		t.Fatal("expected createDraftPRWithRetry to return blocked=false when PR already created")
+	}
+	if state.Phase != PhaseImplement {
+		t.Errorf("state.Phase = %q, want %q", state.Phase, PhaseImplement)
+	}
+	if state.ControllerOverrode {
+		t.Error("expected state.ControllerOverrode to remain false")
+	}
+}
+
+func TestCreateDraftPRWithRetry_RespectsContextCancellation(t *testing.T) {
+	taskID := "issue:789"
+	state := &TaskState{
+		ID:             "789",
+		Type:           "issue",
+		Phase:          PhaseImplement,
+		DraftPRCreated: false,
+	}
+	c := &Controller{
+		taskStates: map[string]*TaskState{taskID: state},
+		logger:     newTestLogger(),
+	}
+
+	// Cancel context before calling — the retry loop should stop early.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	blocked := c.createDraftPRWithRetry(ctx, taskID, state, PhaseImplement, 1)
+
+	if !blocked {
+		t.Fatal("expected createDraftPRWithRetry to return blocked=true on cancelled context")
+	}
+	if state.Phase != PhaseBlocked {
+		t.Errorf("state.Phase = %q, want %q", state.Phase, PhaseBlocked)
+	}
+	if !state.ControllerOverrode {
+		t.Error("expected state.ControllerOverrode to be true")
+	}
+}
+
 func TestTaskState_NOMERGEConditions(t *testing.T) {
 	// Verify both ControllerOverrode and JudgeOverrodeReviewer trigger NOMERGE
 	tests := []struct {

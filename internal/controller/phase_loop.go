@@ -491,10 +491,11 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 			// Post phase comment with filtered content (no tool results, max 250 lines)
 			c.postPhaseComment(ctx, plc.currentPhase, iter, RoleWorker, plc.commentContent)
 
-			// Create draft PR after first IMPLEMENT iteration with commits
+			// Create draft PR after first IMPLEMENT iteration with commits.
+			// Retry with backoff — a task must not "complete" without a PR.
 			if plc.currentPhase == PhaseImplement && !state.DraftPRCreated {
-				if prErr := c.maybeCreateDraftPR(ctx, taskID); prErr != nil {
-					c.logWarning("Failed to create draft PR: %v", prErr)
+				if blocked := c.createDraftPRWithRetry(ctx, taskID, state, plc.currentPhase, iter); blocked {
+					return nil
 				}
 			}
 
