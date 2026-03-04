@@ -54,10 +54,10 @@ jobs:
       contents: read
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
             goarch: arm64
     steps:
       - uses: actions/checkout@v6
@@ -72,17 +72,13 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           LDFLAGS="-X github.com/andywolf/agentium/internal/version.Commit=${{ github.sha }}"
-          go build -ldflags="${LDFLAGS}" -o agentium-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/agentium
+          go build -ldflags="${LDFLAGS}" -o agentium-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agentium
 
       - name: Build controller
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           LDFLAGS="-X github.com/andywolf/agentium/internal/version.Commit=${{ github.sha }}"
-          go build -ldflags="${LDFLAGS}" -o controller-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/controller
+          go build -ldflags="${LDFLAGS}" -o controller-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/controller
