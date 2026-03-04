@@ -371,25 +371,6 @@ resource "google_compute_instance" "agentium" {
     google_service_account_iam_member.self_user,
   ]
 }
-
-# Firewall rule to allow outbound traffic
-resource "google_compute_firewall" "agentium_egress" {
-  name    = "agentium-allow-egress-${substr(var.session_id, 0, 20)}"
-  network = var.network
-  project = var.project_id
-
-  direction = "EGRESS"
-
-  allow {
-    protocol = "tcp"
-    ports    = ["443", "80", "22"]
-  }
-
-  target_tags = ["agentium"]
-
-  depends_on = [google_project_service.compute]
-}
-
 output "instance_id" {
   description = "The instance ID"
   value       = google_compute_instance.agentium.name

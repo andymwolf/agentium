@@ -15,6 +15,15 @@ import (
 	"github.com/andywolf/agentium/terraform"
 )
 
+const (
+	// sharedFirewallRuleName is the name of the single shared egress firewall
+	// rule used by all Agentium sessions. Created once on first use.
+	sharedFirewallRuleName = "agentium-allow-egress"
+
+	// defaultNetwork is the GCP VPC network used when none is configured.
+	defaultNetwork = "default"
+)
+
 // GCPProvisioner implements Provisioner for Google Cloud Platform
 type GCPProvisioner struct {
 	verbose           bool
@@ -54,6 +63,56 @@ func (p *GCPProvisioner) setCredentialEnv(cmd *exec.Cmd) {
 		"GOOGLE_APPLICATION_CREDENTIALS="+p.serviceAccountKey,
 		"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="+p.serviceAccountKey,
 	)
+}
+
+// ensureFirewallRule creates the shared egress firewall rule if it does not
+// already exist. The rule is shared across all Agentium sessions and is never
+// deleted during session teardown.
+func (p *GCPProvisioner) ensureFirewallRule(ctx context.Context) error {
+	network := defaultNetwork
+
+	// Check if the rule already exists
+	descArgs := []string{"compute", "firewall-rules", "describe", sharedFirewallRuleName, "--format=value(name)"}
+	if p.project != "" {
+		descArgs = append(descArgs, "--project="+p.project)
+	}
+	descCmd := exec.CommandContext(ctx, "gcloud", descArgs...)
+	p.setCredentialEnv(descCmd)
+	if err := descCmd.Run(); err == nil {
+		// Rule already exists
+		return nil
+	}
+
+	// Rule doesn't exist — create it
+	createArgs := []string{
+		"compute", "firewall-rules", "create", sharedFirewallRuleName,
+		"--direction=EGRESS",
+		"--action=ALLOW",
+		"--rules=tcp:443,tcp:80,tcp:22",
+		"--target-tags=agentium",
+		"--network=" + network,
+		"--quiet",
+	}
+	if p.project != "" {
+		createArgs = append(createArgs, "--project="+p.project)
+	}
+	createCmd := exec.CommandContext(ctx, "gcloud", createArgs...)
+	p.setCredentialEnv(createCmd)
+	output, err := createCmd.CombinedOutput()
+	if err != nil {
+		// Handle race condition: another session may have created the rule concurrently
+		if isAlreadyExistsError(string(output)) {
+			return nil
+		}
+		return fmt.Errorf("failed to create shared firewall rule: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+	return nil
+}
+
+// isAlreadyExistsError checks if gcloud command output indicates a resource already exists.
+func isAlreadyExistsError(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "already exists")
 }
 
 // Provision creates a new GCP VM for an agent session
@@ -132,6 +191,11 @@ max_run_duration   = "%s"
 	// Copy terraform files to work directory
 	if err = p.copyTerraformFiles(workDir); err != nil {
 		return nil, fmt.Errorf("failed to copy terraform files: %w", err)
+	}
+
+	// Ensure the shared egress firewall rule exists (created once, never deleted)
+	if err = p.ensureFirewallRule(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ensure firewall rule: %w", err)
 	}
 
 	// Run terraform init
@@ -608,13 +672,7 @@ func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) 
 		errors = append(errors, fmt.Sprintf("instance: %v", err))
 	}
 
-	// 2. Delete the firewall rule
-	firewallName := fmt.Sprintf("agentium-allow-egress-%s", prefix)
-	if err := p.deleteFirewallRule(ctx, firewallName); err != nil {
-		errors = append(errors, fmt.Sprintf("firewall: %v", err))
-	}
-
-	// 3. Remove IAM bindings for the service account
+	// 2. Remove IAM bindings for the service account
 	iamRoles := []string{
 		"roles/secretmanager.secretAccessor",
 		"roles/logging.logWriter",
@@ -626,7 +684,7 @@ func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) 
 		}
 	}
 
-	// 4. Delete the service account
+	// 3. Delete the service account
 	if err := p.deleteServiceAccount(ctx, saEmail); err != nil {
 		errors = append(errors, fmt.Sprintf("service-account: %v", err))
 	}
@@ -665,31 +723,6 @@ func (p *GCPProvisioner) deleteInstance(ctx context.Context, instanceName string
 			return nil
 		}
 		return fmt.Errorf("failed to delete instance %s: %w", instanceName, err)
-	}
-	return nil
-}
-
-// deleteFirewallRule deletes a GCP firewall rule by name.
-func (p *GCPProvisioner) deleteFirewallRule(ctx context.Context, ruleName string) error {
-	args := []string{"compute", "firewall-rules", "delete", ruleName, "--quiet"}
-	if p.project != "" {
-		args = append(args, "--project="+p.project)
-	}
-
-	cmd := exec.CommandContext(ctx, "gcloud", args...)
-	p.setCredentialEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if p.verbose && len(output) > 0 {
-		fmt.Fprintf(os.Stderr, "%s", output)
-	}
-	if err != nil {
-		if isNotFoundError(string(output)) {
-			if p.verbose {
-				fmt.Fprintf(os.Stderr, "firewall rule %s already deleted\n", ruleName)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to delete firewall rule %s: %w", ruleName, err)
 	}
 	return nil
 }

@@ -282,7 +282,14 @@ gcloud services enable compute.googleapis.com secretmanager.googleapis.com
 
 ### "Quota exceeded"
 
-Check your project quotas:
+Agentium uses a single shared firewall rule (`agentium-allow-egress`) that is created automatically on first use and persists across sessions. If you upgraded from an older version, orphaned per-session firewall rules (`agentium-allow-egress-<prefix>`) may be consuming the `FIREWALLS` quota. Clean them up with:
+
+```bash
+gcloud compute firewall-rules list --filter="name~agentium-allow-egress-" --format="value(name)" \
+  | xargs -I {} gcloud compute firewall-rules delete {} --quiet
+```
+
+For other quota issues, check your project quotas:
 
 ```bash
 gcloud compute project-info describe --project YOUR_PROJECT_ID

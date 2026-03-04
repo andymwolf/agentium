@@ -112,32 +112,28 @@ func TestDestroyFallbackResourceNaming(t *testing.T) {
 	// This test verifies that the resource naming in the fallback path
 	// matches the Terraform naming convention.
 	tests := []struct {
-		name         string
-		sessionID    string
-		project      string
-		wantSAEmail  string
-		wantFirewall string
+		name        string
+		sessionID   string
+		project     string
+		wantSAEmail string
 	}{
 		{
-			name:         "standard session ID",
-			sessionID:    "agentium-abc123def456ghi789",
-			project:      "my-project",
-			wantSAEmail:  "agentium-agentium-abc123def45@my-project.iam.gserviceaccount.com",
-			wantFirewall: "agentium-allow-egress-agentium-abc123def45",
+			name:        "standard session ID",
+			sessionID:   "agentium-abc123def456ghi789",
+			project:     "my-project",
+			wantSAEmail: "agentium-agentium-abc123def45@my-project.iam.gserviceaccount.com",
 		},
 		{
-			name:         "short session ID",
-			sessionID:    "test-session",
-			project:      "test-proj",
-			wantSAEmail:  "agentium-test-session@test-proj.iam.gserviceaccount.com",
-			wantFirewall: "agentium-allow-egress-test-session",
+			name:        "short session ID",
+			sessionID:   "test-session",
+			project:     "test-proj",
+			wantSAEmail: "agentium-test-session@test-proj.iam.gserviceaccount.com",
 		},
 		{
-			name:         "exactly 20 char session ID",
-			sessionID:    "12345678901234567890",
-			project:      "proj",
-			wantSAEmail:  "agentium-12345678901234567890@proj.iam.gserviceaccount.com",
-			wantFirewall: "agentium-allow-egress-12345678901234567890",
+			name:        "exactly 20 char session ID",
+			sessionID:   "12345678901234567890",
+			project:     "proj",
+			wantSAEmail: "agentium-12345678901234567890@proj.iam.gserviceaccount.com",
 		},
 	}
 
@@ -151,12 +147,48 @@ func TestDestroyFallbackResourceNaming(t *testing.T) {
 			if saEmail != tt.wantSAEmail {
 				t.Errorf("service account email = %q, want %q", saEmail, tt.wantSAEmail)
 			}
+		})
+	}
+}
 
-			// Verify firewall rule name matches Terraform convention:
-			// name = "agentium-allow-egress-${substr(var.session_id, 0, 20)}"
-			firewallName := "agentium-allow-egress-" + prefix
-			if firewallName != tt.wantFirewall {
-				t.Errorf("firewall rule name = %q, want %q", firewallName, tt.wantFirewall)
+func TestIsAlreadyExistsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{
+			name:   "resource already exists",
+			output: "ERROR: (gcloud.compute.firewall-rules.create) Could not create firewall rule: The resource 'projects/my-project/global/firewalls/agentium-allow-egress' already exists",
+			want:   true,
+		},
+		{
+			name:   "already exists lowercase",
+			output: "the resource already exists in project",
+			want:   true,
+		},
+		{
+			name:   "not found error",
+			output: "ERROR: The resource was not found",
+			want:   false,
+		},
+		{
+			name:   "permission denied error",
+			output: "ERROR: Permission denied",
+			want:   false,
+		},
+		{
+			name:   "empty output",
+			output: "",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAlreadyExistsError(tt.output)
+			if got != tt.want {
+				t.Errorf("isAlreadyExistsError(%q) = %v, want %v", tt.output, got, tt.want)
 			}
 		})
 	}
