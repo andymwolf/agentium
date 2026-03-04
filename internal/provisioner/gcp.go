@@ -114,9 +114,10 @@ func (p *GCPProvisioner) ensureFirewallRule(ctx context.Context) error {
 }
 
 // ensureServiceAccount creates the shared service account if it does not
-// already exist. The SA is shared across all Agentium sessions. Static IAM
-// roles (secretmanager, logging, serviceAccountUser on itself) are granted
-// only when the SA is first created. Returns the SA email.
+// already exist, and ensures all required static IAM roles are bound.
+// The SA is shared across all Agentium sessions. Static IAM bindings are
+// applied idempotently on every call to recover from partial failures
+// (e.g., SA created but bindings failed on a previous run).
 func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, error) {
 	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sharedServiceAccountName, p.project)
 
@@ -127,30 +128,30 @@ func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, erro
 	}
 	descCmd := exec.CommandContext(ctx, "gcloud", descArgs...)
 	p.setCredentialEnv(descCmd)
-	if err := descCmd.Run(); err == nil {
-		return saEmail, nil
-	}
-
-	// SA doesn't exist — create it
-	createArgs := []string{
-		"iam", "service-accounts", "create", sharedServiceAccountName,
-		"--display-name=Agentium Shared Service Account",
-		"--quiet",
-	}
-	if p.project != "" {
-		createArgs = append(createArgs, "--project="+p.project)
-	}
-	createCmd := exec.CommandContext(ctx, "gcloud", createArgs...)
-	p.setCredentialEnv(createCmd)
-	output, err := createCmd.CombinedOutput()
-	if err != nil {
-		if isAlreadyExistsError(string(output)) {
-			return saEmail, nil
+	if err := descCmd.Run(); err != nil {
+		// SA doesn't exist — create it
+		createArgs := []string{
+			"iam", "service-accounts", "create", sharedServiceAccountName,
+			"--display-name=Agentium Shared Service Account",
+			"--quiet",
 		}
-		return "", fmt.Errorf("failed to create shared service account: %s: %w", strings.TrimSpace(string(output)), err)
+		if p.project != "" {
+			createArgs = append(createArgs, "--project="+p.project)
+		}
+		createCmd := exec.CommandContext(ctx, "gcloud", createArgs...)
+		p.setCredentialEnv(createCmd)
+		output, createErr := createCmd.CombinedOutput()
+		if createErr != nil {
+			if !isAlreadyExistsError(string(output)) {
+				return "", fmt.Errorf("failed to create shared service account: %s: %w", strings.TrimSpace(string(output)), createErr)
+			}
+		}
 	}
 
-	// Grant static IAM roles (only on first creation)
+	// Always ensure static IAM roles are bound. add-iam-policy-binding is
+	// idempotent — adding an existing binding is a no-op. This recovers from
+	// cases where the SA was created but bindings failed (e.g., missing
+	// --condition=None before #548).
 	member := "serviceAccount:" + saEmail
 	staticRoles := []string{
 		"roles/secretmanager.secretAccessor",
