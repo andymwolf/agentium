@@ -611,7 +611,17 @@ func (c *Controller) initSession(ctx context.Context) error {
 			c.issueDetailsByNumber[strconv.Itoa(c.issueDetails[i].Number)] = &c.issueDetails[i]
 		}
 
-		// Rebuild task queue without closed issues
+		// Remove tasks for issues that could not be fetched (non-existent, deleted, etc.)
+		for _, taskID := range c.config.Tasks {
+			if _, exists := c.issueDetailsByNumber[taskID]; !exists {
+				if _, inState := c.taskStates[taskKey("issue", taskID)]; inState {
+					c.logWarning("Issue #%s could not be fetched — skipping", taskID)
+					delete(c.taskStates, taskKey("issue", taskID))
+				}
+			}
+		}
+
+		// Rebuild task queue without closed/unfetchable issues
 		var filteredQueue []TaskQueueItem
 		for _, item := range c.taskQueue {
 			if _, exists := c.taskStates[taskKey(item.Type, item.ID)]; exists {

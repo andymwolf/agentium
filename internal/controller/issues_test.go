@@ -441,3 +441,103 @@ func TestFilterClosedIssues_AllClosed(t *testing.T) {
 		t.Errorf("taskQueue length = %d, want 0", len(c.taskQueue))
 	}
 }
+
+func TestFilterNonExistentIssues(t *testing.T) {
+	// Simulate what initSession does when fetchIssueDetails fails for one issue:
+	// the issue never appears in issueDetails or issueDetailsByNumber, but its
+	// task remains in taskStates and taskQueue. The non-existent issue filtering
+	// should remove it from taskStates, and the queue rebuild removes it from taskQueue.
+	c := &Controller{
+		config: SessionConfig{
+			Repository: "org/repo",
+			Tasks:      []string{"20", "21", "22"},
+		},
+		taskStates: map[string]*TaskState{
+			"issue:20": {ID: "20", Type: "issue", Phase: PhaseImplement},
+			"issue:21": {ID: "21", Type: "issue", Phase: PhaseImplement},
+			"issue:22": {ID: "22", Type: "issue", Phase: PhaseImplement},
+		},
+		taskQueue: []TaskQueueItem{
+			{Type: "issue", ID: "20"},
+			{Type: "issue", ID: "21"},
+			{Type: "issue", ID: "22"},
+		},
+		// Issue #21 was not fetched (simulates non-existent/deleted issue)
+		issueDetails: []issueDetail{
+			{Number: 20, Title: "Exists", State: "OPEN"},
+			{Number: 22, Title: "Also exists", State: "OPEN"},
+		},
+	}
+
+	// Apply closed-issue filtering (no-op here — all are OPEN)
+	var openIssues []issueDetail
+	for _, issue := range c.issueDetails {
+		id := strconv.Itoa(issue.Number)
+		if strings.EqualFold(issue.State, "CLOSED") {
+			delete(c.taskStates, taskKey("issue", id))
+			continue
+		}
+		openIssues = append(openIssues, issue)
+	}
+	c.issueDetails = openIssues
+
+	// Rebuild issueDetailsByNumber
+	c.issueDetailsByNumber = make(map[string]*issueDetail, len(c.issueDetails))
+	for i := range c.issueDetails {
+		c.issueDetailsByNumber[fmt.Sprintf("%d", c.issueDetails[i].Number)] = &c.issueDetails[i]
+	}
+
+	// Remove tasks for non-existent issues
+	for _, taskID := range c.config.Tasks {
+		if _, exists := c.issueDetailsByNumber[taskID]; !exists {
+			delete(c.taskStates, taskKey("issue", taskID))
+		}
+	}
+
+	// Rebuild task queue
+	var filteredQueue []TaskQueueItem
+	for _, item := range c.taskQueue {
+		if _, exists := c.taskStates[taskKey(item.Type, item.ID)]; exists {
+			filteredQueue = append(filteredQueue, item)
+		}
+	}
+	c.taskQueue = filteredQueue
+
+	// Verify: only fetched issues remain
+	if len(c.issueDetails) != 2 {
+		t.Fatalf("issueDetails length = %d, want 2", len(c.issueDetails))
+	}
+
+	// Verify taskStates: #21 removed, #20 and #22 present
+	if _, ok := c.taskStates["issue:21"]; ok {
+		t.Error("taskStates should not contain non-existent issue:21")
+	}
+	if _, ok := c.taskStates["issue:20"]; !ok {
+		t.Error("taskStates should contain issue:20")
+	}
+	if _, ok := c.taskStates["issue:22"]; !ok {
+		t.Error("taskStates should contain issue:22")
+	}
+
+	// Verify taskQueue: only #20 and #22
+	if len(c.taskQueue) != 2 {
+		t.Fatalf("taskQueue length = %d, want 2", len(c.taskQueue))
+	}
+	wantIDs := []string{"20", "22"}
+	for i, want := range wantIDs {
+		if c.taskQueue[i].ID != want {
+			t.Errorf("taskQueue[%d].ID = %q, want %q", i, c.taskQueue[i].ID, want)
+		}
+	}
+
+	// Verify issueDetailsByNumber: no #21
+	if _, ok := c.issueDetailsByNumber["21"]; ok {
+		t.Error("issueDetailsByNumber should not contain non-existent issue #21")
+	}
+	if _, ok := c.issueDetailsByNumber["20"]; !ok {
+		t.Error("issueDetailsByNumber should contain issue #20")
+	}
+	if _, ok := c.issueDetailsByNumber["22"]; !ok {
+		t.Error("issueDetailsByNumber should contain issue #22")
+	}
+}
