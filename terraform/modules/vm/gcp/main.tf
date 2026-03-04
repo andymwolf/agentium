@@ -81,6 +81,11 @@ variable "codex_auth_json" {
   sensitive   = true
 }
 
+variable "service_account_email" {
+  description = "Email of the shared service account for Agentium VMs"
+  type        = string
+}
+
 variable "network" {
   description = "VPC network name"
   type        = string
@@ -95,92 +100,6 @@ variable "subnetwork" {
 
 locals {
   zone = var.zone != "" ? var.zone : "${var.region}-a"
-}
-
-# Enable required GCP APIs
-# These must be enabled before any resources that depend on them.
-# disable_on_destroy = false prevents disabling shared APIs on session teardown.
-resource "google_project_service" "iam" {
-  project            = var.project_id
-  service            = "iam.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "cloudresourcemanager" {
-  project            = var.project_id
-  service            = "cloudresourcemanager.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "compute" {
-  project            = var.project_id
-  service            = "compute.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "secretmanager" {
-  project            = var.project_id
-  service            = "secretmanager.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "logging" {
-  project            = var.project_id
-  service            = "logging.googleapis.com"
-  disable_on_destroy = false
-}
-
-# Service account for the VM
-resource "google_service_account" "agentium" {
-  account_id   = "agentium-${substr(var.session_id, 0, 20)}"
-  display_name = "Agentium Session ${var.session_id}"
-  project      = var.project_id
-
-  depends_on = [google_project_service.iam]
-}
-
-# Grant secret accessor role
-resource "google_project_iam_member" "secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-
-  depends_on = [google_project_service.cloudresourcemanager, google_project_service.secretmanager]
-}
-
-# Grant logging writer role
-resource "google_project_iam_member" "logging_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-
-  depends_on = [google_project_service.cloudresourcemanager, google_project_service.logging]
-}
-
-# Grant compute instance admin (for self-deletion only)
-# The IAM condition restricts this role to the session's own VM instance,
-# preventing the service account from modifying or deleting other instances.
-resource "google_project_iam_member" "compute_admin" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.agentium.email}"
-
-  condition {
-    title       = "self-deletion-only"
-    description = "Restrict instance admin to this session's VM only"
-    expression  = "resource.name == 'projects/${var.project_id}/zones/${local.zone}/instances/${var.session_id}'"
-  }
-
-  depends_on = [google_project_service.cloudresourcemanager, google_project_service.compute]
-}
-
-# Grant serviceAccountUser on itself so the VM can update its own instance metadata.
-# Without this, setMetadata operations fail with SERVICE_ACCOUNT_ACCESS_DENIED
-# because the service account cannot impersonate itself.
-resource "google_service_account_iam_member" "self_user" {
-  service_account_id = google_service_account.agentium.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.agentium.email}"
 }
 
 # Cloud-init script
@@ -321,7 +240,7 @@ resource "google_compute_instance" "agentium" {
   }
 
   service_account {
-    email = google_service_account.agentium.email
+    email = var.service_account_email
     # cloud-platform scope is required because Secret Manager has no specific OAuth scope.
     # Access control is enforced via IAM roles (secretmanager.secretAccessor, logging.logWriter,
     # compute.instanceAdmin.v1 with self-deletion condition) rather than OAuth scopes.
@@ -363,13 +282,6 @@ resource "google_compute_instance" "agentium" {
     ]
   }
 
-  depends_on = [
-    google_project_service.compute,
-    google_project_iam_member.logging_writer,
-    google_project_iam_member.secret_accessor,
-    google_project_iam_member.compute_admin,
-    google_service_account_iam_member.self_user,
-  ]
 }
 output "instance_id" {
   description = "The instance ID"
@@ -388,5 +300,5 @@ output "zone" {
 
 output "service_account" {
   description = "The service account email"
-  value       = google_service_account.agentium.email
+  value       = var.service_account_email
 }

@@ -20,6 +20,10 @@ const (
 	// rule used by all Agentium sessions. Created once on first use.
 	sharedFirewallRuleName = "agentium-allow-egress"
 
+	// sharedServiceAccountName is the account_id of the single shared service
+	// account used by all Agentium session VMs. Created once on first use.
+	sharedServiceAccountName = "agentium-shared"
+
 	// defaultNetwork is the GCP VPC network used when none is configured.
 	defaultNetwork = "default"
 )
@@ -109,6 +113,179 @@ func (p *GCPProvisioner) ensureFirewallRule(ctx context.Context) error {
 	return nil
 }
 
+// ensureServiceAccount creates the shared service account if it does not
+// already exist. The SA is shared across all Agentium sessions. Static IAM
+// roles (secretmanager, logging, serviceAccountUser on itself) are granted
+// only when the SA is first created. Returns the SA email.
+func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, error) {
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sharedServiceAccountName, p.project)
+
+	// Check if the SA already exists
+	descArgs := []string{"iam", "service-accounts", "describe", saEmail, "--format=value(email)"}
+	if p.project != "" {
+		descArgs = append(descArgs, "--project="+p.project)
+	}
+	descCmd := exec.CommandContext(ctx, "gcloud", descArgs...)
+	p.setCredentialEnv(descCmd)
+	if err := descCmd.Run(); err == nil {
+		return saEmail, nil
+	}
+
+	// SA doesn't exist — create it
+	createArgs := []string{
+		"iam", "service-accounts", "create", sharedServiceAccountName,
+		"--display-name=Agentium Shared Service Account",
+		"--quiet",
+	}
+	if p.project != "" {
+		createArgs = append(createArgs, "--project="+p.project)
+	}
+	createCmd := exec.CommandContext(ctx, "gcloud", createArgs...)
+	p.setCredentialEnv(createCmd)
+	output, err := createCmd.CombinedOutput()
+	if err != nil {
+		if isAlreadyExistsError(string(output)) {
+			return saEmail, nil
+		}
+		return "", fmt.Errorf("failed to create shared service account: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	// Grant static IAM roles (only on first creation)
+	member := "serviceAccount:" + saEmail
+	staticRoles := []string{
+		"roles/secretmanager.secretAccessor",
+		"roles/logging.logWriter",
+	}
+	for _, role := range staticRoles {
+		args := []string{
+			"projects", "add-iam-policy-binding", p.project,
+			"--member=" + member,
+			"--role=" + role,
+			"--quiet",
+		}
+		cmd := exec.CommandContext(ctx, "gcloud", args...)
+		p.setCredentialEnv(cmd)
+		if out, bindErr := cmd.CombinedOutput(); bindErr != nil {
+			return "", fmt.Errorf("failed to grant %s to shared SA: %s: %w", role, strings.TrimSpace(string(out)), bindErr)
+		}
+	}
+
+	// Grant serviceAccountUser on itself
+	selfArgs := []string{
+		"iam", "service-accounts", "add-iam-policy-binding", saEmail,
+		"--member=" + member,
+		"--role=roles/iam.serviceAccountUser",
+		"--quiet",
+	}
+	if p.project != "" {
+		selfArgs = append(selfArgs, "--project="+p.project)
+	}
+	selfCmd := exec.CommandContext(ctx, "gcloud", selfArgs...)
+	p.setCredentialEnv(selfCmd)
+	if out, selfErr := selfCmd.CombinedOutput(); selfErr != nil {
+		return "", fmt.Errorf("failed to grant serviceAccountUser on shared SA: %s: %w", strings.TrimSpace(string(out)), selfErr)
+	}
+
+	return saEmail, nil
+}
+
+// addInstanceIAMCondition grants compute.instanceAdmin.v1 to the shared SA
+// with a condition scoped to the specific instance. This allows the VM to
+// self-delete without granting broad compute admin access.
+func (p *GCPProvisioner) addInstanceIAMCondition(ctx context.Context, sessionID, zone string) error {
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sharedServiceAccountName, p.project)
+	member := "serviceAccount:" + saEmail
+	condition := fmt.Sprintf(
+		"resource.name == 'projects/%s/zones/%s/instances/%s'",
+		p.project, zone, sessionID,
+	)
+	conditionTitle := fmt.Sprintf("agentium-instance-%s", sessionID)
+
+	args := []string{
+		"projects", "add-iam-policy-binding", p.project,
+		"--member=" + member,
+		"--role=roles/compute.instanceAdmin.v1",
+		"--condition=expression=" + condition + ",title=" + conditionTitle,
+		"--quiet",
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to add instance IAM condition: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+	return nil
+}
+
+// removeInstanceIAMCondition removes the per-instance compute.instanceAdmin.v1
+// binding for the shared SA. Called during session teardown.
+func (p *GCPProvisioner) removeInstanceIAMCondition(ctx context.Context, sessionID, zone string) error {
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sharedServiceAccountName, p.project)
+	member := "serviceAccount:" + saEmail
+	condition := fmt.Sprintf(
+		"resource.name == 'projects/%s/zones/%s/instances/%s'",
+		p.project, zone, sessionID,
+	)
+	conditionTitle := fmt.Sprintf("agentium-instance-%s", sessionID)
+
+	args := []string{
+		"projects", "remove-iam-policy-binding", p.project,
+		"--member=" + member,
+		"--role=roles/compute.instanceAdmin.v1",
+		"--condition=expression=" + condition + ",title=" + conditionTitle,
+		"--quiet",
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if isNotFoundError(string(output)) {
+			return nil
+		}
+		return fmt.Errorf("failed to remove instance IAM condition: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+	return nil
+}
+
+// requiredAPIs is the set of GCP APIs that must be enabled for Agentium to function.
+var requiredAPIs = []string{
+	"iam.googleapis.com",
+	"cloudresourcemanager.googleapis.com",
+	"compute.googleapis.com",
+	"secretmanager.googleapis.com",
+	"logging.googleapis.com",
+}
+
+// ensureAPIs enables the required GCP APIs if they are not already enabled.
+// APIs are project-wide resources that persist across sessions.
+func (p *GCPProvisioner) ensureAPIs(ctx context.Context) error {
+	for _, api := range requiredAPIs {
+		// Check if already enabled
+		descArgs := []string{"services", "list", "--enabled", "--filter=config.name:" + api, "--format=value(config.name)"}
+		if p.project != "" {
+			descArgs = append(descArgs, "--project="+p.project)
+		}
+		descCmd := exec.CommandContext(ctx, "gcloud", descArgs...)
+		p.setCredentialEnv(descCmd)
+		out, err := descCmd.Output()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			continue // already enabled
+		}
+
+		// Enable the API
+		enableArgs := []string{"services", "enable", api, "--quiet"}
+		if p.project != "" {
+			enableArgs = append(enableArgs, "--project="+p.project)
+		}
+		enableCmd := exec.CommandContext(ctx, "gcloud", enableArgs...)
+		p.setCredentialEnv(enableCmd)
+		if output, enableErr := enableCmd.CombinedOutput(); enableErr != nil {
+			return fmt.Errorf("failed to enable API %s: %s: %w", api, strings.TrimSpace(string(output)), enableErr)
+		}
+	}
+	return nil
+}
+
 // isAlreadyExistsError checks if gcloud command output indicates a resource already exists.
 func isAlreadyExistsError(output string) bool {
 	lower := strings.ToLower(output)
@@ -193,9 +370,24 @@ max_run_duration   = "%s"
 		return nil, fmt.Errorf("failed to copy terraform files: %w", err)
 	}
 
-	// Ensure the shared egress firewall rule exists (created once, never deleted)
+	// Ensure shared resources exist (created once, never deleted)
+	if err = p.ensureAPIs(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ensure GCP APIs: %w", err)
+	}
 	if err = p.ensureFirewallRule(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ensure firewall rule: %w", err)
+	}
+	var saEmail string
+	saEmail, err = p.ensureServiceAccount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure service account: %w", err)
+	}
+
+	// Append shared service account email to tfvars
+	tfvars += fmt.Sprintf("service_account_email = \"%s\"\n", saEmail)
+	if writeErr := os.WriteFile(tfvarsPath, []byte(tfvars), 0600); writeErr != nil {
+		err = fmt.Errorf("failed to rewrite tfvars with service account: %w", writeErr)
+		return nil, err
 	}
 
 	// Run terraform init
@@ -214,6 +406,11 @@ max_run_duration   = "%s"
 	if err != nil {
 		err = fmt.Errorf("failed to get terraform output: %w", err)
 		return nil, err
+	}
+
+	// Add per-instance compute admin IAM condition for self-deletion
+	if err = p.addInstanceIAMCondition(ctx, config.Session.ID, output["zone"]); err != nil {
+		return nil, fmt.Errorf("failed to add instance IAM condition: %w", err)
 	}
 
 	return &ProvisionResult{
@@ -657,36 +854,33 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// destroyFallback deletes all GCP resources associated with a session using
-// gcloud commands directly. This covers the case where Terraform state is
-// missing or Terraform destroy failed. Resources are deleted in dependency
-// order: instance, firewall rule, IAM bindings, service account.
+// destroyFallback deletes per-session GCP resources using gcloud commands
+// directly. This covers the case where Terraform state is missing or Terraform
+// destroy failed. Only the instance and its per-instance IAM condition are
+// removed; the shared service account and its static bindings are retained.
 func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) error {
-	prefix := sessionIDPrefix(sessionID)
-	saEmail := fmt.Sprintf("agentium-%s@%s.iam.gserviceaccount.com", prefix, p.project)
-
 	var errors []string
 
-	// 1. Delete the compute instance
+	// 1. Find the instance zone before deleting (needed for IAM condition removal)
+	sessions, _ := p.List(ctx)
+	var zone string
+	for _, s := range sessions {
+		if s.SessionID == sessionID {
+			zone = s.Zone
+			break
+		}
+	}
+
+	// 2. Delete the compute instance
 	if err := p.deleteInstance(ctx, sessionID); err != nil {
 		errors = append(errors, fmt.Sprintf("instance: %v", err))
 	}
 
-	// 2. Remove IAM bindings for the service account
-	iamRoles := []string{
-		"roles/secretmanager.secretAccessor",
-		"roles/logging.logWriter",
-		"roles/compute.instanceAdmin.v1",
-	}
-	for _, role := range iamRoles {
-		if err := p.removeIAMBinding(ctx, saEmail, role); err != nil {
-			errors = append(errors, fmt.Sprintf("iam(%s): %v", role, err))
+	// 3. Remove per-instance compute admin IAM condition
+	if zone != "" {
+		if err := p.removeInstanceIAMCondition(ctx, sessionID, zone); err != nil {
+			errors = append(errors, fmt.Sprintf("iam-condition: %v", err))
 		}
-	}
-
-	// 3. Delete the service account
-	if err := p.deleteServiceAccount(ctx, saEmail); err != nil {
-		errors = append(errors, fmt.Sprintf("service-account: %v", err))
 	}
 
 	if len(errors) > 0 {
@@ -694,15 +888,6 @@ func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) 
 	}
 
 	return nil
-}
-
-// sessionIDPrefix returns the first 20 characters of a session ID, matching
-// the Terraform naming convention: substr(var.session_id, 0, 20).
-func sessionIDPrefix(sessionID string) string {
-	if len(sessionID) > 20 {
-		return sessionID[:20]
-	}
-	return sessionID
 }
 
 // deleteInstance deletes a GCP compute instance by name.
@@ -723,63 +908,6 @@ func (p *GCPProvisioner) deleteInstance(ctx context.Context, instanceName string
 			return nil
 		}
 		return fmt.Errorf("failed to delete instance %s: %w", instanceName, err)
-	}
-	return nil
-}
-
-// removeIAMBinding removes an IAM policy binding for a service account.
-func (p *GCPProvisioner) removeIAMBinding(ctx context.Context, saEmail, role string) error {
-	if p.project == "" {
-		return fmt.Errorf("project is required to remove IAM bindings")
-	}
-	member := "serviceAccount:" + saEmail
-	args := []string{
-		"projects", "remove-iam-policy-binding", p.project,
-		"--member=" + member,
-		"--role=" + role,
-		"--quiet",
-	}
-
-	cmd := exec.CommandContext(ctx, "gcloud", args...)
-	p.setCredentialEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if p.verbose && len(output) > 0 {
-		fmt.Fprintf(os.Stderr, "%s", output)
-	}
-	if err != nil {
-		// Treat "not found" or "not bound" as success
-		if isNotFoundError(string(output)) {
-			if p.verbose {
-				fmt.Fprintf(os.Stderr, "IAM binding %s for %s already removed\n", role, saEmail)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to remove IAM binding %s for %s: %w", role, saEmail, err)
-	}
-	return nil
-}
-
-// deleteServiceAccount deletes a GCP service account by email.
-func (p *GCPProvisioner) deleteServiceAccount(ctx context.Context, saEmail string) error {
-	args := []string{"iam", "service-accounts", "delete", saEmail, "--quiet"}
-	if p.project != "" {
-		args = append(args, "--project="+p.project)
-	}
-
-	cmd := exec.CommandContext(ctx, "gcloud", args...)
-	p.setCredentialEnv(cmd)
-	output, err := cmd.CombinedOutput()
-	if p.verbose && len(output) > 0 {
-		fmt.Fprintf(os.Stderr, "%s", output)
-	}
-	if err != nil {
-		if isNotFoundError(string(output)) {
-			if p.verbose {
-				fmt.Fprintf(os.Stderr, "service account %s already deleted\n", saEmail)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to delete service account %s: %w", saEmail, err)
 	}
 	return nil
 }
