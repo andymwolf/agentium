@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.5](https://github.com/andymwolf/agentium/compare/v0.12.4...v0.12.5) (2026-03-04)
+
+
+### Bug Fixes
+
+* always ensure IAM bindings on shared service account ([#552](https://github.com/andymwolf/agentium/issues/552)) ([d9bd881](https://github.com/andymwolf/agentium/commit/d9bd8811766c56626824febf1362a5ef04668823))
+* clean up GCP resources on failed terraform apply ([#550](https://github.com/andymwolf/agentium/issues/550)) ([b3ba5d9](https://github.com/andymwolf/agentium/commit/b3ba5d990419b0c026d23ac64cea9b3e45eaebb7))
+
 ## [0.12.4](https://github.com/andymwolf/agentium/compare/v0.12.3...v0.12.4) (2026-03-04)
 
 
