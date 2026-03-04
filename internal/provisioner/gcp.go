@@ -114,10 +114,10 @@ func (p *GCPProvisioner) ensureFirewallRule(ctx context.Context) error {
 }
 
 // ensureServiceAccount creates the shared service account if it does not
-// already exist, and ensures all required static IAM roles are bound.
-// The SA is shared across all Agentium sessions. Static IAM bindings are
-// applied idempotently on every call to recover from partial failures
-// (e.g., SA created but bindings failed on a previous run).
+// already exist and grants serviceAccountUser on itself (SA-level IAM).
+// Project-level static IAM bindings are handled separately by
+// ensureStaticIAMBindings to avoid read-modify-write races with
+// addInstanceIAMCondition.
 func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, error) {
 	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sharedServiceAccountName, p.project)
 
@@ -148,31 +148,8 @@ func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, erro
 		}
 	}
 
-	// Always ensure static IAM roles are bound. add-iam-policy-binding is
-	// idempotent — adding an existing binding is a no-op. This recovers from
-	// cases where the SA was created but bindings failed (e.g., missing
-	// --condition=None before #548).
+	// Grant serviceAccountUser on itself (SA-level IAM, not project-level)
 	member := "serviceAccount:" + saEmail
-	staticRoles := []string{
-		"roles/secretmanager.secretAccessor",
-		"roles/logging.logWriter",
-	}
-	for _, role := range staticRoles {
-		args := []string{
-			"projects", "add-iam-policy-binding", p.project,
-			"--member=" + member,
-			"--role=" + role,
-			"--condition=None",
-			"--quiet",
-		}
-		cmd := exec.CommandContext(ctx, "gcloud", args...)
-		p.setCredentialEnv(cmd)
-		if out, bindErr := cmd.CombinedOutput(); bindErr != nil {
-			return "", fmt.Errorf("failed to grant %s to shared SA: %s: %w", role, strings.TrimSpace(string(out)), bindErr)
-		}
-	}
-
-	// Grant serviceAccountUser on itself
 	selfArgs := []string{
 		"iam", "service-accounts", "add-iam-policy-binding", saEmail,
 		"--member=" + member,
@@ -190,6 +167,34 @@ func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, erro
 	}
 
 	return saEmail, nil
+}
+
+// ensureStaticIAMBindings grants persistent project-level IAM roles to the
+// shared service account. These bindings are idempotent (adding an existing
+// binding is a no-op). This function must be called AFTER addInstanceIAMCondition
+// so that its project IAM policy writes are the last ones, avoiding
+// read-modify-write races that could clobber these bindings.
+func (p *GCPProvisioner) ensureStaticIAMBindings(ctx context.Context, saEmail string) error {
+	member := "serviceAccount:" + saEmail
+	staticRoles := []string{
+		"roles/secretmanager.secretAccessor",
+		"roles/logging.logWriter",
+	}
+	for _, role := range staticRoles {
+		args := []string{
+			"projects", "add-iam-policy-binding", p.project,
+			"--member=" + member,
+			"--role=" + role,
+			"--condition=None",
+			"--quiet",
+		}
+		cmd := exec.CommandContext(ctx, "gcloud", args...)
+		p.setCredentialEnv(cmd)
+		if out, bindErr := cmd.CombinedOutput(); bindErr != nil {
+			return fmt.Errorf("failed to grant %s to shared SA: %s: %w", role, strings.TrimSpace(string(out)), bindErr)
+		}
+	}
+	return nil
 }
 
 // addInstanceIAMCondition grants compute.instanceAdmin.v1 to the shared SA
@@ -427,6 +432,13 @@ max_run_duration   = "%s"
 	// Add per-instance compute admin IAM condition for self-deletion
 	if err = p.addInstanceIAMCondition(ctx, config.Session.ID, output["zone"]); err != nil {
 		return nil, fmt.Errorf("failed to add instance IAM condition: %w", err)
+	}
+
+	// Ensure static IAM bindings AFTER addInstanceIAMCondition so these
+	// project-level policy writes happen last and aren't clobbered by the
+	// conditional binding's read-modify-write cycle.
+	if err = p.ensureStaticIAMBindings(ctx, saEmail); err != nil {
+		return nil, fmt.Errorf("failed to ensure static IAM bindings: %w", err)
 	}
 
 	return &ProvisionResult{
