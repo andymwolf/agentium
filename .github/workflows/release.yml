@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
             goarch: arm64
     steps:
       - uses: actions/checkout@v6
@@ -37,8 +37,6 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           mkdir -p dist
 
           VERSION="${{ github.ref_name }}"
@@ -50,9 +48,9 @@ jobs:
             -X github.com/andywolf/agentium/internal/version.BuildDate=${BUILD_DATE}"
 
           go build -ldflags="${LDFLAGS}" \
-            -o dist/agentium-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/agentium
+            -o dist/agentium-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agentium
           go build -ldflags="${LDFLAGS}" \
-            -o dist/controller-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/controller
+            -o dist/controller-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/controller
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
