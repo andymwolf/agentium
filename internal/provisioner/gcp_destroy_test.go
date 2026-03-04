@@ -2,54 +2,6 @@ package provisioner
 
 import "testing"
 
-func TestSessionIDPrefix(t *testing.T) {
-	tests := []struct {
-		name      string
-		sessionID string
-		want      string
-	}{
-		{
-			name:      "short session ID unchanged",
-			sessionID: "abc123",
-			want:      "abc123",
-		},
-		{
-			name:      "exactly 20 chars unchanged",
-			sessionID: "12345678901234567890",
-			want:      "12345678901234567890",
-		},
-		{
-			name:      "longer than 20 chars truncated",
-			sessionID: "agentium-session-abc123def456",
-			want:      "agentium-session-abc",
-		},
-		{
-			name:      "typical agentium session ID",
-			sessionID: "agentium-abc123def456ghi789",
-			want:      "agentium-abc123def45",
-		},
-		{
-			name:      "empty session ID",
-			sessionID: "",
-			want:      "",
-		},
-		{
-			name:      "single character",
-			sessionID: "a",
-			want:      "a",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sessionIDPrefix(tt.sessionID)
-			if got != tt.want {
-				t.Errorf("sessionIDPrefix(%q) = %q, want %q", tt.sessionID, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsNotFoundError(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -108,42 +60,29 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
-func TestDestroyFallbackResourceNaming(t *testing.T) {
-	// This test verifies that the resource naming in the fallback path
-	// matches the Terraform naming convention.
+func TestSharedServiceAccountEmail(t *testing.T) {
+	// This test verifies that the shared service account email follows
+	// the expected naming convention: agentium-shared@PROJECT.iam.gserviceaccount.com
 	tests := []struct {
 		name        string
-		sessionID   string
 		project     string
 		wantSAEmail string
 	}{
 		{
-			name:        "standard session ID",
-			sessionID:   "agentium-abc123def456ghi789",
+			name:        "standard project",
 			project:     "my-project",
-			wantSAEmail: "agentium-agentium-abc123def45@my-project.iam.gserviceaccount.com",
+			wantSAEmail: "agentium-shared@my-project.iam.gserviceaccount.com",
 		},
 		{
-			name:        "short session ID",
-			sessionID:   "test-session",
-			project:     "test-proj",
-			wantSAEmail: "agentium-test-session@test-proj.iam.gserviceaccount.com",
-		},
-		{
-			name:        "exactly 20 char session ID",
-			sessionID:   "12345678901234567890",
+			name:        "short project",
 			project:     "proj",
-			wantSAEmail: "agentium-12345678901234567890@proj.iam.gserviceaccount.com",
+			wantSAEmail: "agentium-shared@proj.iam.gserviceaccount.com",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prefix := sessionIDPrefix(tt.sessionID)
-
-			// Verify service account email matches Terraform convention:
-			// account_id = "agentium-${substr(var.session_id, 0, 20)}"
-			saEmail := "agentium-" + prefix + "@" + tt.project + ".iam.gserviceaccount.com"
+			saEmail := sharedServiceAccountName + "@" + tt.project + ".iam.gserviceaccount.com"
 			if saEmail != tt.wantSAEmail {
 				t.Errorf("service account email = %q, want %q", saEmail, tt.wantSAEmail)
 			}
