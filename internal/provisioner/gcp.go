@@ -161,6 +161,7 @@ func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, erro
 			"projects", "add-iam-policy-binding", p.project,
 			"--member=" + member,
 			"--role=" + role,
+			"--condition=None",
 			"--quiet",
 		}
 		cmd := exec.CommandContext(ctx, "gcloud", args...)
@@ -175,6 +176,7 @@ func (p *GCPProvisioner) ensureServiceAccount(ctx context.Context) (string, erro
 		"iam", "service-accounts", "add-iam-policy-binding", saEmail,
 		"--member=" + member,
 		"--role=roles/iam.serviceAccountUser",
+		"--condition=None",
 		"--quiet",
 	}
 	if p.project != "" {
