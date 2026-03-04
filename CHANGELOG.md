@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/andymwolf/agentium/compare/v0.12.1...v0.12.2) (2026-03-04)
+
+
+### Bug Fixes
+
+* skip non-existent issues during initSession to prevent GraphQL crash ([#542](https://github.com/andymwolf/agentium/issues/542)) ([be171a3](https://github.com/andymwolf/agentium/commit/be171a31241a008395cb741a3259339cdc69bf55)), closes [#538](https://github.com/andymwolf/agentium/issues/538)
+
 ## [0.12.1](https://github.com/andymwolf/agentium/compare/v0.12.0...v0.12.1) (2026-03-03)
 
 
