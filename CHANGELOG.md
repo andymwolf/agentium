@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.6](https://github.com/andymwolf/agentium/compare/v0.12.5...v0.12.6) (2026-03-04)
+
+
+### Bug Fixes
+
+* apply static IAM bindings after conditional binding to prevent clobbering ([#555](https://github.com/andymwolf/agentium/issues/555)) ([f6e8a7e](https://github.com/andymwolf/agentium/commit/f6e8a7e7092b88f097d6e6d20e048f02875134be)), closes [#554](https://github.com/andymwolf/agentium/issues/554)
+
 ## [0.12.5](https://github.com/andymwolf/agentium/compare/v0.12.4...v0.12.5) (2026-03-04)
 
 
