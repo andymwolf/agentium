@@ -302,10 +302,23 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result
 		return nil, fmt.Errorf("failed to create work directory: %w", err)
 	}
 
+	// Track whether terraform apply was attempted so we can clean up
+	// partially-created GCP resources on failure.
+	var tfApplied bool
+
 	// Ensure cleanup on error - workDir is removed on all error paths
 	// Using named return value 'err' so defer can check final error state
 	defer func() {
 		if err != nil {
+			// If terraform apply was attempted (even partially), run terraform
+			// destroy to clean up any GCP resources that were created. Without
+			// this, a failed apply leaves orphaned resources (e.g. in-flight
+			// instance creation) that count against quota and are never reclaimed.
+			if tfApplied {
+				if destroyErr := p.runTerraform(ctx, workDir, "destroy", "-auto-approve"); destroyErr != nil {
+					fmt.Fprintf(os.Stderr, "WARNING: failed to clean up resources after provision failure: %v\n", destroyErr)
+				}
+			}
 			_ = os.RemoveAll(workDir)
 		}
 	}()
@@ -397,6 +410,7 @@ max_run_duration   = "%s"
 	}
 
 	// Run terraform apply
+	tfApplied = true
 	if err = p.runTerraform(ctx, workDir, "apply", "-auto-approve"); err != nil {
 		return nil, fmt.Errorf("terraform apply failed: %w", err)
 	}
