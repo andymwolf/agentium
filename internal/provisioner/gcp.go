@@ -247,6 +247,18 @@ func (p *GCPProvisioner) removeInstanceIAMCondition(ctx context.Context, session
 	return nil
 }
 
+// cleanupInstanceIAMCondition removes the per-instance IAM condition, logging
+// a warning if the zone is unknown (e.g., instance already deleted).
+func (p *GCPProvisioner) cleanupInstanceIAMCondition(ctx context.Context, sessionID, zone string) {
+	if zone == "" {
+		fmt.Fprintf(os.Stderr, "WARNING: cannot remove IAM condition for session %s: zone unknown (instance may already be deleted)\n", sessionID)
+		return
+	}
+	if err := p.removeInstanceIAMCondition(ctx, sessionID, zone); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to remove IAM condition for session %s: %v\n", sessionID, err)
+	}
+}
+
 // requiredAPIs is the set of GCP APIs that must be enabled for Agentium to function.
 var requiredAPIs = []string{
 	"iam.googleapis.com",
@@ -257,31 +269,18 @@ var requiredAPIs = []string{
 }
 
 // ensureAPIs enables the required GCP APIs if they are not already enabled.
-// APIs are project-wide resources that persist across sessions.
+// APIs are project-wide resources that persist across sessions. All APIs are
+// enabled in a single gcloud call for efficiency (already-enabled APIs are
+// no-ops).
 func (p *GCPProvisioner) ensureAPIs(ctx context.Context) error {
-	for _, api := range requiredAPIs {
-		// Check if already enabled
-		descArgs := []string{"services", "list", "--enabled", "--filter=config.name:" + api, "--format=value(config.name)"}
-		if p.project != "" {
-			descArgs = append(descArgs, "--project="+p.project)
-		}
-		descCmd := exec.CommandContext(ctx, "gcloud", descArgs...)
-		p.setCredentialEnv(descCmd)
-		out, err := descCmd.Output()
-		if err == nil && strings.TrimSpace(string(out)) != "" {
-			continue // already enabled
-		}
-
-		// Enable the API
-		enableArgs := []string{"services", "enable", api, "--quiet"}
-		if p.project != "" {
-			enableArgs = append(enableArgs, "--project="+p.project)
-		}
-		enableCmd := exec.CommandContext(ctx, "gcloud", enableArgs...)
-		p.setCredentialEnv(enableCmd)
-		if output, enableErr := enableCmd.CombinedOutput(); enableErr != nil {
-			return fmt.Errorf("failed to enable API %s: %s: %w", api, strings.TrimSpace(string(output)), enableErr)
-		}
+	args := append([]string{"services", "enable", "--quiet"}, requiredAPIs...)
+	if p.project != "" {
+		args = append(args, "--project="+p.project)
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to enable APIs: %s: %w", strings.TrimSpace(string(output)), err)
 	}
 	return nil
 }
@@ -828,6 +827,16 @@ func (p *GCPProvisioner) buildDestroyArgs(sessionID string) []string {
 func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 	workDir := filepath.Join(os.TempDir(), "agentium", sessionID)
 
+	// Resolve zone before any destructive operations (needed for IAM condition removal)
+	sessions, _ := p.List(ctx)
+	var zone string
+	for _, s := range sessions {
+		if s.SessionID == sessionID {
+			zone = s.Zone
+			break
+		}
+	}
+
 	// Check if terraform state exists
 	if _, err := os.Stat(filepath.Join(workDir, "terraform.tfstate")); err == nil {
 		// Use terraform destroy
@@ -837,6 +846,8 @@ func (p *GCPProvisioner) Destroy(ctx context.Context, sessionID string) error {
 				fmt.Fprintf(os.Stderr, "terraform destroy failed, falling back to gcloud: %v\n", err)
 			}
 		} else {
+			// Remove per-instance IAM condition (managed by Go, not Terraform)
+			p.cleanupInstanceIAMCondition(ctx, sessionID, zone)
 			// Clean up work directory
 			_ = os.RemoveAll(workDir)
 			return nil
@@ -877,11 +888,7 @@ func (p *GCPProvisioner) destroyFallback(ctx context.Context, sessionID string) 
 	}
 
 	// 3. Remove per-instance compute admin IAM condition
-	if zone != "" {
-		if err := p.removeInstanceIAMCondition(ctx, sessionID, zone); err != nil {
-			errors = append(errors, fmt.Sprintf("iam-condition: %v", err))
-		}
-	}
+	p.cleanupInstanceIAMCondition(ctx, sessionID, zone)
 
 	if len(errors) > 0 {
 		return fmt.Errorf("fallback cleanup encountered errors: %s", strings.Join(errors, "; "))
