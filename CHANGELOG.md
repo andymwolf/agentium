@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.4](https://github.com/andymwolf/agentium/compare/v0.12.3...v0.12.4) (2026-03-04)
+
+
+### Bug Fixes
+
+* add --condition=None to unconditional IAM bindings ([#548](https://github.com/andymwolf/agentium/issues/548)) ([f9d5c83](https://github.com/andymwolf/agentium/commit/f9d5c833e6881d840d67fadd07b5e8a99344988c)), closes [#545](https://github.com/andymwolf/agentium/issues/545)
+
 ## [0.12.3](https://github.com/andymwolf/agentium/compare/v0.12.2...v0.12.3) (2026-03-04)
 
 
