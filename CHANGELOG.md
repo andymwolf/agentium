@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/andymwolf/agentium/compare/v0.12.2...v0.12.3) (2026-03-04)
+
+
+### Bug Fixes
+
+* shared GCP service account and APIs to prevent quota exhaustion ([#546](https://github.com/andymwolf/agentium/issues/546)) ([93e08d1](https://github.com/andymwolf/agentium/commit/93e08d1ee18f884c6b777e5c509379cefc30f6d9))
+
 ## [0.12.2](https://github.com/andymwolf/agentium/compare/v0.12.1...v0.12.2) (2026-03-04)
 
 
