@@ -225,7 +225,7 @@ func (c *Controller) removeInstanceIAMCondition() {
 	cmd = c.execCommand(ctx, "gcloud", "projects", "remove-iam-policy-binding", project,
 		"--member="+member,
 		"--role=roles/compute.instanceAdmin.v1",
-		"--condition=expression="+condition+",title="+conditionTitle,
+		"--condition", "expression="+condition+",title="+conditionTitle,
 		"--quiet",
 	)
 	output, err := cmd.CombinedOutput()

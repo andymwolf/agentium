@@ -62,7 +62,10 @@ func (m *mockCmdRunner) run(ctx context.Context, name string, args ...string) *e
 	output, err := m.handler(name, args)
 
 	if err != nil {
-		// Return a command that will fail
+		// Return a command that will fail, including output if provided
+		if output != nil {
+			return exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("echo -n %q; exit 1", string(output)))
+		}
 		return exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("echo %q >&2; exit 1", err.Error()))
 	}
 
@@ -569,5 +572,45 @@ func TestRemoveInstanceIAMCondition_GcloudFailure(t *testing.T) {
 	logOutput := buf.String()
 	if !strings.Contains(logOutput, "failed to remove IAM condition (non-fatal)") {
 		t.Errorf("expected non-fatal warning in log, got: %s", logOutput)
+	}
+}
+
+func TestRemoveInstanceIAMCondition_NotFoundIsNotError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{ID: "session-abc"},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := &mockCmdRunner{}
+	runner.handler = func(name string, args []string) ([]byte, error) {
+		if name == "curl" {
+			for _, arg := range args {
+				if strings.Contains(arg, "/project/project-id") {
+					return []byte("my-project"), nil
+				}
+				if strings.Contains(arg, "/instance/zone") {
+					return []byte("projects/p/zones/us-central1-a"), nil
+				}
+			}
+		}
+		if name == "gcloud" {
+			return []byte("Policy binding with the specified member, role, and condition was not found for this policy."), fmt.Errorf("exit status 1")
+		}
+		return nil, nil
+	}
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "IAM condition already removed") {
+		t.Errorf("expected 'IAM condition already removed' in log, got: %s", logOutput)
+	}
+	if strings.Contains(logOutput, "non-fatal") {
+		t.Errorf("should not log non-fatal warning for 'not found' case, got: %s", logOutput)
 	}
 }
