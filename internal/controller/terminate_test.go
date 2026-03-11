@@ -26,6 +26,12 @@ type mockCall struct {
 // newSuccessRunner returns a cmdRunner that simulates successful metadata fetches
 // and a successful gcloud delete command.
 func newSuccessRunner(instanceName, zone string) *mockCmdRunner {
+	return newSuccessRunnerWithProject(instanceName, zone, "my-project")
+}
+
+// newSuccessRunnerWithProject returns a cmdRunner that simulates successful metadata fetches
+// (including project-id) and successful gcloud commands.
+func newSuccessRunnerWithProject(instanceName, zone, project string) *mockCmdRunner {
 	m := &mockCmdRunner{}
 	m.handler = func(name string, args []string) ([]byte, error) {
 		if name == "curl" {
@@ -36,10 +42,13 @@ func newSuccessRunner(instanceName, zone string) *mockCmdRunner {
 				if strings.Contains(arg, "/instance/zone") {
 					return []byte(zone), nil
 				}
+				if strings.Contains(arg, "/project/project-id") {
+					return []byte(project), nil
+				}
 			}
 		}
 		if name == "gcloud" {
-			return nil, nil // Successful deletion
+			return nil, nil // Successful command
 		}
 		return nil, fmt.Errorf("unexpected command: %s", name)
 	}
@@ -374,5 +383,191 @@ func TestExecCommand_UsesCustomRunner(t *testing.T) {
 	}
 	if strings.TrimSpace(string(output)) != "custom" {
 		t.Errorf("expected 'custom', got %q", string(output))
+	}
+}
+
+func TestRemoveInstanceIAMCondition_Success(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{ID: "session-abc"},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := newSuccessRunnerWithProject("session-abc", "projects/my-project/zones/us-central1-a", "my-project")
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	logOutput := buf.String()
+
+	if !strings.Contains(logOutput, "IAM condition removed successfully") {
+		t.Errorf("expected success message in log, got: %s", logOutput)
+	}
+
+	// Should have: 2 curl calls (project-id, zone) + 1 gcloud remove-iam-policy-binding
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected 3 commands, got %d: %+v", len(runner.calls), runner.calls)
+	}
+
+	// Verify the gcloud command
+	gcloudCall := runner.calls[2]
+	if gcloudCall.name != "gcloud" {
+		t.Errorf("expected third call to be 'gcloud', got %q", gcloudCall.name)
+	}
+	if gcloudCall.args[0] != "projects" || gcloudCall.args[1] != "remove-iam-policy-binding" {
+		t.Errorf("expected 'projects remove-iam-policy-binding', got %q %q", gcloudCall.args[0], gcloudCall.args[1])
+	}
+	if gcloudCall.args[2] != "my-project" {
+		t.Errorf("expected project 'my-project', got %q", gcloudCall.args[2])
+	}
+
+	// Verify member and role args
+	foundMember := false
+	foundRole := false
+	foundCondition := false
+	for _, arg := range gcloudCall.args {
+		if strings.Contains(arg, "agentium-shared@my-project.iam.gserviceaccount.com") {
+			foundMember = true
+		}
+		if strings.Contains(arg, "roles/compute.instanceAdmin.v1") {
+			foundRole = true
+		}
+		if strings.Contains(arg, "agentium-instance-session-abc") {
+			foundCondition = true
+		}
+	}
+	if !foundMember {
+		t.Error("expected gcloud args to contain service account member")
+	}
+	if !foundRole {
+		t.Error("expected gcloud args to contain compute.instanceAdmin.v1 role")
+	}
+	if !foundCondition {
+		t.Error("expected gcloud args to contain condition title")
+	}
+}
+
+func TestRemoveInstanceIAMCondition_SkipsInteractive(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{Interactive: true},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := &mockCmdRunner{}
+	runner.handler = func(name string, args []string) ([]byte, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	if len(runner.calls) != 0 {
+		t.Errorf("expected no commands in interactive mode, got %d", len(runner.calls))
+	}
+}
+
+func TestRemoveInstanceIAMCondition_ProjectFetchError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{ID: "session-abc"},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := &mockCmdRunner{}
+	runner.handler = func(name string, args []string) ([]byte, error) {
+		if name == "curl" {
+			return nil, fmt.Errorf("metadata unavailable")
+		}
+		return nil, nil
+	}
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "failed to get project ID from metadata") {
+		t.Errorf("expected project ID error in log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "skipping IAM cleanup") {
+		t.Errorf("expected 'skipping IAM cleanup' in log, got: %s", logOutput)
+	}
+}
+
+func TestRemoveInstanceIAMCondition_ZoneFetchError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{ID: "session-abc"},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := &mockCmdRunner{}
+	runner.handler = func(name string, args []string) ([]byte, error) {
+		if name == "curl" {
+			for _, arg := range args {
+				if strings.Contains(arg, "/project/project-id") {
+					return []byte("my-project"), nil
+				}
+			}
+			return nil, fmt.Errorf("metadata unavailable")
+		}
+		return nil, nil
+	}
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "failed to get zone from metadata") {
+		t.Errorf("expected zone error in log, got: %s", logOutput)
+	}
+}
+
+func TestRemoveInstanceIAMCondition_GcloudFailure(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "[test] ", 0)
+
+	c := &Controller{
+		config:     SessionConfig{ID: "session-abc"},
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
+	}
+
+	runner := &mockCmdRunner{}
+	runner.handler = func(name string, args []string) ([]byte, error) {
+		if name == "curl" {
+			for _, arg := range args {
+				if strings.Contains(arg, "/project/project-id") {
+					return []byte("my-project"), nil
+				}
+				if strings.Contains(arg, "/instance/zone") {
+					return []byte("projects/p/zones/us-central1-a"), nil
+				}
+			}
+		}
+		if name == "gcloud" {
+			return []byte("permission denied"), fmt.Errorf("exit status 1")
+		}
+		return nil, nil
+	}
+	c.cmdRunner = runner.run
+
+	c.removeInstanceIAMCondition()
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "failed to remove IAM condition (non-fatal)") {
+		t.Errorf("expected non-fatal warning in log, got: %s", logOutput)
 	}
 }
