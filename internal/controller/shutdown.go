@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -55,7 +56,8 @@ func (c *Controller) cleanup() {
 // 2. Run registered shutdown hooks
 // 3. Clear sensitive data from memory
 // 4. Close clients
-// 5. Terminate VM
+// 5. Remove per-instance IAM condition
+// 6. Terminate VM
 func (c *Controller) gracefulShutdown() {
 	c.shutdownOnce.Do(func() {
 		close(c.shutdownCh)
@@ -97,7 +99,8 @@ func (c *Controller) gracefulShutdown() {
 
 		c.logInfo("Graceful shutdown complete")
 
-		// Step 5: Request VM termination (last action)
+		// Step 5: Remove per-instance IAM condition, then terminate VM
+		c.removeInstanceIAMCondition()
 		c.terminateVM()
 	})
 }
@@ -174,6 +177,69 @@ func (c *Controller) clearSensitiveData() {
 
 	// Clear GitHub app credentials
 	c.config.GitHub.PrivateKeySecret = ""
+}
+
+// removeInstanceIAMCondition removes the per-instance compute.instanceAdmin.v1
+// IAM binding that was created during provisioning. This prevents stale conditional
+// bindings from accumulating and hitting the GCP limit of 20 per role+member pair.
+func (c *Controller) removeInstanceIAMCondition() {
+	if c.config.Interactive {
+		return
+	}
+
+	c.logInfo("Removing per-instance IAM condition")
+
+	ctx, cancel := context.WithTimeout(context.Background(), VMTerminationTimeout)
+	defer cancel()
+
+	// Get project ID from metadata
+	cmd := c.execCommand(ctx, "curl", "-s", "-H", "Metadata-Flavor: Google",
+		"http://metadata.google.internal/computeMetadata/v1/project/project-id")
+	projectID, err := cmd.Output()
+	if err != nil {
+		c.logWarning("failed to get project ID from metadata, skipping IAM cleanup: %v", err)
+		return
+	}
+
+	// Get zone from metadata
+	cmd = c.execCommand(ctx, "curl", "-s", "-H", "Metadata-Flavor: Google",
+		"http://metadata.google.internal/computeMetadata/v1/instance/zone")
+	zoneRaw, err := cmd.Output()
+	if err != nil {
+		c.logWarning("failed to get zone from metadata, skipping IAM cleanup: %v", err)
+		return
+	}
+
+	project := strings.TrimSpace(string(projectID))
+	zone := filepath.Base(strings.TrimSpace(string(zoneRaw)))
+	sessionID := c.config.ID
+
+	saEmail := fmt.Sprintf("agentium-shared@%s.iam.gserviceaccount.com", project)
+	member := "serviceAccount:" + saEmail
+	condition := fmt.Sprintf(
+		"resource.name == 'projects/%s/zones/%s/instances/%s'",
+		project, zone, sessionID,
+	)
+	conditionTitle := fmt.Sprintf("agentium-instance-%s", sessionID)
+
+	cmd = c.execCommand(ctx, "gcloud", "projects", "remove-iam-policy-binding", project,
+		"--member="+member,
+		"--role=roles/compute.instanceAdmin.v1",
+		"--condition", "expression="+condition+",title="+conditionTitle,
+		"--quiet",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		outStr := strings.TrimSpace(string(output))
+		// "not found" means the binding was already removed — not an error
+		if strings.Contains(strings.ToLower(outStr), "not found") {
+			c.logInfo("IAM condition already removed")
+			return
+		}
+		c.logWarning("failed to remove IAM condition (non-fatal): %s: %v", outStr, err)
+		return
+	}
+	c.logInfo("IAM condition removed successfully")
 }
 
 func (c *Controller) terminateVM() {
