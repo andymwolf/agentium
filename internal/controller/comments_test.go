@@ -362,6 +362,48 @@ func TestPostReviewFeedbackForPhase_Routing(t *testing.T) {
 	}
 }
 
+func TestPostBlockedComment(t *testing.T) {
+	tests := []struct {
+		name           string
+		activeTaskType string
+	}{
+		{
+			name:           "PR tasks are skipped",
+			activeTaskType: "pr",
+		},
+		{
+			name:           "issue tasks post comment",
+			activeTaskType: "issue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Controller{
+				activeTaskType: tt.activeTaskType,
+				activeTask:     "42",
+				taskStates:     map[string]*TaskState{},
+				logger:         testLogger(),
+			}
+
+			// Should not panic or crash
+			c.postBlockedComment(context.Background(), "test blocked reason")
+		})
+	}
+}
+
+func TestPostBlockedCommentForIssue(t *testing.T) {
+	c := &Controller{
+		activeTaskType: "issue",
+		activeTask:     "42",
+		taskStates:     map[string]*TaskState{},
+		logger:         testLogger(),
+	}
+
+	// Should not panic or crash - gh command will fail but that's expected in tests
+	c.postBlockedCommentForIssue(context.Background(), "99", "Parent issue #42 is blocked")
+}
+
 func TestPostCommentForPhase_Routing(t *testing.T) {
 	tests := []struct {
 		name           string

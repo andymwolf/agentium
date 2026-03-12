@@ -29,7 +29,7 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 			c.logWarning("Task %s blocked after %d test failures", taskID, state.TestRetries)
 			// Propagate blocked state to dependent issues
 			if state.Type == "issue" {
-				c.propagateBlocked(state.ID)
+				c.propagateBlocked(context.Background(), state.ID)
 			}
 		}
 	case "PR_CREATED":
@@ -45,7 +45,7 @@ func (c *Controller) updateTaskPhase(taskID string, result *agent.IterationResul
 		state.Phase = PhaseBlocked
 		// Propagate blocked state to dependent issues
 		if state.Type == "issue" {
-			c.propagateBlocked(state.ID)
+			c.propagateBlocked(context.Background(), state.ID)
 		}
 	}
 
