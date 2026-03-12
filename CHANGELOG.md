@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/andymwolf/agentium/compare/v0.12.6...v0.13.0) (2026-03-12)
+
+
+### Features
+
+* post BLOCKED reason as GitHub issue comment ([#570](https://github.com/andymwolf/agentium/issues/570)) ([be494aa](https://github.com/andymwolf/agentium/commit/be494aa45ee2649a1864a491aca374a605447ba4))
+
+
+### Bug Fixes
+
+* pass assistant text instead of raw output to judge/reviewer prompts ([#568](https://github.com/andymwolf/agentium/issues/568)) ([2795083](https://github.com/andymwolf/agentium/commit/2795083d74f01564963940945b39e13fcca9aa75)), closes [#567](https://github.com/andymwolf/agentium/issues/567)
+
 ## [0.12.6](https://github.com/andymwolf/agentium/compare/v0.12.5...v0.12.6) (2026-03-11)
 
 
