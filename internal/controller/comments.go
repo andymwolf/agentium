@@ -81,17 +81,32 @@ func (c *Controller) postJudgeComment(ctx context.Context, phase TaskPhase, iter
 }
 
 // postIssueComment posts a comment on the active issue. Best-effort.
+// On auth errors, refreshes the token and retries once.
 func (c *Controller) postIssueComment(ctx context.Context, body string) {
 	body = c.appendSignature(body)
-	cmd := exec.CommandContext(ctx, "gh", "issue", "comment", c.activeTask,
-		"--repo", c.config.Repository,
-		"--body-file", "-",
-	)
-	cmd.Env = c.envWithGitHubToken()
-	cmd.Dir = c.workDir
-	cmd.Stdin = strings.NewReader(body)
 
-	if output, err := cmd.CombinedOutput(); err != nil {
+	attempt := func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "gh", "issue", "comment", c.activeTask,
+			"--repo", c.config.Repository,
+			"--body-file", "-",
+		)
+		cmd.Env = c.envWithGitHubToken()
+		cmd.Dir = c.workDir
+		cmd.Stdin = strings.NewReader(body)
+		return cmd.CombinedOutput()
+	}
+
+	output, err := attempt()
+	if err != nil && isAuthError(err, string(output)) {
+		if refreshErr := c.forceRefreshGitHubToken(); refreshErr != nil {
+			c.logWarning("Token refresh failed after auth error on issue comment: %v", refreshErr)
+		} else {
+			c.logInfo("Token refreshed after auth error, retrying issue comment")
+			output, err = attempt()
+		}
+	}
+
+	if err != nil {
 		c.logWarning("failed to post issue comment: %v (output: %s)", err, string(output))
 	} else {
 		c.logInfo("Posted comment to issue #%s", c.activeTask)
@@ -99,6 +114,7 @@ func (c *Controller) postIssueComment(ctx context.Context, body string) {
 }
 
 // postPRComment posts a comment on a pull request. Best-effort.
+// On auth errors, refreshes the token and retries once.
 func (c *Controller) postPRComment(ctx context.Context, prNumber string, body string) {
 	if prNumber == "" {
 		c.logWarning("postPRComment called with empty PR number")
@@ -106,15 +122,29 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 	}
 
 	body = c.appendSignature(body)
-	cmd := exec.CommandContext(ctx, "gh", "pr", "comment", prNumber,
-		"--repo", c.config.Repository,
-		"--body-file", "-",
-	)
-	cmd.Env = c.envWithGitHubToken()
-	cmd.Dir = c.workDir
-	cmd.Stdin = strings.NewReader(body)
 
-	if output, err := cmd.CombinedOutput(); err != nil {
+	attempt := func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "gh", "pr", "comment", prNumber,
+			"--repo", c.config.Repository,
+			"--body-file", "-",
+		)
+		cmd.Env = c.envWithGitHubToken()
+		cmd.Dir = c.workDir
+		cmd.Stdin = strings.NewReader(body)
+		return cmd.CombinedOutput()
+	}
+
+	output, err := attempt()
+	if err != nil && isAuthError(err, string(output)) {
+		if refreshErr := c.forceRefreshGitHubToken(); refreshErr != nil {
+			c.logWarning("Token refresh failed after auth error on PR comment: %v", refreshErr)
+		} else {
+			c.logInfo("Token refreshed after auth error, retrying PR comment")
+			output, err = attempt()
+		}
+	}
+
+	if err != nil {
 		c.logWarning("failed to post PR comment: %v (output: %s)", err, string(output))
 	} else {
 		c.logInfo("Posted comment to PR #%s", prNumber)

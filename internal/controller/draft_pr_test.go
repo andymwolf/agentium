@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -325,6 +326,37 @@ func TestCreateDraftPRWithRetry_RespectsContextCancellation(t *testing.T) {
 	}
 	if !state.ControllerOverrode {
 		t.Error("expected state.ControllerOverrode to be true")
+	}
+}
+
+func TestIsAuthError(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		output []string
+		want   bool
+	}{
+		{"nil error", nil, nil, false},
+		{"generic error", fmt.Errorf("connection refused"), nil, false},
+		{"401 in error", fmt.Errorf("exit status 1: HTTP 401"), nil, true},
+		{"bad credentials in error", fmt.Errorf("Bad credentials"), nil, true},
+		{"auth failed in error", fmt.Errorf("authentication failed for https://github.com"), nil, true},
+		{"could not read username", fmt.Errorf("could not read Username"), nil, true},
+		{"401 in output only", fmt.Errorf("exit status 1"), []string{"HTTP 401: Bad credentials"}, true},
+		{"bad credentials in output only", fmt.Errorf("exit status 1"), []string{"Bad credentials (https://api.github.com/graphql)"}, true},
+		{"clean output no auth issue", fmt.Errorf("exit status 1"), []string{"not found"}, false},
+		{"cmdOutputError with 401 in output", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "HTTP 401: Bad credentials"}, nil, true},
+		{"cmdOutputError with clean output", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "not found"}, nil, false},
+		{"wrapped cmdOutputError with auth", fmt.Errorf("draft PR failed: %w", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "HTTP 401"}), nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAuthError(tt.err, tt.output...)
+			if got != tt.want {
+				t.Errorf("isAuthError(%v, %v) = %v, want %v", tt.err, tt.output, got, tt.want)
+			}
+		})
 	}
 }
 
