@@ -98,7 +98,9 @@ func (c *Controller) postIssueComment(ctx context.Context, body string) {
 
 	output, err := attempt()
 	if err != nil && isAuthError(err, string(output)) {
-		if refreshErr := c.refreshGitHubTokenIfNeeded(); refreshErr == nil {
+		if refreshErr := c.forceRefreshGitHubToken(); refreshErr != nil {
+			c.logWarning("Token refresh failed after auth error on issue comment: %v", refreshErr)
+		} else {
 			c.logInfo("Token refreshed after auth error, retrying issue comment")
 			output, err = attempt()
 		}
@@ -134,7 +136,9 @@ func (c *Controller) postPRComment(ctx context.Context, prNumber string, body st
 
 	output, err := attempt()
 	if err != nil && isAuthError(err, string(output)) {
-		if refreshErr := c.refreshGitHubTokenIfNeeded(); refreshErr == nil {
+		if refreshErr := c.forceRefreshGitHubToken(); refreshErr != nil {
+			c.logWarning("Token refresh failed after auth error on PR comment: %v", refreshErr)
+		} else {
 			c.logInfo("Token refreshed after auth error, retrying PR comment")
 			output, err = attempt()
 		}

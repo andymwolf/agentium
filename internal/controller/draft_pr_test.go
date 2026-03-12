@@ -345,6 +345,9 @@ func TestIsAuthError(t *testing.T) {
 		{"401 in output only", fmt.Errorf("exit status 1"), []string{"HTTP 401: Bad credentials"}, true},
 		{"bad credentials in output only", fmt.Errorf("exit status 1"), []string{"Bad credentials (https://api.github.com/graphql)"}, true},
 		{"clean output no auth issue", fmt.Errorf("exit status 1"), []string{"not found"}, false},
+		{"cmdOutputError with 401 in output", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "HTTP 401: Bad credentials"}, nil, true},
+		{"cmdOutputError with clean output", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "not found"}, nil, false},
+		{"wrapped cmdOutputError with auth", fmt.Errorf("draft PR failed: %w", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "HTTP 401"}), nil, true},
 	}
 
 	for _, tt := range tests {

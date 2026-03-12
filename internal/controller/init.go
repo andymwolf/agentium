@@ -117,6 +117,26 @@ func (c *Controller) refreshGitHubTokenIfNeeded() error {
 	return nil
 }
 
+// forceRefreshGitHubToken unconditionally refreshes the GitHub token.
+// Use this after receiving a 401 — the token may have been revoked server-side
+// while still appearing fresh by local expiry time.
+// For static tokens (from GITHUB_TOKEN env var), this is a no-op.
+func (c *Controller) forceRefreshGitHubToken() error {
+	if c.tokenManager == nil {
+		return nil
+	}
+
+	c.logInfo("Force-refreshing GitHub token after auth error...")
+	token, err := c.tokenManager.Refresh()
+	if err != nil {
+		return fmt.Errorf("failed to refresh GitHub token: %w", err)
+	}
+
+	c.gitHubToken = token
+	c.logInfo("GitHub token refreshed (expires at %s)", c.tokenManager.ExpiresAt().Format(time.RFC3339))
+	return nil
+}
+
 func (c *Controller) fetchSecret(ctx context.Context, secretPath string) (string, error) {
 	// Try to use Secret Manager client first
 	if c.secretManager != nil {

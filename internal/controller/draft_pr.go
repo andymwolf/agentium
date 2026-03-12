@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -24,10 +25,10 @@ func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, 
 			c.logWarning("Draft PR creation failed (retry %d/%d), retrying in %s: %v",
 				attempt, len(delays)-1, delay, prErr)
 
-			// On auth errors, refresh the token before retrying — backoff alone
-			// won't fix an expired token.
+			// On auth errors, force-refresh the token before retrying — backoff
+			// alone won't fix an expired or revoked token.
 			if isAuthError(prErr) {
-				if refreshErr := c.refreshGitHubTokenIfNeeded(); refreshErr != nil {
+				if refreshErr := c.forceRefreshGitHubToken(); refreshErr != nil {
 					c.logError("Token refresh failed during draft PR retry: %v", refreshErr)
 				} else {
 					c.logInfo("Token refreshed after auth error, retrying draft PR creation")
@@ -56,10 +57,27 @@ func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, 
 	return true
 }
 
+// cmdOutputError wraps an error with the command's stdout/stderr output.
+// This allows isAuthError to check both the Go error and the raw command
+// output when the two are returned through a single error value.
+type cmdOutputError struct {
+	err    error
+	output string
+}
+
+func (e *cmdOutputError) Error() string {
+	return fmt.Sprintf("%v (output: %s)", e.err, e.output)
+}
+
+func (e *cmdOutputError) Unwrap() error {
+	return e.err
+}
+
 // isAuthError returns true if the error message indicates a GitHub authentication failure.
 // These errors won't self-heal with backoff — they require a token refresh.
 // Checks both the error and optional command output, since gh CLI puts the
-// HTTP status in stdout/stderr rather than the Go error.
+// HTTP status in stdout/stderr rather than the Go error. Also unwraps
+// cmdOutputError to check embedded command output.
 func isAuthError(err error, output ...string) bool {
 	if err == nil {
 		return false
@@ -68,6 +86,13 @@ func isAuthError(err error, output ...string) bool {
 	for _, o := range output {
 		msg += " " + strings.ToLower(o)
 	}
+
+	// Also check embedded command output from cmdOutputError
+	var cmdErr *cmdOutputError
+	if errors.As(err, &cmdErr) {
+		msg += " " + strings.ToLower(cmdErr.output)
+	}
+
 	return strings.Contains(msg, "401") ||
 		strings.Contains(msg, "bad credentials") ||
 		strings.Contains(msg, "authentication failed") ||
@@ -194,7 +219,10 @@ This is a draft PR - implementation is in progress.
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to create draft PR: %w (output: %s)", createErr, string(createOutput))
+		return &cmdOutputError{
+			err:    fmt.Errorf("failed to create draft PR: %w", createErr),
+			output: string(createOutput),
+		}
 	}
 
 	// Parse PR number from output (gh pr create outputs the PR URL)
