@@ -18,7 +18,7 @@ import (
 //
 //	phase_loop.go          — initializes/resets all fields in the outer and inner loops
 //	phase_loop_tracing.go  — manages tracing fields (traceCtx … traceStatus)
-//	phase_loop_iteration.go — writes per-iteration output (phaseOutput, commentContent)
+//	phase_loop_iteration.go — writes per-iteration output (phaseOutput, evalOutput, commentContent)
 //	phase_loop_phases.go   — writes advanced, maxIter (complexity assessment), and state fields
 //	phase_loop_eval.go     — writes advanced, noSignalCount, traceStatus, and state fields
 type phaseLoopContext struct {
@@ -41,7 +41,8 @@ type phaseLoopContext struct {
 	noSignalCount int  // updated by applyJudgePostProcessing (phase_loop_eval.go)
 
 	// Per-iteration output (reset each iteration in runPhaseLoop)
-	phaseOutput    string // written by runWorkerIteration (phase_loop_iteration.go)
+	phaseOutput    string // written by runWorkerIteration (phase_loop_iteration.go) — full RawTextContent for signal parsing
+	evalOutput     string // written by runWorkerIteration (phase_loop_iteration.go) — assistant text only, for reviewer/judge/complexity prompts
 	commentContent string // written by runWorkerIteration (phase_loop_iteration.go)
 }
 
@@ -67,9 +68,10 @@ const (
 	simpleVerifyMaxIter    = 2
 )
 
-// defaultJudgeContextBudget is the default max characters of phase output sent to the judge.
-// Increased from 8000 to 16000 to avoid truncating PLAN phase output that the judge/reviewer
-// need to see in full for correct ADVANCE/ITERATE decisions.
+// defaultJudgeContextBudget is the default max characters of eval output (assistant text)
+// sent to the judge/reviewer/complexity prompts. Now that evalOutput excludes tool results
+// (file contents, diffs, command output), this budget applies to the much smaller assistant
+// narration rather than the full RawTextContent.
 const defaultJudgeContextBudget = 16000
 
 // Skip condition constants for reviewer/judge conditional skipping.
@@ -462,6 +464,7 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 
 			// Reset per-iteration state
 			plc.phaseOutput = ""
+			plc.evalOutput = ""
 			plc.commentContent = ""
 
 			if err := c.runWorkerIteration(ctx, plc, iter); err != nil {

@@ -179,7 +179,7 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 	// Run reviewer
 	reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
 		CompletedPhase:          plc.currentPhase,
-		PhaseOutput:             plc.phaseOutput,
+		PhaseOutput:             plc.evalOutput,
 		Iteration:               iter,
 		MaxIterations:           plc.maxIter,
 		PreviousFeedback:        previousFeedback,
@@ -231,7 +231,7 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 	// Run judge
 	judgeResult, err := c.runJudge(ctx, judgeRunParams{
 		CompletedPhase:  plc.currentPhase,
-		PhaseOutput:     plc.phaseOutput,
+		PhaseOutput:     plc.evalOutput,
 		ReviewFeedback:  reviewResult.Feedback,
 		Iteration:       iter,
 		MaxIterations:   plc.maxIter,
