@@ -188,6 +188,17 @@ Please review the changes carefully before merging.
 	c.postPRComment(ctx, prNumber, body)
 }
 
+// postBlockedComment posts a comment on the active issue explaining why it was blocked.
+// This is best-effort: errors are logged but never cause the controller to crash.
+func (c *Controller) postBlockedComment(ctx context.Context, reason string) {
+	if c.activeTaskType != "issue" {
+		return
+	}
+	body := fmt.Sprintf("### BLOCKED\n\n**Reason:** %s\n\n"+
+		"This task has been marked as blocked and will not be processed further in this session.", reason)
+	c.postIssueComment(ctx, body)
+}
+
 // postReviewFeedbackForPhase posts reviewer feedback routed by phase via postCommentForPhase.
 func (c *Controller) postReviewFeedbackForPhase(ctx context.Context, phase TaskPhase, iteration int, feedback string) {
 	body := fmt.Sprintf("### Phase: %s — %s (iteration %d)\n\n%s", phase, RoleReviewer, iteration, feedback)

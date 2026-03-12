@@ -676,6 +676,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 		if err := c.refreshGitHubTokenIfNeeded(); err != nil {
 			c.logError("Failed to refresh GitHub token: %v", err)
 			// Mark task as blocked and continue to next task
+			// Cannot post BLOCKED comment: GitHub token is invalid.
 			taskID := fmt.Sprintf("%s:%s", nextTask.Type, nextTask.ID)
 			if state, ok := c.taskStates[taskID]; ok {
 				state.Phase = PhaseBlocked
@@ -700,6 +701,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 				if state, ok := c.taskStates[taskID]; ok {
 					state.Phase = PhaseBlocked
 				}
+				c.postBlockedComment(ctx, fmt.Sprintf("Sub-issue expansion failed: %v", expandErr))
 			} else {
 				c.logInfo("Issue #%s: expanded %d sub-issues %v — parent complete", nextTask.ID, len(subIssueIDs), subIssueIDs)
 				if state, ok := c.taskStates[taskID]; ok {
@@ -720,6 +722,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 			if state, ok := c.taskStates[taskID]; ok {
 				state.Phase = PhaseBlocked
 			}
+			c.postBlockedComment(ctx, fmt.Sprintf("Blocked by open issues: %v", blockingIDs))
 			c.propagateBlocked(nextTask.ID)
 			continue
 		}
@@ -731,6 +734,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 			if state, ok := c.taskStates[taskID]; ok {
 				state.Phase = PhaseBlocked
 			}
+			c.postBlockedComment(ctx, fmt.Sprintf("Package scope initialization failed: %v", err))
 			continue
 		}
 
@@ -743,6 +747,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 			if state != nil {
 				state.Phase = PhaseBlocked
 			}
+			c.postBlockedComment(ctx, fmt.Sprintf("Parent dependency unresolved: %v", err))
 			c.propagateBlocked(nextTask.ID)
 			continue
 		}
