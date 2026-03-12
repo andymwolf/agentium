@@ -392,18 +392,6 @@ func TestPostBlockedComment(t *testing.T) {
 	}
 }
 
-func TestPostBlockedCommentForIssue(t *testing.T) {
-	c := &Controller{
-		activeTaskType: "issue",
-		activeTask:     "42",
-		taskStates:     map[string]*TaskState{},
-		logger:         testLogger(),
-	}
-
-	// Should not panic or crash - gh command will fail but that's expected in tests
-	c.postBlockedCommentForIssue(context.Background(), "99", "Parent issue #42 is blocked")
-}
-
 func TestPostCommentForPhase_Routing(t *testing.T) {
 	tests := []struct {
 		name           string

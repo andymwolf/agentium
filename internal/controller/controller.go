@@ -723,7 +723,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 				state.Phase = PhaseBlocked
 			}
 			c.postBlockedComment(ctx, fmt.Sprintf("Blocked by open issues: %v", blockingIDs))
-			c.propagateBlocked(ctx, nextTask.ID)
+			c.propagateBlocked(nextTask.ID)
 			continue
 		}
 
@@ -748,7 +748,7 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 				state.Phase = PhaseBlocked
 			}
 			c.postBlockedComment(ctx, fmt.Sprintf("Parent dependency unresolved: %v", err))
-			c.propagateBlocked(ctx, nextTask.ID)
+			c.propagateBlocked(nextTask.ID)
 			continue
 		}
 		if state != nil {

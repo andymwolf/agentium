@@ -524,7 +524,7 @@ func (c *Controller) isPRMerged(ctx context.Context, prNumber string) (bool, err
 }
 
 // propagateBlocked marks all children of a blocked issue as BLOCKED via BFS.
-func (c *Controller) propagateBlocked(ctx context.Context, issueID string) {
+func (c *Controller) propagateBlocked(issueID string) {
 	if c.depGraph == nil {
 		return
 	}
@@ -549,8 +549,6 @@ func (c *Controller) propagateBlocked(ctx context.Context, issueID string) {
 				if state.Phase != PhaseBlocked && state.Phase != PhaseComplete && state.Phase != PhaseNothingToDo {
 					state.Phase = PhaseBlocked
 					c.logInfo("Issue #%s marked BLOCKED (parent #%s blocked)", childID, current)
-					c.postBlockedCommentForIssue(ctx, childID,
-						fmt.Sprintf("Parent issue #%s is blocked", current))
 					queue = append(queue, childID)
 				}
 			}
