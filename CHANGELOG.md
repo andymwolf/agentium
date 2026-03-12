@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/andymwolf/agentium/compare/v0.13.0...v0.13.1) (2026-03-12)
+
+
+### Bug Fixes
+
+* refresh GitHub token after agent iteration to prevent expired-token failures ([#571](https://github.com/andymwolf/agentium/issues/571)) ([e3a8cea](https://github.com/andymwolf/agentium/commit/e3a8ceae88f0820012de8abadd1779418444fc5e))
+
 ## [0.13.0](https://github.com/andymwolf/agentium/compare/v0.12.6...v0.13.0) (2026-03-12)
 
 
