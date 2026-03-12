@@ -62,10 +62,17 @@ func (c *Controller) runWorkerIteration(ctx context.Context, plc *phaseLoopConte
 		EndTime:      result.EndTime,
 	})
 
-	// Full output for internal processing (handoff parsing, judge context)
+	// Full output for internal processing (handoff parsing, plan markers, signal detection)
 	plc.phaseOutput = result.RawTextContent
 	if plc.phaseOutput == "" {
 		plc.phaseOutput = result.Summary
+	}
+
+	// Assistant-only text for reviewer/judge/complexity prompts (excludes tool results
+	// like file contents, diffs, and command output that inflate the context).
+	plc.evalOutput = result.AssistantText
+	if plc.evalOutput == "" {
+		plc.evalOutput = plc.phaseOutput
 	}
 
 	// Filtered output for GitHub comments (assistant text only, no tool results)
@@ -84,10 +91,10 @@ func (c *Controller) runWorkerIteration(ctx context.Context, plc *phaseLoopConte
 // writes the plan file for the PLAN phase. Returns an error if the plan file
 // write fails — callers should treat this as a fatal condition (BLOCKED).
 func (c *Controller) processWorkerHandoff(plc *phaseLoopContext, iter int) error {
-	// Warn if phase output exceeds judge context budget
-	if plc.phaseOutput != "" && len(plc.phaseOutput) > c.judgeContextBudget() {
-		c.logWarning("Phase %s output (%d chars) exceeds judge context budget (%d chars) — judge/reviewer will see truncated output",
-			plc.currentPhase, len(plc.phaseOutput), c.judgeContextBudget())
+	// Warn if eval output (assistant text for reviewer/judge) exceeds judge context budget
+	if plc.evalOutput != "" && len(plc.evalOutput) > c.judgeContextBudget() {
+		c.logWarning("Phase %s eval output (%d chars) exceeds judge context budget (%d chars) — judge/reviewer will see truncated output",
+			plc.currentPhase, len(plc.evalOutput), c.judgeContextBudget())
 	}
 
 	// Parse and store handoff output if enabled

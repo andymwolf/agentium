@@ -72,7 +72,7 @@ func (c *Controller) handleComplexityAssessment(ctx context.Context, plc *phaseL
 		return false
 	}
 	complexityResult, complexityErr := c.runComplexityAssessor(ctx, complexityRunParams{
-		PlanOutput:    plc.phaseOutput,
+		PlanOutput:    plc.evalOutput,
 		Iteration:     iter,
 		MaxIterations: plc.maxIter,
 	})
