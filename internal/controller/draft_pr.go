@@ -13,6 +13,8 @@ import (
 )
 
 // createDraftPRWithRetry attempts to create a draft PR with retries and backoff.
+// On auth errors (401), it refreshes the GitHub token before retrying instead
+// of blind backoff, since expired tokens won't self-heal with time.
 // Returns true if the task was blocked (all retry attempts exhausted).
 func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, state *TaskState, phase TaskPhase, iter int) bool {
 	delays := []time.Duration{0, 2 * time.Second, 4 * time.Second}
@@ -21,6 +23,17 @@ func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, 
 		if attempt > 0 {
 			c.logWarning("Draft PR creation failed (retry %d/%d), retrying in %s: %v",
 				attempt, len(delays)-1, delay, prErr)
+
+			// On auth errors, refresh the token before retrying — backoff alone
+			// won't fix an expired token.
+			if isAuthError(prErr) {
+				if refreshErr := c.refreshGitHubTokenIfNeeded(); refreshErr != nil {
+					c.logError("Token refresh failed during draft PR retry: %v", refreshErr)
+				} else {
+					c.logInfo("Token refreshed after auth error, retrying draft PR creation")
+				}
+			}
+
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
@@ -41,6 +54,24 @@ func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, 
 	c.postPhaseComment(ctx, phase, iter, RoleController,
 		fmt.Sprintf("BLOCKED: draft PR creation failed after %d attempts: %v — task requires human intervention.", len(delays), prErr))
 	return true
+}
+
+// isAuthError returns true if the error message indicates a GitHub authentication failure.
+// These errors won't self-heal with backoff — they require a token refresh.
+// Checks both the error and optional command output, since gh CLI puts the
+// HTTP status in stdout/stderr rather than the Go error.
+func isAuthError(err error, output ...string) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, o := range output {
+		msg += " " + strings.ToLower(o)
+	}
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "bad credentials") ||
+		strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "could not read username")
 }
 
 // maybeCreateDraftPR ensures a draft PR exists for the current branch.

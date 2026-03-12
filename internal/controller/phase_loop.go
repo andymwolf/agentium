@@ -472,6 +472,13 @@ func (c *Controller) runPhaseLoop(ctx context.Context) error {
 				continue
 			}
 
+			// Refresh token after worker completes — agent runs can exceed
+			// the 1-hour token lifetime, causing all post-processing
+			// (comments, draft PR, review/judge) to fail with 401.
+			if err := c.refreshGitHubTokenIfNeeded(); err != nil {
+				c.logWarning("Post-iteration token refresh failed: %v (continuing with current token)", err)
+			}
+
 			if handoffErr := c.processWorkerHandoff(plc, iter); handoffErr != nil {
 				c.logError("Phase %s: fatal handoff error: %v", plc.currentPhase, handoffErr)
 				state.Phase = PhaseBlocked
