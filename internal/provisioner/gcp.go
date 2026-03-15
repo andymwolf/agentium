@@ -255,6 +255,130 @@ func (p *GCPProvisioner) removeInstanceIAMCondition(ctx context.Context, session
 	return nil
 }
 
+// iamBinding represents a single IAM policy binding from gcloud's JSON output.
+type iamBinding struct {
+	Role      string        `json:"role"`
+	Members   []string      `json:"members"`
+	Condition *iamCondition `json:"condition,omitempty"`
+}
+
+// iamCondition represents a condition attached to an IAM binding.
+type iamCondition struct {
+	Title      string `json:"title"`
+	Expression string `json:"expression"`
+}
+
+// cleanupStaleIAMBindings removes per-instance IAM conditions for instances
+// that no longer exist. This prevents stale bindings from accumulating when
+// VMs terminate ungracefully (crash, spot preemption, max_run_duration timeout)
+// and hitting the GCP limit of 20 conditional bindings per role+member pair.
+//
+// Best-effort: failures are logged as warnings but never block provisioning.
+func (p *GCPProvisioner) cleanupStaleIAMBindings(ctx context.Context) {
+	// 1. Get the current IAM policy
+	args := []string{
+		"projects", "get-iam-policy", p.project,
+		"--format=json",
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	p.setCredentialEnv(cmd)
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to get IAM policy for stale binding cleanup: %v\n", err)
+		return
+	}
+
+	var policy struct {
+		Bindings []iamBinding `json:"bindings"`
+	}
+	if err = json.Unmarshal(output, &policy); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to parse IAM policy for stale binding cleanup: %v\n", err)
+		return
+	}
+
+	// 2. Find all agentium-instance-* condition titles
+	const conditionPrefix = "agentium-instance-"
+	var staleSessionIDs []string
+	for _, binding := range policy.Bindings {
+		if binding.Role != "roles/compute.instanceAdmin.v1" || binding.Condition == nil {
+			continue
+		}
+		if strings.HasPrefix(binding.Condition.Title, conditionPrefix) {
+			sessionID := strings.TrimPrefix(binding.Condition.Title, conditionPrefix)
+			staleSessionIDs = append(staleSessionIDs, sessionID)
+		}
+	}
+
+	if len(staleSessionIDs) < 5 {
+		return
+	}
+
+	// 3. Get live instances to determine which bindings are still valid
+	liveInstances := make(map[string]string) // sessionID -> zone
+	sessions, err := p.List(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to list instances for stale binding cleanup: %v\n", err)
+		return
+	}
+	for _, s := range sessions {
+		liveInstances[s.SessionID] = s.Zone
+	}
+
+	// 4. Remove bindings whose instances no longer exist
+	var removed int
+	for _, sessionID := range staleSessionIDs {
+		if _, alive := liveInstances[sessionID]; alive {
+			continue
+		}
+		// Instance doesn't exist — this binding is stale.
+		// We need to reconstruct the zone from the condition expression to remove
+		// the binding, but we can also just try all common zone patterns. However,
+		// the condition expression contains the zone, so we can parse it.
+		zone := p.extractZoneFromPolicy(policy.Bindings, sessionID)
+		if zone == "" {
+			fmt.Fprintf(os.Stderr, "WARNING: cannot determine zone for stale IAM binding %s, skipping\n", sessionID)
+			continue
+		}
+		if err := p.removeInstanceIAMCondition(ctx, sessionID, zone); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: failed to remove stale IAM binding for %s: %v\n", sessionID, err)
+		} else {
+			removed++
+		}
+	}
+	if removed > 0 {
+		fmt.Fprintf(os.Stderr, "Cleaned up %d stale IAM binding(s)\n", removed)
+	}
+}
+
+// extractZoneFromPolicy parses the zone from an agentium-instance condition
+// expression. The expression format is:
+//
+//	resource.name == 'projects/PROJECT/zones/ZONE/instances/SESSION_ID'
+func (p *GCPProvisioner) extractZoneFromPolicy(bindings []iamBinding, sessionID string) string {
+	conditionTitle := fmt.Sprintf("agentium-instance-%s", sessionID)
+	for _, binding := range bindings {
+		if binding.Role != "roles/compute.instanceAdmin.v1" || binding.Condition == nil {
+			continue
+		}
+		if binding.Condition.Title != conditionTitle {
+			continue
+		}
+		// Parse zone from: resource.name == 'projects/P/zones/ZONE/instances/ID'
+		expr := binding.Condition.Expression
+		zonesIdx := strings.Index(expr, "/zones/")
+		if zonesIdx == -1 {
+			return ""
+		}
+		rest := expr[zonesIdx+len("/zones/"):]
+		instancesIdx := strings.Index(rest, "/instances/")
+		if instancesIdx == -1 {
+			return ""
+		}
+		return rest[:instancesIdx]
+	}
+	return ""
+}
+
 // cleanupInstanceIAMCondition removes the per-instance IAM condition, logging
 // a warning if the zone is unknown (e.g., instance already deleted).
 func (p *GCPProvisioner) cleanupInstanceIAMCondition(ctx context.Context, sessionID, zone string) {
@@ -428,6 +552,11 @@ max_run_duration   = "%s"
 		err = fmt.Errorf("failed to get terraform output: %w", err)
 		return nil, err
 	}
+
+	// Clean up stale per-instance IAM bindings from previous sessions that
+	// didn't shut down gracefully (crash, spot preemption, max_run_duration).
+	// Best-effort: failures are logged as warnings but don't block provisioning.
+	p.cleanupStaleIAMBindings(ctx)
 
 	// Add per-instance compute admin IAM condition for self-deletion
 	if err = p.addInstanceIAMCondition(ctx, config.Session.ID, output["zone"]); err != nil {
