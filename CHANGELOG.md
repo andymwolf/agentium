@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/andymwolf/agentium/compare/v0.13.1...v0.13.2) (2026-03-15)
+
+
+### Bug Fixes
+
+* clean up stale IAM bindings during provisioning to prevent 20-binding limit ([#574](https://github.com/andymwolf/agentium/issues/574)) ([e7ec11c](https://github.com/andymwolf/agentium/commit/e7ec11cc9e91dcd79aad85f1389a180ee281655b)), closes [#573](https://github.com/andymwolf/agentium/issues/573)
+
 ## [0.13.1](https://github.com/andymwolf/agentium/compare/v0.13.0...v0.13.1) (2026-03-12)
 
 
