@@ -90,6 +90,64 @@ func TestSharedServiceAccountEmail(t *testing.T) {
 	}
 }
 
+func TestExtractZoneFromPolicy(t *testing.T) {
+	p := &GCPProvisioner{project: "my-project"}
+
+	bindings := []iamBinding{
+		{
+			Role:    "roles/compute.instanceAdmin.v1",
+			Members: []string{"serviceAccount:agentium-shared@my-project.iam.gserviceaccount.com"},
+			Condition: &iamCondition{
+				Title:      "agentium-instance-session-abc",
+				Expression: "resource.name == 'projects/my-project/zones/us-central1-a/instances/session-abc'",
+			},
+		},
+		{
+			Role:    "roles/compute.instanceAdmin.v1",
+			Members: []string{"serviceAccount:agentium-shared@my-project.iam.gserviceaccount.com"},
+			Condition: &iamCondition{
+				Title:      "agentium-instance-session-def",
+				Expression: "resource.name == 'projects/my-project/zones/europe-west1-b/instances/session-def'",
+			},
+		},
+		{
+			Role:    "roles/secretmanager.secretAccessor",
+			Members: []string{"serviceAccount:agentium-shared@my-project.iam.gserviceaccount.com"},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{
+			name:      "extracts zone from matching binding",
+			sessionID: "session-abc",
+			want:      "us-central1-a",
+		},
+		{
+			name:      "extracts zone from second binding",
+			sessionID: "session-def",
+			want:      "europe-west1-b",
+		},
+		{
+			name:      "returns empty for unknown session",
+			sessionID: "session-unknown",
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := p.extractZoneFromPolicy(bindings, tt.sessionID)
+			if got != tt.want {
+				t.Errorf("extractZoneFromPolicy(%q) = %q, want %q", tt.sessionID, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsAlreadyExistsError(t *testing.T) {
 	tests := []struct {
 		name   string
