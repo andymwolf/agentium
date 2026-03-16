@@ -180,6 +180,147 @@ func TestAdapter_BuildCommand(t *testing.T) {
 	})
 }
 
+func TestAdapter_BuildCommand_EffortLevel(t *testing.T) {
+	a := New()
+
+	t.Run("reasoning override maps to --effort flag", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			IterationContext: &agent.IterationContext{
+				Phase:             "IMPLEMENT",
+				ReasoningOverride: "high",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var effortValue string
+		for i, arg := range cmd {
+			if arg == "--effort" && i+1 < len(cmd) {
+				effortValue = cmd[i+1]
+				break
+			}
+		}
+		if effortValue != "high" {
+			t.Errorf("--effort = %q, want %q (cmd: %v)", effortValue, "high", cmd)
+		}
+	})
+
+	t.Run("xhigh maps to max", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			IterationContext: &agent.IterationContext{
+				ReasoningOverride: "xhigh",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var effortValue string
+		for i, arg := range cmd {
+			if arg == "--effort" && i+1 < len(cmd) {
+				effortValue = cmd[i+1]
+				break
+			}
+		}
+		if effortValue != "max" {
+			t.Errorf("--effort = %q, want %q", effortValue, "max")
+		}
+	})
+
+	t.Run("minimal maps to low", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			IterationContext: &agent.IterationContext{
+				ReasoningOverride: "minimal",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var effortValue string
+		for i, arg := range cmd {
+			if arg == "--effort" && i+1 < len(cmd) {
+				effortValue = cmd[i+1]
+				break
+			}
+		}
+		if effortValue != "low" {
+			t.Errorf("--effort = %q, want %q", effortValue, "low")
+		}
+	})
+
+	t.Run("no effort flag when not set", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		for _, arg := range cmd {
+			if arg == "--effort" {
+				t.Error("--effort should not be present when no reasoning override is set")
+			}
+		}
+	})
+
+	t.Run("effort in continue command", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			IterationContext: &agent.IterationContext{
+				Phase:             "IMPLEMENT",
+				ReasoningOverride: "medium",
+			},
+		}
+
+		cmd := a.BuildContinueCommand(session, 2)
+
+		var effortValue string
+		for i, arg := range cmd {
+			if arg == "--effort" && i+1 < len(cmd) {
+				effortValue = cmd[i+1]
+				break
+			}
+		}
+		if effortValue != "medium" {
+			t.Errorf("BuildContinueCommand --effort = %q, want %q", effortValue, "medium")
+		}
+	})
+
+	t.Run("effort and model override together", func(t *testing.T) {
+		session := &agent.Session{
+			Repository: "github.com/org/repo",
+			Tasks:      []string{"1"},
+			IterationContext: &agent.IterationContext{
+				ModelOverride:     "claude-opus-4-20250514",
+				ReasoningOverride: "max",
+			},
+		}
+
+		cmd := a.BuildCommand(session, 1)
+
+		var modelValue, effortValue string
+		for i, arg := range cmd {
+			if arg == "--model" && i+1 < len(cmd) {
+				modelValue = cmd[i+1]
+			}
+			if arg == "--effort" && i+1 < len(cmd) {
+				effortValue = cmd[i+1]
+			}
+		}
+		if modelValue != "claude-opus-4-20250514" {
+			t.Errorf("--model = %q, want %q", modelValue, "claude-opus-4-20250514")
+		}
+		if effortValue != "max" {
+			t.Errorf("--effort = %q, want %q", effortValue, "max")
+		}
+	})
+}
+
 func TestAdapter_BuildPrompt(t *testing.T) {
 	a := New()
 

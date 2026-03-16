@@ -13,6 +13,17 @@ const (
 	DefaultImage = "ghcr.io/andymwolf/agentium-claudecode:latest"
 )
 
+// reasoningToEffort maps generic routing reasoning levels to Claude Code --effort values.
+// Claude Code supports: low, medium, high, max.
+var reasoningToEffort = map[string]string{
+	"minimal": "low",
+	"low":     "low",
+	"medium":  "medium",
+	"high":    "high",
+	"xhigh":   "max",
+	"max":     "max",
+}
+
 // Adapter implements the Agent interface for Claude Code
 type Adapter struct {
 	image string
@@ -83,6 +94,13 @@ func (a *Adapter) BuildContinueCommand(session *agent.Session, iteration int) []
 	// Pass model override from routing config
 	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
 		args = append(args, "--model", session.IterationContext.ModelOverride)
+	}
+
+	// Reasoning level override via config (Claude Code uses --effort flag)
+	if session.IterationContext != nil && session.IterationContext.ReasoningOverride != "" {
+		if effort, ok := reasoningToEffort[session.IterationContext.ReasoningOverride]; ok {
+			args = append(args, "--effort", effort)
+		}
 	}
 
 	// No --system-prompt or --append-system-prompt: they carry over from invocation 1
@@ -168,6 +186,13 @@ func (a *Adapter) BuildCommand(session *agent.Session, iteration int) []string {
 	// Pass model override from routing config
 	if session.IterationContext != nil && session.IterationContext.ModelOverride != "" {
 		args = append(args, "--model", session.IterationContext.ModelOverride)
+	}
+
+	// Reasoning level override via config (Claude Code uses --effort flag)
+	if session.IterationContext != nil && session.IterationContext.ReasoningOverride != "" {
+		if effort, ok := reasoningToEffort[session.IterationContext.ReasoningOverride]; ok {
+			args = append(args, "--effort", effort)
+		}
 	}
 
 	// In interactive mode, append prompt as positional argument.

@@ -357,14 +357,15 @@ func TestReasoningInModelConfig(t *testing.T) {
 
 func TestValidReasoningLevels(t *testing.T) {
 	// Codex supports: minimal, low, medium, high, xhigh
-	expectedLevels := []string{"minimal", "low", "medium", "high", "xhigh"}
+	// Claude Code supports: low, medium, high, max
+	expectedLevels := []string{"minimal", "low", "medium", "high", "xhigh", "max"}
 	for _, level := range expectedLevels {
 		if !ValidReasoningLevels[level] {
 			t.Errorf("expected %q to be a valid reasoning level", level)
 		}
 	}
 
-	invalidLevels := []string{"", "none", "max", "ultra"}
+	invalidLevels := []string{"", "none", "ultra"}
 	for _, level := range invalidLevels {
 		if ValidReasoningLevels[level] {
 			t.Errorf("expected %q to be an invalid reasoning level", level)
@@ -374,11 +375,11 @@ func TestValidReasoningLevels(t *testing.T) {
 
 func TestValidReasoningLevelNames(t *testing.T) {
 	names := ValidReasoningLevelNames()
-	if len(names) != 5 {
-		t.Fatalf("expected 5 reasoning levels, got %d", len(names))
+	if len(names) != 6 {
+		t.Fatalf("expected 6 reasoning levels, got %d", len(names))
 	}
 	// Should be sorted
-	if names[0] != "high" || names[1] != "low" || names[2] != "medium" {
+	if names[0] != "high" || names[1] != "low" || names[2] != "max" || names[3] != "medium" {
 		t.Errorf("reasoning levels not sorted: %v", names)
 	}
 }
