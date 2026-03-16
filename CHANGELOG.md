@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/andymwolf/agentium/compare/v0.13.1...v0.14.0) (2026-03-16)
+
+
+### Features
+
+* support reasoning/effort level config for Claude Code adapter ([#577](https://github.com/andymwolf/agentium/issues/577)) ([a474e58](https://github.com/andymwolf/agentium/commit/a474e58263293f1dec8870849899f36f2bb7ed27)), closes [#576](https://github.com/andymwolf/agentium/issues/576)
+
+
+### Bug Fixes
+
+* clean up stale IAM bindings during provisioning to prevent 20-binding limit ([#574](https://github.com/andymwolf/agentium/issues/574)) ([e7ec11c](https://github.com/andymwolf/agentium/commit/e7ec11cc9e91dcd79aad85f1389a180ee281655b)), closes [#573](https://github.com/andymwolf/agentium/issues/573)
+* detect no-commits error in PR creation and fail fast with diagnostics ([#579](https://github.com/andymwolf/agentium/issues/579)) ([638b038](https://github.com/andymwolf/agentium/commit/638b03868582bd6c23389de081f5343e62795bf8)), closes [#578](https://github.com/andymwolf/agentium/issues/578)
+
 ## [0.13.1](https://github.com/andymwolf/agentium/compare/v0.13.0...v0.13.1) (2026-03-12)
 
 
