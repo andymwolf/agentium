@@ -15,12 +15,14 @@ type ModelConfig struct {
 
 // ValidReasoningLevels is the set of recognized reasoning level values.
 // For codex: minimal, low, medium, high, xhigh (passed as model_reasoning_effort config)
+// For claude-code: low, medium, high, max (passed as --effort flag)
 var ValidReasoningLevels = map[string]bool{
 	"minimal": true,
 	"low":     true,
 	"medium":  true,
 	"high":    true,
 	"xhigh":   true,
+	"max":     true,
 }
 
 // ValidReasoningLevelNames returns the sorted list of recognized reasoning levels.
