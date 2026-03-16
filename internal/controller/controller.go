@@ -782,6 +782,31 @@ func (c *Controller) runMainLoop(ctx context.Context) error {
 // would start on task N's feature branch, causing maybeCreateDraftPR to associate
 // the wrong PR and VERIFY to merge the wrong PR.
 func (c *Controller) resetWorkspaceToMain(ctx context.Context) {
+	// Check for uncommitted changes before resetting — these would be silently
+	// discarded, so log them as a warning for post-mortem analysis.
+	statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	statusCmd.Dir = c.workDir
+	if statusOutput, statusErr := statusCmd.Output(); statusErr == nil {
+		lines := parseGitStatusPorcelain(string(statusOutput))
+		if len(lines) > 0 {
+			c.logWarning("Discarding %d uncommitted files from previous task", len(lines))
+		}
+	}
+
+	// Force-clean the working tree to prevent dirty state from blocking checkout
+	// or leaking into the next task's working tree.
+	cleanCmd := exec.CommandContext(ctx, "git", "checkout", "--", ".")
+	cleanCmd.Dir = c.workDir
+	if cleanOutput, cleanErr := cleanCmd.CombinedOutput(); cleanErr != nil {
+		c.logWarning("Failed to clean working tree: %v (output: %s)", cleanErr, strings.TrimSpace(string(cleanOutput)))
+	}
+
+	cleanUntrackedCmd := exec.CommandContext(ctx, "git", "clean", "-fd")
+	cleanUntrackedCmd.Dir = c.workDir
+	if cleanOutput, cleanErr := cleanUntrackedCmd.CombinedOutput(); cleanErr != nil {
+		c.logWarning("Failed to clean untracked files: %v (output: %s)", cleanErr, strings.TrimSpace(string(cleanOutput)))
+	}
+
 	cmd := exec.CommandContext(ctx, "git", "checkout", "main")
 	cmd.Dir = c.workDir
 	output, err := cmd.CombinedOutput()

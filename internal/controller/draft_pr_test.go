@@ -329,6 +329,80 @@ func TestCreateDraftPRWithRetry_RespectsContextCancellation(t *testing.T) {
 	}
 }
 
+func TestIsNoCommitsError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"generic error", fmt.Errorf("connection refused"), false},
+		{"no commits in error msg", fmt.Errorf("GraphQL: No commits between main and feat/issue-123"), true},
+		{"no commits lowercase", fmt.Errorf("no commits between main and feature/issue-456"), true},
+		{"auth error not matched", fmt.Errorf("HTTP 401: Bad credentials"), false},
+		{"no commits in cmdOutputError", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "No commits between main and feat/issue-789"}, true},
+		{"wrapped cmdOutputError with no commits", fmt.Errorf("PR create failed: %w", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "No commits between main and feat/issue-100"}), true},
+		{"cmdOutputError without no commits", &cmdOutputError{err: fmt.Errorf("exit status 1"), output: "already exists"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isNoCommitsError(tt.err)
+			if got != tt.want {
+				t.Errorf("isNoCommitsError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseGitStatusPorcelain(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   []string
+	}{
+		{
+			"empty output",
+			"",
+			nil,
+		},
+		{
+			"single modified file",
+			" M internal/controller/draft_pr.go\n",
+			[]string{"internal/controller/draft_pr.go"},
+		},
+		{
+			"multiple files",
+			" M file1.go\n?? file2.go\nA  file3.go\n",
+			[]string{"file1.go", "file2.go", "file3.go"},
+		},
+		{
+			"trailing whitespace lines",
+			" M file1.go\n\n",
+			[]string{"file1.go"},
+		},
+		{
+			"renamed file",
+			"R  old.go -> new.go\n",
+			[]string{"old.go -> new.go"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseGitStatusPorcelain(tt.output)
+			if len(got) != len(tt.want) {
+				t.Fatalf("parseGitStatusPorcelain() returned %d files, want %d: got=%v", len(got), len(tt.want), got)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("parseGitStatusPorcelain()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestIsAuthError(t *testing.T) {
 	tests := []struct {
 		name   string
