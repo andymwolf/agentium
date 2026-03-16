@@ -48,6 +48,24 @@ func (c *Controller) createDraftPRWithRetry(ctx context.Context, taskID string, 
 		if prErr == nil {
 			return false
 		}
+
+		// No-commits error is structural (agent didn't commit) — retrying won't help.
+		if isNoCommitsError(prErr) {
+			c.logError("Agent left uncommitted changes but made no commits — cannot create PR: %v", prErr)
+			var fileListMsg string
+			if files, listErr := c.listUncommittedFiles(ctx); listErr == nil && len(files) > 0 {
+				c.logWarning("Uncommitted files (%d): %v", len(files), files)
+				fileListMsg = fmt.Sprintf("\n\nUncommitted files (%d):\n", len(files))
+				for _, f := range files {
+					fileListMsg += fmt.Sprintf("- `%s`\n", f)
+				}
+			}
+			state.Phase = PhaseBlocked
+			state.ControllerOverrode = true
+			c.postPhaseComment(ctx, phase, iter, RoleController,
+				fmt.Sprintf("BLOCKED: Agent modified files but did not commit them — branch has no commits relative to main, so a PR cannot be created.%s\nTask requires human intervention.", fileListMsg))
+			return true
+		}
 	}
 	c.logError("Draft PR creation failed after %d attempts: %v", len(delays), prErr)
 	state.Phase = PhaseBlocked
@@ -71,6 +89,51 @@ func (e *cmdOutputError) Error() string {
 
 func (e *cmdOutputError) Unwrap() error {
 	return e.err
+}
+
+// isNoCommitsError returns true if the error indicates a "no commits between" failure.
+// This happens when the agent modifies files but exits without committing — the branch
+// exists but has zero commits relative to the base branch, so gh pr create fails.
+// Unlike auth errors, this is a structural problem that won't self-heal with retries.
+func isNoCommitsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+
+	var cmdErr *cmdOutputError
+	if errors.As(err, &cmdErr) {
+		msg += " " + strings.ToLower(cmdErr.output)
+	}
+
+	return strings.Contains(msg, "no commits between")
+}
+
+// listUncommittedFiles runs `git status --porcelain` and returns the list of dirty files.
+func (c *Controller) listUncommittedFiles(ctx context.Context) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd.Dir = c.workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git status failed: %w", err)
+	}
+	return parseGitStatusPorcelain(string(output)), nil
+}
+
+// parseGitStatusPorcelain parses `git status --porcelain` output into file paths.
+// Porcelain format: each line is "XY filename" where XY is exactly 2 status chars
+// followed by a space and the filename. We must NOT trim leading spaces since
+// the first status char may be a space (e.g., " M" means modified but unstaged).
+func parseGitStatusPorcelain(output string) []string {
+	var files []string
+	for _, line := range strings.Split(output, "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		// Fixed format: 2 status chars + 1 space + filename
+		files = append(files, line[3:])
+	}
+	return files
 }
 
 // isAuthError returns true if the error message indicates a GitHub authentication failure.
