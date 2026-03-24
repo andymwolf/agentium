@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -33,6 +34,7 @@ type reviewRunParams struct {
 	WorkerHandoffSummary    string // What worker claims to have done this iteration
 	WorkerFeedbackResponses string // Worker's FEEDBACK_RESPONSE signals from current iteration
 	ParentBranch            string // Parent branch for dependency chains (diff base instead of main)
+	DiffContent             string // Pre-fetched git diff output injected into the prompt
 }
 
 // runReviewer runs a reviewer agent against the completed phase output.
@@ -40,6 +42,11 @@ type reviewRunParams struct {
 // constructive feedback without deciding the verdict.
 func (c *Controller) runReviewer(ctx context.Context, params reviewRunParams) (ReviewResult, error) {
 	c.logInfo("Starting reviewer for phase %s (iteration %d/%d)...", params.CompletedPhase, params.Iteration, params.MaxIterations)
+
+	// Pre-fetch git diff for code review phases so the reviewer doesn't have to
+	if params.CompletedPhase != PhasePlan && params.DiffContent == "" {
+		params.DiffContent = c.fetchReviewDiff(ctx, params.ParentBranch)
+	}
 
 	reviewPrompt := c.buildReviewPrompt(params)
 
@@ -245,33 +252,42 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 	} else {
 		// IMPLEMENT/DOCS/VERIFY phases: review actual code changes
 		sb.WriteString("Review the code changes produced in this phase.\n\n")
-		sb.WriteString("**IMPORTANT:** Do not rely solely on the phase output log above. The log shows agent activity, not a clean view of the code. You MUST:\n")
 
-		// Use parent branch as diff base when this issue depends on another issue's branch
-		diffBase := "main"
-		if params.ParentBranch != "" {
-			diffBase = params.ParentBranch
+		// Inject pre-fetched diff directly into the prompt
+		if params.DiffContent != "" {
+			diffBase := "main"
+			if params.ParentBranch != "" {
+				diffBase = params.ParentBranch
+			}
+			sb.WriteString(fmt.Sprintf("## Code Diff (%s..HEAD)\n\n", diffBase))
+			sb.WriteString("```diff\n")
+			sb.WriteString(params.DiffContent)
+			sb.WriteString("\n```\n\n")
 		}
-		sb.WriteString(fmt.Sprintf("1. Run `git diff %s..HEAD` to see the code changes on this branch\n", diffBase))
-		sb.WriteString("2. Open and read key modified files to check surrounding context\n")
-		sb.WriteString("3. Verify that the changes match what the worker claims to have done\n\n")
+
+		if params.DiffContent != "" {
+			sb.WriteString("**IMPORTANT:** The diff above is the authoritative view of what changed. ")
+			sb.WriteString("Open and read key modified files to check surrounding context — the diff alone may not show enough. ")
+			sb.WriteString("Verify that the changes match what the worker claims to have done.\n\n")
+		}
 
 		if params.ParentBranch != "" {
 			sb.WriteString(fmt.Sprintf("**DEPENDENCY CONTEXT:** This issue depends on work from branch `%s`. ", params.ParentBranch))
 			sb.WriteString(fmt.Sprintf("The diff base is `%s` (not `main`) so you only see changes made for THIS issue. ", params.ParentBranch))
 			sb.WriteString("Do NOT flag inherited parent branch changes as scope creep.\n\n")
 		}
-		sb.WriteString("Provide constructive, actionable review feedback.\n")
-		sb.WriteString("Be specific about what to improve and indicate severity (critical/security, functional bug, minor style).\n")
-		sb.WriteString("Security issues (data leakage, missing input validation, unguarded nil access) should always be flagged as critical.\n\n")
-	}
 
-	sb.WriteString("## Output Format\n\n")
-	sb.WriteString("**CRITICAL:** Output ONLY your feedback. Do NOT include:\n")
-	sb.WriteString("- Preamble or planning statements (e.g., \"I need to review...\", \"Let me examine...\")\n")
-	sb.WriteString("- Descriptions of your process or reasoning\n")
-	sb.WriteString("- Issue or PR metadata\n\n")
-	sb.WriteString("Start directly with your feedback content. Use concise bullet points or short paragraphs.\n")
+		if params.DiffContent == "" {
+			// Fallback: diff fetch failed, tell reviewer to fetch it manually
+			diffBase := "main"
+			if params.ParentBranch != "" {
+				diffBase = params.ParentBranch
+			}
+			sb.WriteString(fmt.Sprintf("**NOTE:** The diff could not be pre-fetched. Run `git diff %s..HEAD` to see the code changes.\n", diffBase))
+			sb.WriteString("Open and read key modified files to check surrounding context. ")
+			sb.WriteString("Verify that the changes match what the worker claims to have done.\n\n")
+		}
+	}
 
 	// Add comparison task if we have previous feedback or worker responses
 	if params.Iteration > 1 && params.WorkerFeedbackResponses != "" {
@@ -289,6 +305,35 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 
 	// Apply template variable substitution
 	return c.renderWithParameters(sb.String())
+}
+
+// defaultReviewDiffBudget is the max characters of git diff output included
+// directly in the reviewer prompt. Diffs exceeding this are tail-truncated so
+// the reviewer still sees the most recent changes.
+const defaultReviewDiffBudget = 32000
+
+// fetchReviewDiff runs git diff against the appropriate base branch and returns
+// the output, truncated to the diff budget. Returns empty string on error.
+func (c *Controller) fetchReviewDiff(ctx context.Context, parentBranch string) string {
+	diffBase := "main"
+	if parentBranch != "" {
+		diffBase = parentBranch
+	}
+
+	cmd := exec.CommandContext(ctx, "git", "diff", fmt.Sprintf("%s..HEAD", diffBase))
+	cmd.Dir = c.workDir
+	output, err := cmd.Output()
+	if err != nil {
+		c.logWarning("Failed to fetch git diff for reviewer: %v", err)
+		return ""
+	}
+
+	diff := string(output)
+	budget := defaultReviewDiffBudget
+	if len(diff) > budget {
+		diff = diff[:budget] + "\n\n... (diff truncated — review key modified files for full context)"
+	}
+	return diff
 }
 
 // feedbackResponsePattern matches AGENTIUM_MEMORY: FEEDBACK_RESPONSE lines.

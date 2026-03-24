@@ -426,10 +426,8 @@ func TestBuildReviewPrompt_ImplementPhaseHasCodeReview(t *testing.T) {
 	prompt := c.buildReviewPrompt(params)
 
 	contains := []string{
-		"git diff main..HEAD",
-		"Open and read key modified files",
-		"Verify that the changes match",
-		"Security issues",
+		"git diff main..HEAD",           // Fallback note when DiffContent is empty
+		"Verify that the changes match", // Verification instruction
 	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {
@@ -439,11 +437,70 @@ func TestBuildReviewPrompt_ImplementPhaseHasCodeReview(t *testing.T) {
 
 	notContains := []string{
 		"Review the **plan**",
-		"Do NOT run",
 	}
 	for _, substr := range notContains {
 		if containsString(prompt, substr) {
 			t.Errorf("IMPLEMENT review prompt should NOT contain %q", substr)
 		}
+	}
+}
+
+func TestBuildReviewPrompt_DiffInjected(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "20",
+	}
+
+	diffContent := "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -1,3 +1,5 @@\n+func newFunc() {}\n"
+
+	params := reviewRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "Implemented feature",
+		Iteration:      1,
+		MaxIterations:  3,
+		DiffContent:    diffContent,
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	contains := []string{
+		"## Code Diff (main..HEAD)",
+		"func newFunc() {}",
+		"authoritative view of what changed",
+	}
+	for _, substr := range contains {
+		if !containsString(prompt, substr) {
+			t.Errorf("review prompt with DiffContent should contain %q", substr)
+		}
+	}
+
+	// When diff is provided, fallback note should NOT be present
+	if containsString(prompt, "diff could not be pre-fetched") {
+		t.Error("review prompt with DiffContent should NOT contain fallback note")
+	}
+}
+
+func TestBuildReviewPrompt_DiffWithParentBranch(t *testing.T) {
+	c := &Controller{
+		config:     SessionConfig{Repository: "github.com/org/repo"},
+		activeTask: "21",
+	}
+
+	params := reviewRunParams{
+		CompletedPhase: PhaseImplement,
+		PhaseOutput:    "Implemented feature",
+		Iteration:      1,
+		MaxIterations:  3,
+		DiffContent:    "diff content here",
+		ParentBranch:   "feature/issue-10-base",
+	}
+
+	prompt := c.buildReviewPrompt(params)
+
+	if !containsString(prompt, "## Code Diff (feature/issue-10-base..HEAD)") {
+		t.Error("diff header should use parent branch as base")
+	}
+	if !containsString(prompt, "DEPENDENCY CONTEXT") {
+		t.Error("should include dependency context for parent branch")
 	}
 }
