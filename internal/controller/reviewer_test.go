@@ -426,9 +426,8 @@ func TestBuildReviewPrompt_ImplementPhaseHasCodeReview(t *testing.T) {
 	prompt := c.buildReviewPrompt(params)
 
 	contains := []string{
-		"git diff main..HEAD",                // Fallback note when DiffContent is empty
-		"authoritative view of what changed", // Diff instruction
-		"Verify that the changes match",      // Verification instruction
+		"git diff main..HEAD",           // Fallback note when DiffContent is empty
+		"Verify that the changes match", // Verification instruction
 	}
 	for _, substr := range contains {
 		if !containsString(prompt, substr) {

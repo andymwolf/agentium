@@ -265,9 +265,11 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 			sb.WriteString("\n```\n\n")
 		}
 
-		sb.WriteString("**IMPORTANT:** The diff above is the authoritative view of what changed. ")
-		sb.WriteString("Open and read key modified files to check surrounding context — the diff alone may not show enough. ")
-		sb.WriteString("Verify that the changes match what the worker claims to have done.\n\n")
+		if params.DiffContent != "" {
+			sb.WriteString("**IMPORTANT:** The diff above is the authoritative view of what changed. ")
+			sb.WriteString("Open and read key modified files to check surrounding context — the diff alone may not show enough. ")
+			sb.WriteString("Verify that the changes match what the worker claims to have done.\n\n")
+		}
 
 		if params.ParentBranch != "" {
 			sb.WriteString(fmt.Sprintf("**DEPENDENCY CONTEXT:** This issue depends on work from branch `%s`. ", params.ParentBranch))
@@ -281,7 +283,9 @@ func (c *Controller) buildReviewPrompt(params reviewRunParams) string {
 			if params.ParentBranch != "" {
 				diffBase = params.ParentBranch
 			}
-			sb.WriteString(fmt.Sprintf("**NOTE:** The diff could not be pre-fetched. Run `git diff %s..HEAD` to see the code changes.\n\n", diffBase))
+			sb.WriteString(fmt.Sprintf("**NOTE:** The diff could not be pre-fetched. Run `git diff %s..HEAD` to see the code changes.\n", diffBase))
+			sb.WriteString("Open and read key modified files to check surrounding context. ")
+			sb.WriteString("Verify that the changes match what the worker claims to have done.\n\n")
 		}
 	}
 
