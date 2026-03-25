@@ -45,7 +45,15 @@ type PhaseStepConfigYAML struct {
 	MaxIterations int                    `mapstructure:"max_iterations"`
 	Worker        *StepPromptConfigYAML  `mapstructure:"worker"`
 	Reviewer      *StepPromptConfigYAML  `mapstructure:"reviewer"`
+	Reviewers     []ReviewerConfigYAML   `mapstructure:"reviewers"`
+	Synthesis     *StepPromptConfigYAML  `mapstructure:"synthesis"`
 	Judge         *JudgePromptConfigYAML `mapstructure:"judge"`
+}
+
+// ReviewerConfigYAML defines a named reviewer with its own prompt for multi-reviewer mode.
+type ReviewerConfigYAML struct {
+	Name   string `mapstructure:"name"`
+	Prompt string `mapstructure:"prompt"`
 }
 
 // StepPromptConfigYAML contains an override prompt for a worker or reviewer step in YAML config.

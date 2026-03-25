@@ -383,3 +383,68 @@ func TestValidReasoningLevelNames(t *testing.T) {
 		t.Errorf("reasoning levels not sorted: %v", names)
 	}
 }
+
+func TestSynthesisPhaseKeysAreValid(t *testing.T) {
+	synthesisPhases := []string{
+		"SYNTHESIS",
+		"PLAN_SYNTHESIS", "IMPLEMENT_SYNTHESIS",
+		"DOCS_SYNTHESIS", "VERIFY_SYNTHESIS",
+	}
+
+	for _, phase := range synthesisPhases {
+		if !ValidPhases[phase] {
+			t.Errorf("synthesis phase %q should be in ValidPhases", phase)
+		}
+	}
+}
+
+func TestDynamicReviewerKeysNotFlaggedAsUnknown(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code"},
+		Overrides: map[string]ModelConfig{
+			"IMPLEMENT_REVIEW_CORRECTNESS": {Model: "sonnet"},
+			"IMPLEMENT_REVIEW_ERRORS":      {Model: "haiku"},
+			"PLAN_REVIEW_SCOPE":            {Model: "sonnet"},
+		},
+	})
+
+	unknowns := r.UnknownPhases()
+	if len(unknowns) != 0 {
+		t.Errorf("dynamic reviewer keys should not be unknown, got %v", unknowns)
+	}
+}
+
+func TestDynamicReviewerKeys_InvalidBasePhase(t *testing.T) {
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code"},
+		Overrides: map[string]ModelConfig{
+			"INVALID_REVIEW_CORRECTNESS": {Model: "sonnet"},
+		},
+	})
+
+	unknowns := r.UnknownPhases()
+	if len(unknowns) != 1 {
+		t.Errorf("expected 1 unknown phase for invalid base, got %d: %v", len(unknowns), unknowns)
+	}
+}
+
+func TestDynamicReviewerKeys_EmptyName(t *testing.T) {
+	// "IMPLEMENT_REVIEW_" has empty name after split — should be flagged
+	r := NewRouter(&PhaseRouting{
+		Default: ModelConfig{Adapter: "claude-code"},
+		Overrides: map[string]ModelConfig{
+			"IMPLEMENT_REVIEW_": {Model: "sonnet"},
+		},
+	})
+
+	unknowns := r.UnknownPhases()
+	if len(unknowns) != 1 {
+		t.Errorf("expected 1 unknown phase for empty name suffix, got %d: %v", len(unknowns), unknowns)
+	}
+}
+
+func TestReviewGlobalFallbackKeyIsValid(t *testing.T) {
+	if !ValidPhases["REVIEW"] {
+		t.Error("REVIEW should be a valid phase for global reviewer fallback")
+	}
+}

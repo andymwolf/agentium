@@ -175,6 +175,18 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 			if p.Reviewer != nil {
 				stepCfg.Reviewer = &controller.StepPromptConfig{Prompt: p.Reviewer.Prompt}
 			}
+			if len(p.Reviewers) > 0 {
+				stepCfg.Reviewers = make([]controller.ReviewerConfig, len(p.Reviewers))
+				for j, r := range p.Reviewers {
+					stepCfg.Reviewers[j] = controller.ReviewerConfig{
+						Name:   r.Name,
+						Prompt: r.Prompt,
+					}
+				}
+			}
+			if p.Synthesis != nil {
+				stepCfg.Synthesis = &controller.StepPromptConfig{Prompt: p.Synthesis.Prompt}
+			}
 			if p.Judge != nil {
 				stepCfg.Judge = &controller.JudgePromptConfig{Criteria: p.Judge.Criteria}
 			}

@@ -178,7 +178,15 @@ type PhaseStepConfig struct {
 	MaxIterations int                `json:"max_iterations,omitempty"`
 	Worker        *StepPromptConfig  `json:"worker,omitempty"`
 	Reviewer      *StepPromptConfig  `json:"reviewer,omitempty"`
+	Reviewers     []ReviewerConfig   `json:"reviewers,omitempty"`
+	Synthesis     *StepPromptConfig  `json:"synthesis,omitempty"`
 	Judge         *JudgePromptConfig `json:"judge,omitempty"`
+}
+
+// ReviewerConfig defines a named reviewer with its own prompt for multi-reviewer mode.
+type ReviewerConfig struct {
+	Name   string `json:"name"`
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // StepPromptConfig contains an override prompt for a worker or reviewer step.

@@ -145,3 +145,40 @@ func TestPhases(t *testing.T) {
 		}
 	}
 }
+
+func TestGet_MultiReviewerProfiles(t *testing.T) {
+	profiles := []struct {
+		role     string
+		contains string
+	}{
+		{"REVIEWER_CORRECTNESS", "CORRECTNESS REVIEWER"},
+		{"REVIEWER_ERRORS", "ERROR HANDLING REVIEWER"},
+		{"REVIEWER_TESTS", "TEST COVERAGE REVIEWER"},
+		{"SYNTHESIS", "REVIEW SYNTHESIZER"},
+	}
+
+	for _, p := range profiles {
+		t.Run(p.role, func(t *testing.T) {
+			content := Get("IMPLEMENT", p.role)
+			if content == "" {
+				t.Errorf("Get(IMPLEMENT, %q) returned empty string", p.role)
+			}
+			if !strings.Contains(content, p.contains) {
+				t.Errorf("Get(IMPLEMENT, %q) does not contain %q", p.role, p.contains)
+			}
+		})
+	}
+}
+
+func TestGet_MultiReviewerProfilesHaveEvalSignal(t *testing.T) {
+	profiles := []string{"REVIEWER_CORRECTNESS", "REVIEWER_ERRORS", "REVIEWER_TESTS", "SYNTHESIS"}
+
+	for _, role := range profiles {
+		t.Run(role, func(t *testing.T) {
+			content := Get("IMPLEMENT", role)
+			if !strings.Contains(content, "AGENTIUM_EVAL") {
+				t.Errorf("Multi-reviewer profile IMPLEMENT:%s missing AGENTIUM_EVAL signal", role)
+			}
+		})
+	}
+}

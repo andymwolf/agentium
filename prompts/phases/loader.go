@@ -41,6 +41,18 @@ var verifyReviewer string
 //go:embed verify_judge.md
 var verifyJudge string
 
+//go:embed implement_reviewer_correctness.md
+var implementReviewerCorrectness string
+
+//go:embed implement_reviewer_errors.md
+var implementReviewerErrors string
+
+//go:embed implement_reviewer_tests.md
+var implementReviewerTests string
+
+//go:embed implement_synthesis.md
+var implementSynthesis string
+
 // promptMap maps "PHASE:ROLE" keys to their embedded prompt content.
 var promptMap = map[string]string{
 	"PLAN:WORKER":        planWorker,
@@ -55,6 +67,12 @@ var promptMap = map[string]string{
 	"VERIFY:WORKER":      verifyWorker,
 	"VERIFY:REVIEWER":    verifyReviewer,
 	"VERIFY:JUDGE":       verifyJudge,
+	// Multi-reviewer specialist profiles
+	"IMPLEMENT:REVIEWER_CORRECTNESS": implementReviewerCorrectness,
+	"IMPLEMENT:REVIEWER_ERRORS":      implementReviewerErrors,
+	"IMPLEMENT:REVIEWER_TESTS":       implementReviewerTests,
+	// Synthesis prompt for multi-reviewer mode
+	"IMPLEMENT:SYNTHESIS": implementSynthesis,
 }
 
 // Get returns the static prompt for the given phase and role.

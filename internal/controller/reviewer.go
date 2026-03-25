@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andywolf/agentium/internal/agent"
@@ -378,4 +379,193 @@ func truncateString(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// NamedReviewResult extends ReviewResult with the reviewer's name for multi-reviewer mode.
+type NamedReviewResult struct {
+	ReviewResult
+	Name string // Reviewer name (e.g., "correctness", "errors", "tests")
+}
+
+// runNamedReviewer runs a single named reviewer agent with its own skills prompt.
+// It follows the same pattern as runReviewer but uses a named reviewer's prompt
+// and routing key ({PHASE}_REVIEW_{NAME} → {PHASE}_REVIEW → REVIEW → default).
+// Named reviewers always use one-shot container execution (never pooled).
+func (c *Controller) runNamedReviewer(ctx context.Context, name string, skillsPrompt string, params reviewRunParams) (NamedReviewResult, error) {
+	c.logInfo("Starting named reviewer %q for phase %s (iteration %d/%d)...",
+		name, params.CompletedPhase, params.Iteration, params.MaxIterations)
+
+	reviewPrompt := c.buildReviewPrompt(params)
+
+	session := &agent.Session{
+		ID:             c.config.ID,
+		Repository:     c.config.Repository,
+		Tasks:          c.config.Tasks,
+		WorkDir:        c.workDir,
+		GitHubToken:    c.gitHubToken,
+		MaxDuration:    c.config.MaxDuration,
+		Prompt:         reviewPrompt,
+		Metadata:       make(map[string]string),
+		ClaudeAuthMode: c.config.ClaudeAuth.AuthMode,
+		SystemPrompt:   c.systemPrompt,
+		ActiveTask:     c.activeTask,
+	}
+
+	// Resolve phase key: {PHASE}_REVIEW_{NAME} → {PHASE}_REVIEW → REVIEW → default
+	namedPhase := fmt.Sprintf("%s_REVIEW_%s", params.CompletedPhase, strings.ToUpper(name))
+	reviewPhase := fmt.Sprintf("%s_REVIEW", params.CompletedPhase)
+
+	// Apply template variable substitution to skills prompt
+	resolvedPrompt := c.renderWithParameters(skillsPrompt)
+	session.IterationContext = &agent.IterationContext{
+		Phase:        namedPhase,
+		SkillsPrompt: resolvedPrompt,
+	}
+
+	// Select adapter via compound key fallback chain
+	activeAgent := c.agent
+	if c.modelRouter != nil && c.modelRouter.IsConfigured() {
+		// Try {PHASE}_REVIEW_{NAME} first
+		modelCfg := c.modelRouter.ModelForPhase(namedPhase)
+		// Fallback to {PHASE}_REVIEW
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase(reviewPhase)
+		}
+		// Fallback to REVIEW
+		if modelCfg.Adapter == "" && modelCfg.Model == "" {
+			modelCfg = c.modelRouter.ModelForPhase("REVIEW")
+		}
+		if modelCfg.Adapter != "" {
+			if a, ok := c.adapters[modelCfg.Adapter]; ok {
+				activeAgent = a
+			} else {
+				c.logWarning("Named reviewer %q: configured adapter %q not found, using default %q",
+					name, modelCfg.Adapter, c.agent.Name())
+			}
+		}
+		if modelCfg.Model != "" {
+			session.IterationContext.ModelOverride = modelCfg.Model
+		}
+		if modelCfg.Reasoning != "" {
+			session.IterationContext.ReasoningOverride = modelCfg.Reasoning
+		}
+	}
+
+	env := activeAgent.BuildEnv(session, 0)
+	command := activeAgent.BuildCommand(session, 0)
+
+	stdinPrompt := ""
+	if provider, ok := activeAgent.(agent.StdinPromptProvider); ok {
+		stdinPrompt = provider.GetStdinPrompt(session, 0)
+	}
+
+	modelName := ""
+	if session.IterationContext.ModelOverride != "" {
+		modelName = session.IterationContext.ModelOverride
+	}
+	c.logInfo("Running named reviewer %q for phase %s: adapter=%s model=%s",
+		name, params.CompletedPhase, activeAgent.Name(), modelName)
+
+	reviewerParams := containerRunParams{
+		Agent:       activeAgent,
+		Session:     session,
+		Env:         env,
+		Command:     command,
+		LogTag:      fmt.Sprintf("Reviewer_%s", name),
+		StdinPrompt: stdinPrompt,
+	}
+
+	// Named reviewers always use one-shot execution
+	reviewStart := time.Now()
+	result, err := c.runAgentContainer(ctx, reviewerParams)
+	reviewEnd := time.Now()
+	if err != nil {
+		c.logError("Named reviewer %q container failed for phase %s: %v", name, params.CompletedPhase, err)
+		return NamedReviewResult{}, fmt.Errorf("named reviewer %q failed: %w", name, err)
+	}
+
+	feedback := result.AssistantText
+	if feedback == "" {
+		feedback = result.RawTextContent
+	}
+	if feedback == "" {
+		c.logWarning("Named reviewer %q for phase %s produced no text content", name, params.CompletedPhase)
+		if result.Success {
+			feedback = fmt.Sprintf("Review by %s completed but no feedback text was captured.", name)
+		} else {
+			feedback = fmt.Sprintf("Review by %s failed: %s", name, result.Error)
+		}
+	}
+
+	c.logInfo("Named reviewer %q completed for phase %s", name, params.CompletedPhase)
+
+	return NamedReviewResult{
+		ReviewResult: ReviewResult{
+			Feedback:     feedback,
+			Prompt:       stdinPrompt,
+			SystemPrompt: resolvedPrompt,
+			InputTokens:  result.InputTokens,
+			OutputTokens: result.OutputTokens,
+			StartTime:    reviewStart,
+			EndTime:      reviewEnd,
+		},
+		Name: name,
+	}, nil
+}
+
+// runMultiReviewers fans out to N named reviewers in parallel, collects results,
+// and returns all successful results. Partial failures are tolerated (logged but skipped).
+// Returns error only if ALL reviewers fail.
+func (c *Controller) runMultiReviewers(ctx context.Context, reviewers []ReviewerConfig, params reviewRunParams) ([]NamedReviewResult, error) {
+	c.logInfo("Starting multi-reviewer fan-out: %d reviewers for phase %s", len(reviewers), params.CompletedPhase)
+
+	type indexedResult struct {
+		result NamedReviewResult
+		err    error
+	}
+
+	results := make([]indexedResult, len(reviewers))
+	var wg sync.WaitGroup
+
+	for i, rev := range reviewers {
+		wg.Add(1)
+		go func(idx int, r ReviewerConfig) {
+			defer wg.Done()
+
+			// Resolve skills prompt: config-provided → built-in profile → generic reviewer
+			prompt := r.Prompt
+			if prompt == "" {
+				prompt = phases.Get(string(params.CompletedPhase),
+					fmt.Sprintf("REVIEWER_%s", strings.ToUpper(r.Name)))
+			}
+			if prompt == "" {
+				prompt = phases.Get(string(params.CompletedPhase), "REVIEWER")
+			}
+
+			result, err := c.runNamedReviewer(ctx, r.Name, prompt, params)
+			results[idx] = indexedResult{result: result, err: err}
+		}(i, rev)
+	}
+
+	wg.Wait()
+
+	var successful []NamedReviewResult
+	var firstErr error
+	for i, r := range results {
+		if r.err != nil {
+			c.logWarning("Named reviewer %q failed: %v", reviewers[i].Name, r.err)
+			if firstErr == nil {
+				firstErr = r.err
+			}
+			continue
+		}
+		successful = append(successful, r.result)
+	}
+
+	if len(successful) == 0 && firstErr != nil {
+		return nil, fmt.Errorf("all %d reviewers failed, first error: %w", len(reviewers), firstErr)
+	}
+
+	c.logInfo("Multi-reviewer fan-out complete: %d/%d succeeded", len(successful), len(reviewers))
+	return successful, nil
 }
