@@ -1257,7 +1257,7 @@ func TestMultiReviewers_ReturnsNilWhenNotConfigured(t *testing.T) {
 		},
 	}
 
-	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex); reviewers != nil {
 		t.Errorf("multiReviewers() should return nil for single-reviewer config, got %v", reviewers)
 	}
 }
@@ -1267,7 +1267,7 @@ func TestMultiReviewers_ReturnsNilWhenNoConfig(t *testing.T) {
 		phaseConfigs: map[TaskPhase]*PhaseStepConfig{},
 	}
 
-	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex); reviewers != nil {
 		t.Errorf("multiReviewers() should return nil for missing phase config, got %v", reviewers)
 	}
 }
@@ -1286,7 +1286,7 @@ func TestMultiReviewers_ReturnsConfigWhenPresent(t *testing.T) {
 		},
 	}
 
-	reviewers := c.multiReviewers(PhaseImplement)
+	reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex)
 	if reviewers == nil {
 		t.Fatal("multiReviewers() should return config when Reviewers is populated")
 	}
@@ -1311,7 +1311,87 @@ func TestMultiReviewers_EmptySliceReturnsNil(t *testing.T) {
 		},
 	}
 
-	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex); reviewers != nil {
 		t.Errorf("multiReviewers() should return nil for empty Reviewers slice, got %v", reviewers)
+	}
+}
+
+func TestMultiReviewers_ReturnsNilForSimpleWorkflow(t *testing.T) {
+	c := &Controller{
+		logger: newTestLogger(),
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				Reviewers: []ReviewerConfig{
+					{Name: "correctness", Prompt: "check bugs"},
+					{Name: "errors", Prompt: "check errors"},
+				},
+			},
+		},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathSimple); reviewers != nil {
+		t.Errorf("multiReviewers() should return nil for SIMPLE workflow, got %v", reviewers)
+	}
+}
+
+func TestMultiReviewers_ReturnsNilForSingleReviewerFlag(t *testing.T) {
+	c := &Controller{
+		logger: newTestLogger(),
+		config: SessionConfig{SingleReviewer: true},
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				Reviewers: []ReviewerConfig{
+					{Name: "correctness", Prompt: "check bugs"},
+				},
+			},
+		},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex); reviewers != nil {
+		t.Errorf("multiReviewers() should return nil when SingleReviewer=true, got %v", reviewers)
+	}
+}
+
+func TestMultiReviewers_ReturnsConfigForComplexWorkflow(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				Reviewers: []ReviewerConfig{
+					{Name: "correctness", Prompt: "check bugs"},
+					{Name: "errors", Prompt: "check errors"},
+				},
+			},
+		},
+	}
+
+	reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex)
+	if reviewers == nil {
+		t.Fatal("multiReviewers() should return config for COMPLEX workflow")
+	}
+	if len(reviewers) != 2 {
+		t.Errorf("want 2 reviewers, got %d", len(reviewers))
+	}
+}
+
+func TestMultiReviewers_SingleReviewerFlagTakesPrecedence(t *testing.T) {
+	c := &Controller{
+		logger: newTestLogger(),
+		config: SessionConfig{SingleReviewer: true},
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				Reviewers: []ReviewerConfig{
+					{Name: "correctness"},
+					{Name: "errors"},
+				},
+			},
+		},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement, WorkflowPathComplex); reviewers != nil {
+		t.Errorf("SingleReviewer=true should override COMPLEX path, got %v", reviewers)
 	}
 }

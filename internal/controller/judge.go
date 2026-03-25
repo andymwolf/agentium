@@ -43,6 +43,7 @@ type judgeRunParams struct {
 	MaxIterations   int
 	PhaseIteration  int    // Within-phase iteration (1-indexed) for scoped feedback
 	PriorDirectives string // Judge's own prior ITERATE directives for loop detection
+	Synthesized     bool   // True when feedback came from multi-reviewer synthesis
 }
 
 // judgePattern matches lines of the form: AGENTIUM_EVAL: VERDICT [optional feedback]
@@ -239,7 +240,7 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	}
 
 	sb.WriteString("## Reviewer's Feedback\n\n")
-	if c.multiReviewers(params.CompletedPhase) != nil {
+	if params.Synthesized {
 		sb.WriteString("*(Synthesized from multiple specialized reviewers.)*\n\n")
 	}
 	if params.ReviewFeedback != "" {
