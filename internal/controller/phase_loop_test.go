@@ -1246,3 +1246,72 @@ func TestProcessWorkerHandoff_PlanWriteFailure(t *testing.T) {
 		t.Errorf("error should mention plan, got: %v", err)
 	}
 }
+
+func TestMultiReviewers_ReturnsNilWhenNotConfigured(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name:     "IMPLEMENT",
+				Reviewer: &StepPromptConfig{Prompt: "single reviewer prompt"},
+			},
+		},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+		t.Errorf("multiReviewers() should return nil for single-reviewer config, got %v", reviewers)
+	}
+}
+
+func TestMultiReviewers_ReturnsNilWhenNoConfig(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+		t.Errorf("multiReviewers() should return nil for missing phase config, got %v", reviewers)
+	}
+}
+
+func TestMultiReviewers_ReturnsConfigWhenPresent(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name: "IMPLEMENT",
+				Reviewers: []ReviewerConfig{
+					{Name: "correctness", Prompt: "check bugs"},
+					{Name: "errors", Prompt: "check errors"},
+					{Name: "tests"},
+				},
+			},
+		},
+	}
+
+	reviewers := c.multiReviewers(PhaseImplement)
+	if reviewers == nil {
+		t.Fatal("multiReviewers() should return config when Reviewers is populated")
+	}
+	if len(reviewers) != 3 {
+		t.Errorf("multiReviewers() returned %d reviewers, want 3", len(reviewers))
+	}
+	if reviewers[0].Name != "correctness" {
+		t.Errorf("first reviewer name = %q, want %q", reviewers[0].Name, "correctness")
+	}
+	if reviewers[2].Prompt != "" {
+		t.Errorf("third reviewer should have empty prompt (uses built-in), got %q", reviewers[2].Prompt)
+	}
+}
+
+func TestMultiReviewers_EmptySliceReturnsNil(t *testing.T) {
+	c := &Controller{
+		phaseConfigs: map[TaskPhase]*PhaseStepConfig{
+			PhaseImplement: {
+				Name:      "IMPLEMENT",
+				Reviewers: []ReviewerConfig{},
+			},
+		},
+	}
+
+	if reviewers := c.multiReviewers(PhaseImplement); reviewers != nil {
+		t.Errorf("multiReviewers() should return nil for empty Reviewers slice, got %v", reviewers)
+	}
+}

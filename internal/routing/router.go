@@ -1,6 +1,9 @@
 package routing
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // Router resolves the adapter and model to use for a given phase.
 type Router struct {
@@ -78,16 +81,28 @@ func (r *Router) UsesAdapter(adapter string) bool {
 
 // UnknownPhases returns phase names used in Overrides that are not in ValidPhases.
 // Returns nil if all phases are recognized or if routing is nil.
+// Dynamic phase keys like {PHASE}_REVIEW_{NAME} (e.g., IMPLEMENT_REVIEW_CORRECTNESS)
+// are accepted when the base review phase ({PHASE}_REVIEW) is valid.
 func (r *Router) UnknownPhases() []string {
 	if r.routing == nil {
 		return nil
 	}
 	var unknown []string
 	for phase := range r.routing.Overrides {
-		if !ValidPhases[phase] {
+		if !ValidPhases[phase] && !isValidDynamicPhase(phase) {
 			unknown = append(unknown, phase)
 		}
 	}
 	sort.Strings(unknown)
 	return unknown
+}
+
+// isValidDynamicPhase returns true if the phase matches a known dynamic pattern
+// like {PHASE}_REVIEW_{NAME} for named multi-reviewers.
+func isValidDynamicPhase(phase string) bool {
+	parts := strings.SplitN(phase, "_REVIEW_", 2)
+	if len(parts) == 2 && parts[1] != "" && ValidPhases[parts[0]+"_REVIEW"] {
+		return true
+	}
+	return false
 }

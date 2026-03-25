@@ -167,7 +167,17 @@ func (c *Controller) handleVerdict(ctx context.Context, plc *phaseLoopContext, j
 	return false, false, false
 }
 
+// multiReviewers returns the reviewer configs for multi-reviewer mode, or nil for single-reviewer.
+func (c *Controller) multiReviewers(phase TaskPhase) []ReviewerConfig {
+	if stepCfg, ok := c.phaseConfigs[phase]; ok && len(stepCfg.Reviewers) > 0 {
+		return stepCfg.Reviewers
+	}
+	return nil
+}
+
 // runReviewJudgePipeline runs the reviewer and judge for the current iteration.
+// When multi-reviewer mode is configured, fans out to N reviewers in parallel
+// and synthesizes their findings before passing to the judge.
 func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopContext, iter int) (advanced, blocked, shouldContinue bool) {
 	previousFeedback, workerHandoffSummary, workerFeedbackResponses := c.gatherFeedbackContext(plc, iter)
 
@@ -176,8 +186,8 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 		return true, false, false
 	}
 
-	// Run reviewer
-	reviewResult, reviewErr := c.runReviewer(ctx, reviewRunParams{
+	// Build common review params
+	params := reviewRunParams{
 		CompletedPhase:          plc.currentPhase,
 		PhaseOutput:             plc.evalOutput,
 		Iteration:               iter,
@@ -186,34 +196,54 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 		WorkerHandoffSummary:    workerHandoffSummary,
 		WorkerFeedbackResponses: workerFeedbackResponses,
 		ParentBranch:            plc.state.ParentBranch,
-	})
-	if reviewErr != nil {
-		c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", plc.currentPhase, reviewErr)
-		plc.state.LastJudgeVerdict = string(VerdictAdvance)
-		c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (reviewer error, forced advance)", plc.currentPhase))
-		plc.advanced = true
-		return true, false, false
 	}
 
-	// Record Reviewer generation in Langfuse
-	c.recordGenerationTokens(plc, observability.GenerationInput{
-		Name:         "Reviewer",
-		Model:        c.config.Agent,
-		Input:        reviewResult.Prompt,
-		Output:       reviewResult.Feedback,
-		SystemPrompt: reviewResult.SystemPrompt,
-		InputTokens:  reviewResult.InputTokens,
-		OutputTokens: reviewResult.OutputTokens,
-		Status:       "completed",
-		StartTime:    reviewResult.StartTime,
-		EndTime:      reviewResult.EndTime,
-	})
+	// Branch: multi-reviewer or single-reviewer
+	var reviewFeedback string
+	var reviewResult ReviewResult
+	reviewers := c.multiReviewers(plc.currentPhase)
+
+	if reviewers != nil {
+		// === MULTI-REVIEWER PATH ===
+		var ok bool
+		reviewFeedback, reviewResult, ok = c.runMultiReviewerPipeline(ctx, plc, params, reviewers)
+		if !ok {
+			// All reviewers failed — already handled (forced advance)
+			return true, false, false
+		}
+	} else {
+		// === SINGLE-REVIEWER PATH (unchanged) ===
+		var reviewErr error
+		reviewResult, reviewErr = c.runReviewer(ctx, params)
+		if reviewErr != nil {
+			c.logWarning("Reviewer error for phase %s: %v (defaulting to ADVANCE)", plc.currentPhase, reviewErr)
+			plc.state.LastJudgeVerdict = string(VerdictAdvance)
+			c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (reviewer error, forced advance)", plc.currentPhase))
+			plc.advanced = true
+			return true, false, false
+		}
+
+		// Record Reviewer generation in Langfuse
+		c.recordGenerationTokens(plc, observability.GenerationInput{
+			Name:         "Reviewer",
+			Model:        c.config.Agent,
+			Input:        reviewResult.Prompt,
+			Output:       reviewResult.Feedback,
+			SystemPrompt: reviewResult.SystemPrompt,
+			InputTokens:  reviewResult.InputTokens,
+			OutputTokens: reviewResult.OutputTokens,
+			Status:       "completed",
+			StartTime:    reviewResult.StartTime,
+			EndTime:      reviewResult.EndTime,
+		})
+		reviewFeedback = reviewResult.Feedback
+	}
 
 	// Store reviewer feedback on TaskState for defense-in-depth fallback
-	plc.state.LastReviewerFeedback = reviewResult.Feedback
+	plc.state.LastReviewerFeedback = reviewFeedback
 
 	// Post reviewer feedback to appropriate location (filtered for readability)
-	reviewFeedbackComment := StripAgentiumSignals(reviewResult.Feedback)
+	reviewFeedbackComment := StripAgentiumSignals(reviewFeedback)
 	reviewFeedbackComment = StripPreamble(reviewFeedbackComment)
 	reviewFeedbackComment = SummarizeForComment(reviewFeedbackComment, 250)
 	c.postReviewFeedbackForPhase(ctx, plc.currentPhase, iter, reviewFeedbackComment)
@@ -228,11 +258,11 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 		return true, false, false
 	}
 
-	// Run judge
+	// Run judge (receives synthesized feedback in multi-reviewer mode, single reviewer feedback otherwise)
 	judgeResult, err := c.runJudge(ctx, judgeRunParams{
 		CompletedPhase:  plc.currentPhase,
 		PhaseOutput:     plc.evalOutput,
-		ReviewFeedback:  reviewResult.Feedback,
+		ReviewFeedback:  reviewFeedback,
 		Iteration:       iter,
 		MaxIterations:   plc.maxIter,
 		PhaseIteration:  iter,
@@ -258,6 +288,7 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 	})
 
 	// Apply post-processing (no-signal tracking, hard-gate, override detection)
+	// In multi-reviewer mode, reviewResult.Feedback is the synthesized output
 	c.applyJudgePostProcessing(plc, &judgeResult, reviewResult)
 
 	// Post judge comment
@@ -265,4 +296,78 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 
 	// Handle verdict
 	return c.handleVerdict(ctx, plc, judgeResult, reviewResult, iter)
+}
+
+// runMultiReviewerPipeline fans out to N named reviewers in parallel, runs synthesis,
+// and returns the synthesized feedback. Returns (feedback, compositeResult, ok).
+// If ok is false, all reviewers failed and a forced advance was recorded.
+func (c *Controller) runMultiReviewerPipeline(
+	ctx context.Context,
+	plc *phaseLoopContext,
+	params reviewRunParams,
+	reviewers []ReviewerConfig,
+) (string, ReviewResult, bool) {
+	// Pre-fetch diff once (shared by all reviewers)
+	if params.CompletedPhase != PhasePlan && params.DiffContent == "" {
+		params.DiffContent = c.fetchReviewDiff(ctx, params.ParentBranch)
+	}
+
+	// Fan out to N reviewers in parallel
+	results, err := c.runMultiReviewers(ctx, reviewers, params)
+	if err != nil {
+		c.logWarning("All multi-reviewers failed for phase %s: %v (defaulting to ADVANCE)", plc.currentPhase, err)
+		plc.state.LastJudgeVerdict = string(VerdictAdvance)
+		c.recordPhaseAdvance(plc, fmt.Sprintf("%s completed (all reviewers failed, forced advance)", plc.currentPhase))
+		plc.advanced = true
+		return "", ReviewResult{}, false
+	}
+
+	// Record each reviewer as a separate Langfuse generation
+	for _, r := range results {
+		c.recordGenerationTokens(plc, observability.GenerationInput{
+			Name:         fmt.Sprintf("Reviewer_%s", r.Name),
+			Model:        c.config.Agent,
+			Input:        r.Prompt,
+			Output:       r.Feedback,
+			SystemPrompt: r.SystemPrompt,
+			InputTokens:  r.InputTokens,
+			OutputTokens: r.OutputTokens,
+			Status:       "completed",
+			StartTime:    r.StartTime,
+			EndTime:      r.EndTime,
+		})
+	}
+
+	// Run synthesis step
+	var reviewFeedback string
+	synthesisResult, synthErr := c.runSynthesis(ctx, plc.currentPhase, results, params)
+	if synthErr != nil {
+		// Fallback: concatenate raw reviewer feedback
+		c.logWarning("Synthesis failed for phase %s: %v (concatenating raw feedback)", plc.currentPhase, synthErr)
+		var parts []string
+		for _, r := range results {
+			parts = append(parts, fmt.Sprintf("## Reviewer: %s\n\n%s", r.Name, r.Feedback))
+		}
+		reviewFeedback = strings.Join(parts, "\n\n---\n\n")
+	} else {
+		reviewFeedback = synthesisResult.Feedback
+
+		// Record synthesis generation in Langfuse
+		c.recordGenerationTokens(plc, observability.GenerationInput{
+			Name:         "Synthesis",
+			Model:        c.config.Agent,
+			Input:        synthesisResult.Prompt,
+			Output:       synthesisResult.Feedback,
+			SystemPrompt: synthesisResult.SystemPrompt,
+			InputTokens:  synthesisResult.InputTokens,
+			OutputTokens: synthesisResult.OutputTokens,
+			Status:       "completed",
+			StartTime:    synthesisResult.StartTime,
+			EndTime:      synthesisResult.EndTime,
+		})
+	}
+
+	// Build composite ReviewResult for override detection and memory storage
+	compositeResult := ReviewResult{Feedback: reviewFeedback}
+	return reviewFeedback, compositeResult, true
 }

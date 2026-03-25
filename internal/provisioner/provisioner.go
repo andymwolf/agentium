@@ -130,7 +130,15 @@ type ProvPhaseStepConfig struct {
 	MaxIterations int                    `json:"max_iterations,omitempty"`
 	Worker        *ProvStepPromptConfig  `json:"worker,omitempty"`
 	Reviewer      *ProvStepPromptConfig  `json:"reviewer,omitempty"`
+	Reviewers     []ProvReviewerConfig   `json:"reviewers,omitempty"`
+	Synthesis     *ProvStepPromptConfig  `json:"synthesis,omitempty"`
 	Judge         *ProvJudgePromptConfig `json:"judge,omitempty"`
+}
+
+// ProvReviewerConfig defines a named reviewer with its own prompt for multi-reviewer mode.
+type ProvReviewerConfig struct {
+	Name   string `json:"name"`
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // ProvStepPromptConfig contains an override prompt for a worker or reviewer step.

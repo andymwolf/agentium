@@ -50,6 +50,7 @@ var ValidPhases = map[string]bool{
 	"BLOCKED":       true,
 	"NOTHING_TO_DO": true,
 	// Compound phase keys for reviewer (per-iteration review)
+	"REVIEW":           true,
 	"PLAN_REVIEW":      true,
 	"IMPLEMENT_REVIEW": true,
 	"DOCS_REVIEW":      true,
@@ -62,6 +63,12 @@ var ValidPhases = map[string]bool{
 	"PLAN_JUDGE":      true,
 	"IMPLEMENT_JUDGE": true,
 	"DOCS_JUDGE":      true,
+	// Compound phase keys for synthesis (multi-reviewer)
+	"SYNTHESIS":           true,
+	"PLAN_SYNTHESIS":      true,
+	"IMPLEMENT_SYNTHESIS": true,
+	"DOCS_SYNTHESIS":      true,
+	"VERIFY_SYNTHESIS":    true,
 }
 
 // ValidPhaseNames returns the sorted list of recognized phase names.

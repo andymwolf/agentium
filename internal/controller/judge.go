@@ -239,6 +239,9 @@ func (c *Controller) buildJudgePrompt(params judgeRunParams) string {
 	}
 
 	sb.WriteString("## Reviewer's Feedback\n\n")
+	if c.multiReviewers(params.CompletedPhase) != nil {
+		sb.WriteString("*(Synthesized from multiple specialized reviewers.)*\n\n")
+	}
 	if params.ReviewFeedback != "" {
 		sb.WriteString(params.ReviewFeedback)
 	} else {

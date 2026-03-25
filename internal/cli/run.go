@@ -305,6 +305,18 @@ func runSession(cmd *cobra.Command, args []string) error {
 			if p.Reviewer != nil {
 				stepCfg.Reviewer = &provisioner.ProvStepPromptConfig{Prompt: p.Reviewer.Prompt}
 			}
+			if len(p.Reviewers) > 0 {
+				stepCfg.Reviewers = make([]provisioner.ProvReviewerConfig, len(p.Reviewers))
+				for j, r := range p.Reviewers {
+					stepCfg.Reviewers[j] = provisioner.ProvReviewerConfig{
+						Name:   r.Name,
+						Prompt: r.Prompt,
+					}
+				}
+			}
+			if p.Synthesis != nil {
+				stepCfg.Synthesis = &provisioner.ProvStepPromptConfig{Prompt: p.Synthesis.Prompt}
+			}
 			if p.Judge != nil {
 				stepCfg.Judge = &provisioner.ProvJudgePromptConfig{Criteria: p.Judge.Criteria}
 			}
