@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.15.0](https://github.com/andymwolf/agentium/compare/v0.14.0...v0.15.0) (2026-03-25)
+
+
+### Features
+
+* improve code reviewer with confidence scoring, structured output, and diff injection ([9b6e0f0](https://github.com/andymwolf/agentium/commit/9b6e0f076d2ade8dfd8ac5652d9c2e99c4c61517))
+* improve code reviewer with confidence scoring, structured output, and diff injection ([#583](https://github.com/andymwolf/agentium/issues/583)) ([b09e366](https://github.com/andymwolf/agentium/commit/b09e3663f38bb6950933e26cf9f08171f1511e14))
+* multi-reviewer architecture with parallel specialized agents and synthesis ([f11d93e](https://github.com/andymwolf/agentium/commit/f11d93e606dbdd50a9c481837f7e1f522a877a77))
+* multi-reviewer architecture with parallel specialized agents and synthesis ([231bc69](https://github.com/andymwolf/agentium/commit/231bc69a84f3ef0f6827198bc1b6ec5b8ef36f5c)), closes [#582](https://github.com/andymwolf/agentium/issues/582)
+
+
+### Bug Fixes
+
+* only show "diff above" text when diff is actually present in reviewer prompt ([b7aa7a9](https://github.com/andymwolf/agentium/commit/b7aa7a9d067fedbb3b76f947b9754faf3045cd1f)), closes [#583](https://github.com/andymwolf/agentium/issues/583)
+
 ## [0.14.0](https://github.com/andymwolf/agentium/compare/v0.13.1...v0.14.0) (2026-03-16)
 
 
