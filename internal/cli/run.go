@@ -52,6 +52,7 @@ func init() {
 	runCmd.Flags().Bool("local", false, "Run locally for interactive debugging (no VM provisioning)")
 	runCmd.Flags().Bool("auto-merge", false, "Automatically merge PR after CI checks pass")
 	runCmd.Flags().Bool("container-reuse", false, "Reuse long-lived containers across iterations within a phase")
+	runCmd.Flags().Bool("single-reviewer", false, "Force single-reviewer mode (skip multi-reviewer even when configured)")
 
 	_ = viper.BindPFlag("session.repo", runCmd.Flags().Lookup("repo"))
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
@@ -125,6 +126,10 @@ func runSession(cmd *cobra.Command, args []string) error {
 		containerReuse, _ := cmd.Flags().GetBool("container-reuse")
 		cfg.Session.ContainerReuse = &containerReuse
 	}
+	if cmd.Flags().Changed("single-reviewer") {
+		singleReviewer, _ := cmd.Flags().GetBool("single-reviewer")
+		cfg.Session.SingleReviewer = singleReviewer
+	}
 
 	// Validate configuration after applying CLI flags
 	if err = cfg.ValidateForRun(); err != nil {
@@ -194,6 +199,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		Prompt:         cfg.Session.Prompt,
 		AutoMerge:      cfg.Session.AutoMerge,
 		ContainerReuse: cfg.Session.ContainerReuse != nil && *cfg.Session.ContainerReuse,
+		SingleReviewer: cfg.Session.SingleReviewer,
 		GitHub: provisioner.GitHubConfig{
 			AppID:            cfg.GitHub.AppID,
 			InstallationID:   cfg.GitHub.InstallationID,

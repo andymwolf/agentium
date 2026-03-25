@@ -164,6 +164,7 @@ type SessionConfig struct {
 	Fallback       *FallbackConfig        `json:"fallback,omitempty"`
 	Phases         []PhaseStepConfig      `json:"phases,omitempty"`
 	ContainerReuse bool                   `json:"container_reuse,omitempty"` // Enable long-lived phase containers
+	SingleReviewer bool                   `json:"single_reviewer,omitempty"` // Force single-reviewer mode
 	Verbose        bool                   `json:"verbose,omitempty"`
 	AutoMerge      bool                   `json:"auto_merge,omitempty"`
 	Langfuse       LangfuseSessionConfig  `json:"langfuse,omitempty"`

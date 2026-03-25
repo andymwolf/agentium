@@ -168,11 +168,24 @@ func (c *Controller) handleVerdict(ctx context.Context, plc *phaseLoopContext, j
 }
 
 // multiReviewers returns the reviewer configs for multi-reviewer mode, or nil for single-reviewer.
-func (c *Controller) multiReviewers(phase TaskPhase) []ReviewerConfig {
-	if stepCfg, ok := c.phaseConfigs[phase]; ok && len(stepCfg.Reviewers) > 0 {
-		return stepCfg.Reviewers
+// Returns nil (forcing single-reviewer) when:
+//   - No multi-reviewer config exists for this phase
+//   - --single-reviewer flag is set
+//   - WorkflowPath is SIMPLE (auto-detected lightweight task)
+func (c *Controller) multiReviewers(phase TaskPhase, workflowPath WorkflowPath) []ReviewerConfig {
+	stepCfg, ok := c.phaseConfigs[phase]
+	if !ok || len(stepCfg.Reviewers) == 0 {
+		return nil
 	}
-	return nil
+	if c.config.SingleReviewer {
+		c.logInfo("Phase %s: multi-reviewer skipped (--single-reviewer flag)", phase)
+		return nil
+	}
+	if workflowPath == WorkflowPathSimple {
+		c.logInfo("Phase %s: multi-reviewer skipped (SIMPLE workflow path)", phase)
+		return nil
+	}
+	return stepCfg.Reviewers
 }
 
 // runReviewJudgePipeline runs the reviewer and judge for the current iteration.
@@ -201,7 +214,7 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 	// Branch: multi-reviewer or single-reviewer
 	var reviewFeedback string
 	var reviewResult ReviewResult
-	reviewers := c.multiReviewers(plc.currentPhase)
+	reviewers := c.multiReviewers(plc.currentPhase, plc.state.WorkflowPath)
 
 	if reviewers != nil {
 		// === MULTI-REVIEWER PATH ===
@@ -267,6 +280,7 @@ func (c *Controller) runReviewJudgePipeline(ctx context.Context, plc *phaseLoopC
 		MaxIterations:   plc.maxIter,
 		PhaseIteration:  iter,
 		PriorDirectives: priorDirectives,
+		Synthesized:     reviewers != nil,
 	})
 	if err != nil {
 		c.logWarning("Judge error for phase %s: %v (defaulting to ADVANCE)", plc.currentPhase, err)

@@ -149,6 +149,7 @@ type SessionConfig struct {
 	Prompt         string   `mapstructure:"prompt"`
 	AutoMerge      bool     `mapstructure:"auto_merge"`
 	ContainerReuse *bool    `mapstructure:"container_reuse"`
+	SingleReviewer bool     `mapstructure:"single_reviewer"`
 }
 
 // ControllerConfig contains session controller settings

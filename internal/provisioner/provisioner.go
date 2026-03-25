@@ -87,6 +87,7 @@ type SessionConfig struct {
 	Phases         []ProvPhaseStepConfig `json:"phases,omitempty"`
 	AutoMerge      bool                  `json:"auto_merge,omitempty"`
 	ContainerReuse bool                  `json:"container_reuse,omitempty"`
+	SingleReviewer bool                  `json:"single_reviewer,omitempty"`
 	Langfuse       *ProvLangfuseConfig   `json:"langfuse,omitempty"`
 	Monorepo       *ProvMonorepoConfig   `json:"monorepo,omitempty"`
 }

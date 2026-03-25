@@ -68,6 +68,10 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		autoMerge, _ := cmd.Flags().GetBool("auto-merge")
 		cfg.Session.AutoMerge = autoMerge
 	}
+	if cmd.Flags().Changed("single-reviewer") {
+		singleReviewer, _ := cmd.Flags().GetBool("single-reviewer")
+		cfg.Session.SingleReviewer = singleReviewer
+	}
 
 	// Validate configuration for local run (relaxed validation)
 	if err = cfg.ValidateForLocalRun(); err != nil {
@@ -144,6 +148,7 @@ func runLocalSession(cmd *cobra.Command, _ []string) error {
 		CloneInsideContainer: true, // Clone inside Docker container for reliable auth
 		Verbose:              viper.GetBool("verbose"),
 		AutoMerge:            cfg.Session.AutoMerge,
+		SingleReviewer:       cfg.Session.SingleReviewer,
 	}
 
 	// Set Claude auth config
