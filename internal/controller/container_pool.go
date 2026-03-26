@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ContainerRole identifies the role of a managed container within a phase.
@@ -180,22 +182,65 @@ func (p *ContainerPool) Exec(ctx context.Context, role ContainerRole, command []
 	args = append(args, mc.Entrypoint...)
 	args = append(args, command...)
 
-	cmd := p.cmdRunner(ctx, "docker", args...)
+	// Apply per-exec timeout to prevent indefinite hangs. Long IMPLEMENT
+	// iterations with Opus can run 60+ minutes; 75 minutes provides headroom
+	// while still catching true hangs.
+	execTimeout := 75 * time.Minute
+	execCtx, cancel := context.WithTimeout(ctx, execTimeout)
+	defer cancel()
+
+	cmd := p.cmdRunner(execCtx, "docker", args...)
 
 	if stdinPrompt != "" {
 		cmd.Stdin = strings.NewReader(stdinPrompt)
 	}
 
+	// Read stdout and stderr concurrently via pipes to avoid deadlock.
+	// If either pipe's OS buffer (~64KB) fills while the process writes to
+	// the other, cmd.Run() with bytes.Buffer destinations will block forever.
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("exec stdout pipe for role %s: %w", role, err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("exec stderr pipe for role %s: %w", role, err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		p.mu.Lock()
+		mc.Healthy = false
+		p.mu.Unlock()
+		return nil, nil, -1, fmt.Errorf("exec start failed for role %s: %w", role, err)
+	}
+
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var stdoutErr, stderrErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, stdoutErr = io.Copy(&stdout, stdoutPipe)
+	}()
+	go func() {
+		defer wg.Done()
+		_, stderrErr = io.Copy(&stderr, stderrPipe)
+	}()
+	wg.Wait()
+
+	if stdoutErr != nil {
+		log.Printf("[pool] warning: reading stdout for role %s: %v", role, stdoutErr)
+	}
+	if stderrErr != nil {
+		log.Printf("[pool] warning: reading stderr for role %s: %v", role, stderrErr)
+	}
 
 	exitCode := 0
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
-			// Mark unhealthy on non-exit errors (container gone, etc.)
+			// Mark unhealthy on non-exit errors (container gone, timeout, etc.)
 			p.mu.Lock()
 			mc.Healthy = false
 			p.mu.Unlock()
