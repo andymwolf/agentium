@@ -18,6 +18,7 @@ github:
 cloud:
   provider: "gcp"                   # gcp, aws, or azure
   region: "us-central1"
+  # zone: "us-central1-b"           # GCP zone (optional, randomized across a-f if omitted)
   project: "my-gcp-project"         # GCP project ID
   machine_type: "e2-medium"         # VM instance type
   use_spot: true                    # Use spot/preemptible instances (cheaper)

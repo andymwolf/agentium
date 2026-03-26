@@ -649,3 +649,34 @@ func isPOSIX() bool {
 func writeFileWithPermissions(path string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(path, data, perm)
 }
+
+func TestResolveZone_ExplicitZone(t *testing.T) {
+	zone := resolveZone("us-central1-b", "us-central1")
+	if zone != "us-central1-b" {
+		t.Errorf("resolveZone() with explicit zone = %q, want us-central1-b", zone)
+	}
+}
+
+func TestResolveZone_RandomizedWhenEmpty(t *testing.T) {
+	valid := map[string]bool{
+		"us-central1-a": true, "us-central1-b": true, "us-central1-c": true,
+		"us-central1-d": true, "us-central1-e": true, "us-central1-f": true,
+	}
+	for i := 0; i < 20; i++ {
+		zone := resolveZone("", "us-central1")
+		if !valid[zone] {
+			t.Errorf("resolveZone() returned invalid zone %q", zone)
+		}
+	}
+}
+
+func TestResolveZone_Randomization(t *testing.T) {
+	seen := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		zone := resolveZone("", "us-central1")
+		seen[zone] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("resolveZone() should produce varied zones, only saw %d unique zones", len(seen))
+	}
+}

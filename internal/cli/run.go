@@ -44,6 +44,7 @@ func init() {
 	runCmd.Flags().String("max-duration", "2h", "Maximum session duration")
 	runCmd.Flags().String("provider", "", "Cloud provider (gcp, aws, azure)")
 	runCmd.Flags().String("region", "", "Cloud region")
+	runCmd.Flags().String("zone", "", "Cloud zone (e.g. us-central1-b; randomized if omitted)")
 	runCmd.Flags().Bool("dry-run", false, "Show what would be provisioned without creating resources")
 	runCmd.Flags().String("prompt", "", "Custom prompt for the agent")
 	runCmd.Flags().String("claude-auth-mode", "", "Claude auth mode: api (default) or oauth")
@@ -58,6 +59,7 @@ func init() {
 	_ = viper.BindPFlag("session.issues", runCmd.Flags().Lookup("issues"))
 	_ = viper.BindPFlag("cloud.provider", runCmd.Flags().Lookup("provider"))
 	_ = viper.BindPFlag("cloud.region", runCmd.Flags().Lookup("region"))
+	_ = viper.BindPFlag("cloud.zone", runCmd.Flags().Lookup("zone"))
 	_ = viper.BindPFlag("claude.auth_mode", runCmd.Flags().Lookup("claude-auth-mode"))
 	_ = viper.BindPFlag("defaults.container_reuse", runCmd.Flags().Lookup("container-reuse"))
 }
@@ -111,6 +113,9 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 	if region := viper.GetString("cloud.region"); region != "" {
 		cfg.Cloud.Region = region
+	}
+	if zone := viper.GetString("cloud.zone"); zone != "" {
+		cfg.Cloud.Zone = zone
 	}
 	if prompt, _ := cmd.Flags().GetString("prompt"); prompt != "" {
 		cfg.Session.Prompt = prompt
@@ -359,6 +364,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 	vmConfig := provisioner.VMConfig{
 		Project:         cfg.Cloud.Project,
 		Region:          cfg.Cloud.Region,
+		Zone:            cfg.Cloud.Zone,
 		MachineType:     cfg.Cloud.MachineType,
 		UseSpot:         cfg.Cloud.UseSpot,
 		DiskSizeGB:      cfg.Cloud.DiskSizeGB,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -468,11 +469,14 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result
 		}
 	}
 
+	zone := resolveZone(config.Zone, config.Region)
+
 	// Create terraform.tfvars
 	tfvars := fmt.Sprintf(`
 session_id         = "%s"
 project_id         = "%s"
 region             = "%s"
+zone               = "%s"
 machine_type       = "%s"
 use_spot           = %t
 disk_size_gb       = %d
@@ -484,6 +488,7 @@ max_run_duration   = "%s"
 		config.Session.ID,
 		config.Project,
 		config.Region,
+		zone,
 		config.MachineType,
 		config.UseSpot,
 		config.DiskSizeGB,
@@ -1136,4 +1141,14 @@ func (p *GCPProvisioner) getTerraformOutput(ctx context.Context, workDir string)
 	}
 
 	return result, nil
+}
+
+// resolveZone returns the explicit zone if provided, or picks a random zone
+// (a-f) within the region to spread load across availability zones.
+func resolveZone(zone, region string) string {
+	if zone != "" {
+		return zone
+	}
+	suffixes := []string{"a", "b", "c", "d", "e", "f"}
+	return fmt.Sprintf("%s-%s", region, suffixes[rand.Intn(len(suffixes))])
 }
