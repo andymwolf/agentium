@@ -127,6 +127,7 @@ type GitHubConfig struct {
 type CloudConfig struct {
 	Provider          string `mapstructure:"provider"`
 	Region            string `mapstructure:"region"`
+	Zone              string `mapstructure:"zone"`         // GCP zone (optional, randomized if empty)
 	Project           string `mapstructure:"project"`      // GCP project ID
 	MachineType       string `mapstructure:"machine_type"` // VM instance type
 	UseSpot           bool   `mapstructure:"use_spot"`     // Use spot/preemptible instances

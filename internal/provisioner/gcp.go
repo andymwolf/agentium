@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -468,11 +469,14 @@ func (p *GCPProvisioner) Provision(ctx context.Context, config VMConfig) (result
 		}
 	}
 
+	zone := resolveZone(ctx, config.Zone, config.Region, config.Project)
+
 	// Create terraform.tfvars
 	tfvars := fmt.Sprintf(`
 session_id         = "%s"
 project_id         = "%s"
 region             = "%s"
+zone               = "%s"
 machine_type       = "%s"
 use_spot           = %t
 disk_size_gb       = %d
@@ -484,6 +488,7 @@ max_run_duration   = "%s"
 		config.Session.ID,
 		config.Project,
 		config.Region,
+		zone,
 		config.MachineType,
 		config.UseSpot,
 		config.DiskSizeGB,
@@ -1136,4 +1141,28 @@ func (p *GCPProvisioner) getTerraformOutput(ctx context.Context, workDir string)
 	}
 
 	return result, nil
+}
+
+// resolveZone returns the explicit zone if provided, or picks a random zone
+// from the available zones in the region to spread load.
+func resolveZone(ctx context.Context, zone, region, project string) string {
+	if zone != "" {
+		return zone
+	}
+	// Query GCP for available zones in the region
+	cmd := exec.CommandContext(ctx, "gcloud", "compute", "zones", "list",
+		"--filter=region:"+region+" AND status=UP",
+		"--format=value(name)",
+		"--project="+project,
+	)
+	out, err := cmd.Output()
+	if err == nil {
+		zones := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(zones) > 0 && zones[0] != "" {
+			return zones[rand.Intn(len(zones))]
+		}
+	}
+	// Fallback: b and c exist in virtually all GCP regions
+	fallback := []string{"b", "c"}
+	return fmt.Sprintf("%s-%s", region, fallback[rand.Intn(len(fallback))])
 }

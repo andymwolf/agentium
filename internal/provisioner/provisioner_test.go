@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -648,4 +649,27 @@ func isPOSIX() bool {
 // writeFileWithPermissions writes a file with specific permissions
 func writeFileWithPermissions(path string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(path, data, perm)
+}
+
+func TestResolveZone_ExplicitZone(t *testing.T) {
+	ctx := context.Background()
+	zone := resolveZone(ctx, "us-central1-b", "us-central1", "fake-project")
+	if zone != "us-central1-b" {
+		t.Errorf("resolveZone() with explicit zone = %q, want us-central1-b", zone)
+	}
+}
+
+func TestResolveZone_FallbackWhenGcloudFails(t *testing.T) {
+	// Use a cancelled context so gcloud fails immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	valid := map[string]bool{
+		"us-central1-b": true, "us-central1-c": true,
+	}
+	for i := 0; i < 20; i++ {
+		zone := resolveZone(ctx, "", "us-central1", "fake-project")
+		if !valid[zone] {
+			t.Errorf("resolveZone() fallback returned invalid zone %q, want b or c", zone)
+		}
+	}
 }

@@ -30,6 +30,7 @@ type Provisioner interface {
 type VMConfig struct {
 	Project         string
 	Region          string
+	Zone            string // GCP zone (e.g. us-central1-a); randomized if empty
 	MachineType     string
 	UseSpot         bool
 	DiskSizeGB      int
