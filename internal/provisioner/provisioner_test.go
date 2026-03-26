@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -651,32 +652,24 @@ func writeFileWithPermissions(path string, data []byte, perm os.FileMode) error 
 }
 
 func TestResolveZone_ExplicitZone(t *testing.T) {
-	zone := resolveZone("us-central1-b", "us-central1")
+	ctx := context.Background()
+	zone := resolveZone(ctx, "us-central1-b", "us-central1", "fake-project")
 	if zone != "us-central1-b" {
 		t.Errorf("resolveZone() with explicit zone = %q, want us-central1-b", zone)
 	}
 }
 
-func TestResolveZone_RandomizedWhenEmpty(t *testing.T) {
+func TestResolveZone_FallbackWhenGcloudFails(t *testing.T) {
+	// Use a cancelled context so gcloud fails immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	valid := map[string]bool{
-		"us-central1-a": true, "us-central1-b": true, "us-central1-c": true,
-		"us-central1-d": true, "us-central1-e": true, "us-central1-f": true,
+		"us-central1-b": true, "us-central1-c": true,
 	}
 	for i := 0; i < 20; i++ {
-		zone := resolveZone("", "us-central1")
+		zone := resolveZone(ctx, "", "us-central1", "fake-project")
 		if !valid[zone] {
-			t.Errorf("resolveZone() returned invalid zone %q", zone)
+			t.Errorf("resolveZone() fallback returned invalid zone %q, want b or c", zone)
 		}
-	}
-}
-
-func TestResolveZone_Randomization(t *testing.T) {
-	seen := make(map[string]bool)
-	for i := 0; i < 100; i++ {
-		zone := resolveZone("", "us-central1")
-		seen[zone] = true
-	}
-	if len(seen) < 2 {
-		t.Errorf("resolveZone() should produce varied zones, only saw %d unique zones", len(seen))
 	}
 }
