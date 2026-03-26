@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.16.0](https://github.com/andymwolf/agentium/compare/v0.15.0...v0.16.0) (2026-03-26)
+
+
+### Features
+
+* skip multi-reviewer for SIMPLE tasks and add --single-reviewer flag ([b3b40a9](https://github.com/andymwolf/agentium/commit/b3b40a9dec77fac00118bf36c0c100521608045a))
+* skip multi-reviewer for SIMPLE tasks and add --single-reviewer flag ([38e9a40](https://github.com/andymwolf/agentium/commit/38e9a4026906c0aea636942403591a2ab65faf7e)), closes [#586](https://github.com/andymwolf/agentium/issues/586)
+* support zone config and randomize default zone across a-f ([673bdf8](https://github.com/andymwolf/agentium/commit/673bdf8742aca48324b92440f0c4d6d89a9fdcd4))
+* support zone config and randomize default zone across a-f ([4bdccc1](https://github.com/andymwolf/agentium/commit/4bdccc1fd634246f574c5059f9259a2ab1ed621f)), closes [#593](https://github.com/andymwolf/agentium/issues/593)
+
+
+### Bug Fixes
+
+* prevent pooled exec deadlock and add per-exec timeout ([add42df](https://github.com/andymwolf/agentium/commit/add42df4d450b11ad52731d07a25f4d14a7b53e0))
+* prevent pooled exec deadlock with concurrent pipe reading and timeout ([f399616](https://github.com/andymwolf/agentium/commit/f399616b468be29af331b8b7ca16c398dd7eb7b1)), closes [#591](https://github.com/andymwolf/agentium/issues/591)
+* query GCP for available zones instead of guessing a-f ([69c1800](https://github.com/andymwolf/agentium/commit/69c18002d23e31640ed1c4a821161556ec8f90d8)), closes [#593](https://github.com/andymwolf/agentium/issues/593)
+
 ## [0.15.0](https://github.com/andymwolf/agentium/compare/v0.14.0...v0.15.0) (2026-03-25)
 
 
