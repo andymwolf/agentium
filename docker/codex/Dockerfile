@@ -1,7 +1,7 @@
 # Codex CLI Runtime Dockerfile
 # This image provides the runtime environment for OpenAI's Codex CLI
 
-FROM node:25-slim
+FROM node:26-slim
 
 # Version build args
 ARG VERSION=dev
